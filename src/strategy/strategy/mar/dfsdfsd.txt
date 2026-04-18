@@ -1,0 +1,2209 @@
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+from geometry_msgs.msg import Point
+import tkinter as tk
+from tkinter import ttk
+import threading
+
+# 導入機器人控制 API
+try:
+    from strategy.API import API
+    from tku_msgs.msg import Dio
+    API_AVAILABLE = True
+except ImportError:
+    API_AVAILABLE = False
+    print("[WARNING] strategy.API or tku_msgs not found. Robot control will be disabled.")
+
+
+class YOLOTestNode(Node):
+    def __init__(self, gui):
+        super().__init__('yolo_test_node')
+
+        self.gui = gui
+
+        # === 初始化機器人控制 API ===
+        self.api = None
+        if API_AVAILABLE:
+            try:
+                self.api = API('yolo_strategy_api')
+                self.api_mode = True
+                self.get_logger().info('[API] Using strategy.API control')
+                self.gui.log_message('[API] Robot API loaded successfully')
+            except Exception as e:
+                self.api_mode = False
+                self.get_logger().error(f'[API] Failed to initialize API: {e}')
+                self.gui.log_message(f'[ERROR] API initialization failed: {e}')
+        else:
+            self.api_mode = False
+            self.get_logger().warn('[API] Robot control API not available (Test mode)')
+            self.gui.log_message('[WARNING] API not loaded - Simulation mode only')
+
+        # === 機器人運動控制參數 ===
+        self.target_speed_x = 0
+        self.target_speed_y = 0
+        self.target_theta = 0
+        self.target_head_horizontal = 2048
+        self.target_head_vertical = 1600
+        self.target_head_speed = 50
+
+        # === 機器人行走狀態 ===
+        self.robot_walking = False
+        self.start_warning_shown = False
+
+        # === IMU 資料 ===
+        self.current_yaw = 0.0
+        self.target_yaw = None
+        self.yaw_tolerance = 5.0
+        self.imu_available = False
+
+        # === 偵測資訊(由 Navigation Node 確認後送來) ===
+        self.sign_name = None
+        self.sign_area = 0
+        self.center_x = 0
+        self.center_y = 0
+        self.bbox_bottom_y = 0   # 號誌 bounding box 底部 Y 座標
+
+        # === 指令鎖:收到一個動作就鎖住,執行完才接受新的 ===
+        self.locked_action = None
+        self.command_received = False
+
+        # === 影像參數 (320x240) ===
+        self.img_width = 320
+        self.img_height = 240
+        self.img_center_x = 160
+        self.img_center_y = 120
+        self.align_threshold = 20
+
+        # === 狀態機變數 ===
+        self.current_state = '[SEARCH] Waiting for sign command...'
+        self.alignment_done = False
+
+        # === 動作執行計時器 ===
+        self.action_executing = False
+        self.action_start_time = None
+        self.action_duration = 0.0
+        self.action_timeout = 5.0
+        self.current_action_name = ""
+        self.use_imu_control = True
+
+        # === 基礎運動參數 ===
+        self.ORIGIN_THETA = 0
+        self.BASE_SPEED = 2000
+        self.STRAFE_SPEED = 400
+        self.TURN_SPEED = 8
+
+        # === 訂閱 ===
+        self.class_id_sub = self.create_subscription(
+            String, 'class_id_topic', self.class_id_callback, 10)
+        self.coord_sub = self.create_subscription(
+            Point, 'sign_coordinates', self.coord_callback, 10)
+
+        # === 主控制迴圈 (100Hz) ===
+        self.control_timer = self.create_timer(0.01, self.control_loop)
+
+        # === 策略更新迴圈 (10Hz) ===
+        self.strategy_timer = self.create_timer(0.1, self.strategy_update)
+
+        self.get_logger().info('=' * 50)
+        self.get_logger().info('   YOLO Sign Action Node Started (Y-Trigger)')
+        self.get_logger().info('   Trigger when bbox bottom enters lower 1/4')
+        if API_AVAILABLE:
+            self.get_logger().info('   Robot Control: ENABLED (strategy.API)')
+        else:
+            self.get_logger().info('   Robot Control: DISABLED (Test Mode)')
+        self.get_logger().info('=' * 50 + '\n')
+
+    def normalize_angle(self, angle):
+        while angle > 180:
+            angle -= 360
+        while angle < -180:
+            angle += 360
+        return angle
+
+    def angle_difference(self, target, current):
+        return self.normalize_angle(target - current)
+
+    def update_imu(self, yaw):
+        self.current_yaw = yaw
+        self.imu_available = True
+        self.gui.update_imu_status(yaw, self.target_yaw)
+
+    def start_robot_walking(self):
+        if not self.api_mode:
+            if not self.start_warning_shown:
+                self.get_logger().warn('[ROBOT] API not available - Cannot start walking')
+                self.gui.log_message('[ERROR] Cannot start - API not loaded')
+                self.gui.update_walking_status(False)
+                self.start_warning_shown = True
+            return
+
+        if not self.robot_walking:
+            try:
+                self.send_body_auto(1)
+                self.robot_walking = True
+                self.get_logger().info('[ROBOT] Walking started')
+                self.gui.log_message('[ROBOT] Walking started ✓')
+                self.gui.update_walking_status(True)
+            except Exception as e:
+                self.get_logger().error(f'[ROBOT] Failed to start walking: {e}')
+                self.gui.update_walking_status(False)
+
+    def stop_robot_walking(self):
+        if not self.api_mode:
+            return
+        if self.robot_walking:
+            try:
+                self.send_body_auto(0)
+                self.robot_walking = False
+                self.gui.log_message('[ROBOT] Walking stopped ✓')
+                self.gui.update_walking_status(False)
+            except Exception as e:
+                self.get_logger().error(f'[ROBOT] Failed to stop walking: {e}')
+
+    def class_id_callback(self, msg):
+        """接收 Navigation Node 確認過的指令 — 收到就鎖定"""
+        try:
+            parts = msg.data.split(',')
+            if len(parts) != 4:
+                return
+
+            new_sign = parts[0]
+            self.center_x = int(parts[1])
+            self.bbox_bottom_y = int(parts[2])   # 第三欄是 bbox 底部 Y
+            self.sign_area = int(parts[3])
+
+            # 如果正在執行動作,忽略新指令
+            if self.action_executing:
+                return
+
+            # 如果已經鎖定一個動作,只更新座標(用於對齊和 Y 判斷)
+            if self.locked_action is not None:
+                self.sign_name = new_sign
+                return
+
+            # 收到新指令 → 鎖定
+            if new_sign and new_sign != 'None':
+                self.sign_name = new_sign
+                self.locked_action = new_sign
+                self.command_received = True
+                self.get_logger().info(
+                    f'[CMD] Locked: {new_sign.upper()} '
+                    f'(x={self.center_x}, bottom_y={self.bbox_bottom_y})')
+                self.gui.log_message(f'[CMD] Locked: {new_sign.upper()}')
+                self.gui.update_detection(
+                    new_sign, self.center_x, self.bbox_bottom_y, self.sign_area)
+
+        except Exception as e:
+            self.get_logger().error(f'Parse message failed: {e}')
+
+    def coord_callback(self, msg):
+        self.center_x = int(msg.x)
+        self.center_y = int(msg.y)
+
+    def control_loop(self):
+        """主控制迴圈 - 持續發送運動指令 (100Hz)"""
+        if self.api_mode and self.api and hasattr(self.api, 'imu_rpy'):
+            self.update_imu(self.api.imu_rpy[2])
+
+        self.gui.update_motor_status(
+            self.target_head_horizontal, self.target_head_vertical,
+            self.target_speed_x, self.target_speed_y, self.target_theta)
+
+        if not self.gui.get_robot_control_enabled():
+            if self.robot_walking:
+                self.stop_robot_walking()
+            return
+
+        if not self.robot_walking:
+            self.start_robot_walking()
+
+        if self.api_mode and self.api:
+            self.send_head_motor(1, self.target_head_horizontal, self.target_head_speed)
+            self.send_head_motor(2, self.target_head_vertical, self.target_head_speed)
+            self.send_continuous_value(self.target_speed_x, self.target_speed_y, self.target_theta)
+
+    def strategy_update(self):
+        """策略更新迴圈 (10Hz)"""
+        current_time = self.get_clock().now().nanoseconds / 1e9
+
+        # === 動作執行中的處理 ===
+        if self.action_executing and self.action_start_time is not None:
+            elapsed = current_time - self.action_start_time
+
+            if self.use_imu_control and self.target_yaw is not None:
+                angle_error = abs(self.angle_difference(self.target_yaw, self.current_yaw))
+
+                if angle_error < self.yaw_tolerance:
+                    self.get_logger().info(f'[IMU] Target angle reached! Error: {angle_error:.2f}°')
+                    self.gui.log_message(f'[IMU] Turn complete (error: {angle_error:.2f}°)')
+                    self.finish_action()
+                elif elapsed > self.action_timeout:
+                    self.get_logger().warn(f'[IMU] Timeout! Angle error: {angle_error:.2f}°')
+                    self.gui.log_message(f'[IMU] Timeout (error: {angle_error:.2f}°)')
+                    self.finish_action()
+                else:
+                    remaining = self.action_timeout - elapsed
+                    state = f'[TURNING] {self.current_action_name} | Err: {angle_error:.1f}° | T: {remaining:.1f}s'
+                    if state != self.current_state:
+                        self.current_state = state
+                        self.gui.update_state(state)
+            else:
+                # 時間控制
+                if elapsed < self.action_duration:
+                    remaining = self.action_duration - elapsed
+                    state = f'[EXECUTING] {self.current_action_name} ... {remaining:.1f}s'
+                    if state != self.current_state:
+                        self.current_state = state
+                        self.gui.update_state(state)
+                else:
+                    self.finish_action()
+            return
+
+        # === 沒在執行動作:看有沒有鎖定的指令 ===
+        if self.locked_action is None:
+            new_state = '[SEARCH] Waiting for sign command...'
+            self.target_speed_x = self.BASE_SPEED
+            self.target_speed_y = 0
+            self.target_theta = self.ORIGIN_THETA
+            if new_state != self.current_state:
+                self.current_state = new_state
+                self.gui.update_state(new_state)
+            return
+
+        # === 有鎖定指令:對齊 → 接近 → 執行 ===
+        trigger_y = self.gui.get_trigger_y()
+
+        if not self.alignment_done:
+            x_diff = abs(self.center_x - self.img_center_x)
+            if x_diff > self.align_threshold:
+                new_state = (f'[ALIGN] {self.locked_action.upper()} '
+                             f'(X off: {self.center_x - self.img_center_x}px)')
+                self.perform_alignment()
+            else:
+                self.alignment_done = True
+                new_state = f'[ALIGNED] {self.locked_action.upper()} centered'
+                self.get_logger().info('[ALIGN] Alignment complete')
+                self.gui.log_message('[ALIGN] Alignment complete')
+        else:
+            if self.bbox_bottom_y < trigger_y:
+                new_state = (f'[LOCK] {self.locked_action.upper()} | '
+                             f'Y: {self.bbox_bottom_y}/{trigger_y} | Approaching')
+                self.perform_approach()
+            else:
+                # 號誌底部進入觸發區域,執行動作
+                new_state = f'[ACTION] Execute {self.locked_action.upper()}'
+                self.execute_action(self.locked_action)
+
+        if new_state != self.current_state:
+            self.current_state = new_state
+            self.gui.update_state(new_state)
+
+    def finish_action(self):
+        """動作執行完成,重置所有狀態,準備接受下一個指令"""
+        self.action_executing = False
+        self.target_yaw = None
+        self.alignment_done = False
+        self.locked_action = None
+        self.sign_name = None
+        self.sign_area = 0
+        self.bbox_bottom_y = 0
+        self.command_received = False
+
+        self.target_speed_x = self.BASE_SPEED
+        self.target_speed_y = 0
+        self.target_theta = self.ORIGIN_THETA
+
+        self.current_state = '[SEARCH] Waiting for sign command...'
+        self.gui.update_state(self.current_state)
+        self.get_logger().info('[RESET] Ready for next command')
+        self.gui.log_message('[RESET] Ready for next command')
+
+    # === 機器人控制方法 ===
+    def send_head_motor(self, motor_id, position, speed):
+        if not self.api_mode or not self.api:
+            return
+        self.api.sendHeadMotor(motor_id, position, speed)
+
+    def send_continuous_value(self, speed_x, speed_y, theta):
+        if not self.api_mode or not self.api:
+            return
+        self.api.sendContinuousValue(speed_x, speed_y, theta)
+
+    def send_body_auto(self, mode):
+        if not self.api_mode or not self.api:
+            return
+        self.api.sendbodyAuto(mode)
+
+    def enable_robot_control(self):
+        if self.api_mode and self.api:
+            self.gui.log_message('[CONTROL] Robot body auto mode ENABLED')
+
+    def disable_robot_control(self):
+        if self.api_mode and self.api:
+            self.target_speed_x = 0
+            self.target_speed_y = 0
+            self.target_theta = 0
+            self.gui.log_message('[CONTROL] Robot body auto mode DISABLED')
+
+    def perform_alignment(self):
+        x_diff = self.center_x - self.img_center_x
+        if x_diff < -self.align_threshold:
+            self.gui.update_robot_action("STRAFE LEFT (Aligning)")
+            self.target_speed_x = int(self.BASE_SPEED * 0.6)
+            self.target_speed_y = -self.STRAFE_SPEED
+            self.target_theta = self.ORIGIN_THETA
+        elif x_diff > self.align_threshold:
+            self.gui.update_robot_action("STRAFE RIGHT (Aligning)")
+            self.target_speed_x = int(self.BASE_SPEED * 0.6)
+            self.target_speed_y = self.STRAFE_SPEED
+            self.target_theta = self.ORIGIN_THETA
+
+    def perform_approach(self):
+        self.gui.update_robot_action("Move FORWARD (Approaching)")
+        self.target_speed_x = self.BASE_SPEED
+        self.target_speed_y = 0
+        self.target_theta = self.ORIGIN_THETA
+
+    def execute_action(self, action):
+        self.action_executing = True
+        self.action_start_time = self.get_clock().now().nanoseconds / 1e9
+
+        if action == 'left':
+            self.current_action_name = 'LEFT TURN'
+            if self.imu_available:
+                self.use_imu_control = True
+                left_angle = self.gui.get_left_turn_angle()
+                self.target_yaw = self.normalize_angle(self.current_yaw + left_angle)
+                self.target_speed_x = self.BASE_SPEED
+                self.target_speed_y = 0
+                self.target_theta = self.TURN_SPEED
+                self.get_logger().info(f'[IMU] Left turn: {self.current_yaw:.1f}° → {self.target_yaw:.1f}°')
+                self.gui.log_message(f'[IMU] Left turn target: {self.target_yaw:.1f}°')
+            else:
+                self.use_imu_control = False
+                self.action_duration = self.gui.get_left_turn_duration()
+                self.target_speed_x = self.BASE_SPEED
+                self.target_speed_y = 0
+                self.target_theta = 8 + self.ORIGIN_THETA
+                self.gui.log_message('[WARN] IMU unavailable, using timed control')
+            self.gui.update_robot_action("TURN LEFT")
+
+        elif action == 'right':
+            self.current_action_name = 'RIGHT TURN'
+            if self.imu_available:
+                self.use_imu_control = True
+                right_angle = self.gui.get_right_turn_angle()
+                self.target_yaw = self.normalize_angle(self.current_yaw - right_angle)
+                self.target_speed_x = self.BASE_SPEED
+                self.target_speed_y = 0
+                self.target_theta = -self.TURN_SPEED
+                self.get_logger().info(f'[IMU] Right turn: {self.current_yaw:.1f}° → {self.target_yaw:.1f}°')
+                self.gui.log_message(f'[IMU] Right turn target: {self.target_yaw:.1f}°')
+            else:
+                self.use_imu_control = False
+                self.action_duration = self.gui.get_right_turn_duration()
+                self.target_speed_x = self.BASE_SPEED
+                self.target_speed_y = 0
+                self.target_theta = -8 + self.ORIGIN_THETA
+                self.gui.log_message('[WARN] IMU unavailable, using timed control')
+            self.gui.update_robot_action("TURN RIGHT")
+
+        elif action == 'straight':
+            self.use_imu_control = False
+            self.action_duration = self.gui.get_avoid_duration()
+            self.current_action_name = 'STRAIGHT THROUGH'
+            self.target_speed_x = self.BASE_SPEED
+            self.target_speed_y = 0
+            self.target_theta = self.ORIGIN_THETA
+            self.gui.update_robot_action("Move FORWARD (Stepping over)")
+
+        self.get_logger().warn('=' * 45)
+        self.get_logger().warn(f'   << Execute {action.upper()} >>')
+        self.get_logger().warn('=' * 45)
+        self.gui.log_message(f'[ACTION] Execute {action.upper()}')
+
+
+class YOLOGUI:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("YOLO Sign Control Panel (Y-Trigger)")
+        self.root.geometry("850x1070")
+        self.root.configure(bg='#2c3e50')
+
+        # 改用 trigger_y_threshold 取代 area_threshold
+        self.trigger_y_threshold = tk.IntVar(value=180)  # 預設下方 1/4 (240*0.75)
+        self.left_turn_duration = tk.DoubleVar(value=2.0)
+        self.right_turn_duration = tk.DoubleVar(value=2.0)
+        self.avoid_duration = tk.DoubleVar(value=1.5)
+
+        self.left_turn_angle = tk.IntVar(value=90)
+        self.right_turn_angle = tk.IntVar(value=90)
+
+        self.robot_control_enabled = tk.BooleanVar(value=False)
+
+        self.action_display_label = None
+        self.control_toggle_btn = None
+        self.control_status_label = None
+        self.walking_status_label = None
+
+        self.val_labels = {}
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        # 1. Title
+        title_frame = tk.Frame(self.root, bg='#34495e', pady=10)
+        title_frame.pack(fill='x')
+        title = tk.Label(title_frame, text="YOLO Sign Control Panel (Y-Trigger)",
+                         font=('Arial', 17, 'bold'), bg='#34495e', fg='white')
+        title.pack()
+
+        # 2. ROBOT CONTROL TOGGLE
+        control_frame = tk.Frame(self.root, bg='#34495e', pady=5)
+        control_frame.pack(fill='x', padx=10)
+        tk.Label(control_frame, text="ROBOT CONTROL",
+                 font=('Arial', 11, 'bold'), bg='#34495e', fg='white').pack()
+
+        self.control_toggle_btn = tk.Button(
+            control_frame, text="[ OFF ] Simulation Mode",
+            font=('Arial', 13, 'bold'), bg='#e74c3c', fg='white',
+            command=self.toggle_robot_control,
+            padx=20, pady=5, relief='raised', borderwidth=3, cursor='hand2')
+        self.control_toggle_btn.pack(pady=5)
+
+        self.control_status_label = tk.Label(
+            control_frame, text="Commands will NOT be sent to robot",
+            font=('Arial', 10), bg='#34495e', fg='#ecf0f1')
+        self.control_status_label.pack()
+
+        self.walking_status_label = tk.Label(
+            control_frame, text="Robot Status: STOPPED",
+            font=('Arial', 11, 'bold'), bg='#34495e', fg='#e74c3c')
+        self.walking_status_label.pack(pady=2)
+
+        # 3. IMU 轉向角度設定
+        angle_frame = tk.LabelFrame(self.root, text="Turn Angles (IMU Control)",
+                                    font=('Arial', 11, 'bold'),
+                                    bg='#34495e', fg='#f1c40f', padx=5, pady=5)
+        angle_frame.pack(fill='x', padx=10, pady=5)
+
+        self.create_compact_slider(angle_frame, "Left Turn (°)", 30, 180,
+                                   self.left_turn_angle, self.update_left_angle_label,
+                                   resolution=5, is_int=True, color='#3498db')
+        self.create_compact_slider(angle_frame, "Right Turn (°)", 30, 180,
+                                   self.right_turn_angle, self.update_right_angle_label,
+                                   resolution=5, is_int=True, color='#e74c3c')
+
+        # 4. 其他參數設定
+        control_params = tk.LabelFrame(self.root, text="Other Parameters",
+                                       font=('Arial', 11, 'bold'),
+                                       bg='#ecf0f1', fg='#2c3e50', padx=5, pady=5)
+        control_params.pack(fill='x', padx=10, pady=5)
+
+        # Trigger Y:號誌底部 Y 超過此值就觸發動作 (240 = 完全在底部)
+        self.create_compact_slider(control_params, "Trigger Y", 100, 240,
+                                   self.trigger_y_threshold, self.update_trigger_y_label,
+                                   is_int=True, color='#3498db')
+        self.create_compact_slider(control_params, "Left Time (s)", 0.5, 10.0,
+                                   self.left_turn_duration, self.update_left_label,
+                                   resolution=0.1, color='#95a5a6')
+        self.create_compact_slider(control_params, "Right Time (s)", 0.5, 10.0,
+                                   self.right_turn_duration, self.update_right_label,
+                                   resolution=0.1, color='#95a5a6')
+        self.create_compact_slider(control_params, "Avoid (s)", 0.5, 10.0,
+                                   self.avoid_duration, self.update_avoid_label,
+                                   resolution=0.1, color='#9b59b6')
+
+        # 5. Detection Info
+        info_frame = tk.LabelFrame(self.root, text="Detection Info",
+                                   font=('Arial', 11, 'bold'),
+                                   bg='#ecf0f1', fg='#2c3e50', padx=10, pady=5)
+        info_frame.pack(fill='x', padx=10, pady=5)
+
+        self.sign_label = tk.Label(info_frame, text="Sign: --", font=('Arial', 10), bg='#ecf0f1', width=15, anchor='w')
+        self.sign_label.grid(row=0, column=0, sticky='w', padx=2)
+
+        self.area_label = tk.Label(info_frame, text="Area: 0", font=('Arial', 10), bg='#ecf0f1', width=15, anchor='w')
+        self.area_label.grid(row=0, column=1, sticky='w', padx=2)
+
+        self.coord_label = tk.Label(info_frame, text="Coord: X=0, BotY=0", font=('Arial', 10), bg='#ecf0f1', width=25, anchor='w')
+        self.coord_label.grid(row=1, column=0, columnspan=2, sticky='w', padx=2)
+
+        self.action_display_label = tk.Label(info_frame, text="Action: --",
+                                             font=('Arial', 11, 'bold'),
+                                             bg='#ecf0f1', fg='#e74c3c', anchor='w')
+        self.action_display_label.grid(row=2, column=0, columnspan=2, sticky='w', pady=(5, 0), padx=2)
+
+        # 6. IMU 狀態監控
+        imu_frame = tk.LabelFrame(self.root, text="IMU Monitor",
+                                  font=('Arial', 11, 'bold'),
+                                  bg='#2c3e50', fg='#f39c12', padx=10, pady=5)
+        imu_frame.pack(fill='x', padx=10, pady=5)
+
+        lbl_style = {'bg': '#2c3e50', 'fg': '#ecf0f1', 'font': ('Consolas', 10)}
+        val_style = {'bg': '#2c3e50', 'fg': '#3498db', 'font': ('Consolas', 11, 'bold')}
+
+        tk.Label(imu_frame, text="Current Yaw:", **lbl_style).grid(row=0, column=0, sticky='e', padx=2)
+        self.imu_yaw_val = tk.Label(imu_frame, text="0.0°", **val_style)
+        self.imu_yaw_val.grid(row=0, column=1, sticky='w', padx=5)
+
+        tk.Label(imu_frame, text="Target Yaw:", **lbl_style).grid(row=0, column=2, sticky='e', padx=2)
+        self.imu_target_val = tk.Label(imu_frame, text="--", **val_style)
+        self.imu_target_val.grid(row=0, column=3, sticky='w', padx=5)
+
+        # 7. Motor & Motion Status
+        motor_frame = tk.LabelFrame(self.root, text="Motor & Motion Monitor",
+                                    font=('Arial', 11, 'bold'),
+                                    bg='#2c3e50', fg='#f1c40f', padx=10, pady=5)
+        motor_frame.pack(fill='x', padx=10, pady=5)
+
+        lbl_style = {'bg': '#2c3e50', 'fg': '#ecf0f1', 'font': ('Consolas', 10)}
+        val_style = {'bg': '#2c3e50', 'fg': '#2ecc71', 'font': ('Consolas', 11, 'bold')}
+
+        tk.Label(motor_frame, text="Head H:", **lbl_style).grid(row=0, column=0, sticky='e', padx=2)
+        self.motor_h_val = tk.Label(motor_frame, text="2048", **val_style)
+        self.motor_h_val.grid(row=0, column=1, sticky='w', padx=5)
+
+        tk.Label(motor_frame, text="Head V:", **lbl_style).grid(row=1, column=0, sticky='e', padx=2)
+        self.motor_v_val = tk.Label(motor_frame, text="2048", **val_style)
+        self.motor_v_val.grid(row=1, column=1, sticky='w', padx=5)
+
+        tk.Label(motor_frame, text=" | ", bg='#2c3e50', fg='#7f8c8d').grid(row=0, column=2, rowspan=2)
+
+        tk.Label(motor_frame, text="Speed X:", **lbl_style).grid(row=0, column=3, sticky='e', padx=2)
+        self.move_x_val = tk.Label(motor_frame, text="0", **val_style)
+        self.move_x_val.grid(row=0, column=4, sticky='w', padx=5)
+
+        tk.Label(motor_frame, text="Speed Y:", **lbl_style).grid(row=1, column=3, sticky='e', padx=2)
+        self.move_y_val = tk.Label(motor_frame, text="0", **val_style)
+        self.move_y_val.grid(row=1, column=4, sticky='w', padx=5)
+
+        tk.Label(motor_frame, text="Theta:", **lbl_style).grid(row=0, column=5, sticky='e', padx=2)
+        self.move_th_val = tk.Label(motor_frame, text="0.00", **val_style)
+        self.move_th_val.grid(row=0, column=6, sticky='w', padx=5)
+
+        # 8. Current State
+        state_frame = tk.LabelFrame(self.root, text="State",
+                                    font=('Arial', 11, 'bold'),
+                                    bg='#ecf0f1', fg='#2c3e50', padx=5, pady=5)
+        state_frame.pack(fill='x', padx=10, pady=5)
+
+        self.state_label = tk.Label(state_frame, text="[SEARCH] Ready",
+                                    font=('Arial', 11, 'bold'),
+                                    bg='#f39c12', fg='white', padx=10, pady=5)
+        self.state_label.pack(fill='x')
+
+        # 9. Log
+        log_frame = tk.LabelFrame(self.root, text="Log",
+                                  font=('Arial', 11, 'bold'),
+                                  bg='#ecf0f1', fg='#2c3e50', padx=5, pady=5)
+        log_frame.pack(fill='both', expand=True, padx=10, pady=5)
+
+        scroll = tk.Scrollbar(log_frame)
+        scroll.pack(side='right', fill='y')
+
+        self.log_text = tk.Text(log_frame, height=5,
+                                font=('Consolas', 9),
+                                bg='#2c3e50', fg='#ecf0f1',
+                                yscrollcommand=scroll.set, state='disabled')
+        self.log_text.pack(fill='both', expand=True)
+        scroll.config(command=self.log_text.yview)
+
+    def create_compact_slider(self, parent, label, from_, to, var, cmd, resolution=1, is_int=False, color='#3498db'):
+        frame = tk.Frame(parent, bg=parent['bg'])
+        frame.pack(fill='x', pady=2)
+
+        label_bg = parent['bg']
+        tk.Label(frame, text=label, font=('Arial', 10), bg=label_bg,
+                 fg='white' if label_bg == '#34495e' else 'black',
+                 width=12, anchor='w').pack(side='left')
+
+        val_text = str(var.get())
+        val_lbl = tk.Label(frame, text=val_text, font=('Arial', 10, 'bold'),
+                           bg=color, fg='white', width=6)
+        val_lbl.pack(side='right', padx=5)
+        self.val_labels[str(var)] = val_lbl
+
+        scale = tk.Scale(frame, from_=from_, to=to, resolution=resolution,
+                         orient='horizontal', variable=var, command=cmd,
+                         showvalue=0, bg=label_bg, troughcolor=color,
+                         highlightthickness=0, width=10)
+        scale.pack(side='left', fill='x', expand=True, padx=5)
+
+    def update_val_label(self, var, value, is_int=False):
+        lbl = self.val_labels.get(str(var))
+        if lbl:
+            if is_int:
+                lbl.config(text=str(int(float(value))))
+            else:
+                lbl.config(text=f"{float(value):.1f}")
+
+    def update_trigger_y_label(self, value):
+        self.update_val_label(self.trigger_y_threshold, value, is_int=True)
+
+    def update_left_label(self, value):
+        self.update_val_label(self.left_turn_duration, value)
+
+    def update_right_label(self, value):
+        self.update_val_label(self.right_turn_duration, value)
+
+    def update_avoid_label(self, value):
+        self.update_val_label(self.avoid_duration, value)
+
+    def update_left_angle_label(self, value):
+        self.update_val_label(self.left_turn_angle, value, is_int=True)
+
+    def update_right_angle_label(self, value):
+        self.update_val_label(self.right_turn_angle, value, is_int=True)
+
+    def toggle_robot_control(self):
+        current = self.robot_control_enabled.get()
+        new_state = not current
+        self.robot_control_enabled.set(new_state)
+
+        if new_state:
+            self.control_toggle_btn.config(text="[ ON ] Active Mode", bg='#2ecc71')
+            self.control_status_label.config(text="Commands WILL be sent to robot", fg='#2ecc71')
+            self.log_message('[CONTROL] Robot control ENABLED')
+            if hasattr(self, 'node'):
+                self.node.enable_robot_control()
+        else:
+            self.control_toggle_btn.config(text="[ OFF ] Simulation Mode", bg='#e74c3c')
+            self.control_status_label.config(text="Commands will NOT be sent to robot", fg='#ecf0f1')
+            self.log_message('[CONTROL] Robot control DISABLED')
+            if hasattr(self, 'node'):
+                self.node.disable_robot_control()
+
+    def get_robot_control_enabled(self):
+        return self.robot_control_enabled.get()
+
+    def get_trigger_y(self):
+        return self.trigger_y_threshold.get()
+
+    def get_left_turn_duration(self):
+        return self.left_turn_duration.get()
+
+    def get_right_turn_duration(self):
+        return self.right_turn_duration.get()
+
+    def get_avoid_duration(self):
+        return self.avoid_duration.get()
+
+    def get_left_turn_angle(self):
+        return self.left_turn_angle.get()
+
+    def get_right_turn_angle(self):
+        return self.right_turn_angle.get()
+
+    def update_detection(self, sign_name, x, bottom_y, area):
+        self.sign_label.config(text=f"Sign: {sign_name.upper() if sign_name else '--'}")
+        self.coord_label.config(text=f"Coord: X={x}, BotY={bottom_y}")
+        self.area_label.config(text=f"Area: {area}")
+
+    def update_imu_status(self, current_yaw, target_yaw):
+        try:
+            self.imu_yaw_val.config(text=f"{current_yaw:.1f}°")
+            if target_yaw is not None:
+                self.imu_target_val.config(text=f"{target_yaw:.1f}°", fg='#e74c3c')
+            else:
+                self.imu_target_val.config(text="--", fg='#3498db')
+        except:
+            pass
+
+    def update_walking_status(self, is_walking):
+        try:
+            if is_walking:
+                self.walking_status_label.config(text="Robot Status: WALKING", fg='#2ecc71')
+            else:
+                self.walking_status_label.config(text="Robot Status: STOPPED", fg='#e74c3c')
+        except:
+            pass
+
+    def update_motor_status(self, head_h, head_v, spd_x, spd_y, theta):
+        try:
+            self.motor_h_val.config(text=f"{int(head_h)}")
+            self.motor_v_val.config(text=f"{int(head_v)}")
+            self.move_x_val.config(text=f"{int(spd_x)}")
+            self.move_y_val.config(text=f"{int(spd_y)}")
+            self.move_th_val.config(text=f"{theta:.2f}")
+        except:
+            pass
+
+    def update_robot_action(self, action):
+        if self.action_display_label is None:
+            return
+        self.action_display_label.config(text=f"Action: {action}")
+        if "LEFT" in action or "STRAFE LEFT" in action:
+            self.action_display_label.config(fg='#3498db')
+        elif "RIGHT" in action or "STRAFE RIGHT" in action:
+            self.action_display_label.config(fg='#e74c3c')
+        elif "FORWARD" in action:
+            self.action_display_label.config(fg='#2ecc71')
+        else:
+            self.action_display_label.config(fg='#2c3e50')
+
+    def update_state(self, state):
+        self.state_label.config(text=state)
+        if 'TURNING' in state or 'EXECUTING' in state:
+            self.state_label.config(bg='#e74c3c')
+        elif 'ACTION' in state:
+            self.state_label.config(bg='#c0392b')
+        elif 'LOCK' in state or 'ALIGNED' in state:
+            self.state_label.config(bg='#2ecc71')
+        elif 'ALIGN' in state:
+            self.state_label.config(bg='#27ae60')
+        elif 'DETECT' in state:
+            self.state_label.config(bg='#f39c12')
+        else:
+            self.state_label.config(bg='#95a5a6')
+
+    def log_message(self, message):
+        self.log_text.config(state='normal')
+        self.log_text.insert('end', f'{message}\n')
+        self.log_text.see('end')
+        self.log_text.config(state='disabled')
+
+    def run(self):
+        self.root.mainloop()
+
+
+def ros_spin(node):
+    rclpy.spin(node)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    gui = YOLOGUI()
+    node = YOLOTestNode(gui)
+    gui.node = node
+
+    ros_thread = threading.Thread(target=ros_spin, args=(node,), daemon=True)
+    ros_thread.start()
+
+    try:
+        gui.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if node.api_mode and node.api:
+            node.send_body_auto(0)
+        node.destroy_node()
+        rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
+# # import rclpy
+# # from rclpy.node import Node
+# # from std_msgs.msg import String
+# # from geometry_msgs.msg import Point
+# # from collections import deque
+# # import tkinter as tk
+# # from tkinter import ttk
+# # import threading
+# # import sys
+# # import os
+
+# # # 導入機器人控制 API
+# # try:
+# #     from strategy.API import API
+# #     from tku_msgs.msg import Dio
+# #     API_AVAILABLE = True
+# # except ImportError:
+# #     API_AVAILABLE = False
+# #     print("[WARNING] strategy.API or tku_msgs not found. Robot control will be disabled.")
+
+
+# # class YOLOTestNode(Node):
+# #     def __init__(self, gui):
+# #         super().__init__('yolo_test_node')
+        
+# #         self.gui = gui
+        
+# #         # === 初始化機器人控制 API ===
+# #         self.api = None
+# #         if API_AVAILABLE:
+# #             try:
+# #                 self.api = API('yolo_strategy_api')
+# #                 self.api_mode = True
+# #                 self.get_logger().info('[API] Using strategy.API control')
+# #                 self.gui.log_message('[API] Robot API loaded successfully')
+# #             except Exception as e:
+# #                 self.api_mode = False
+# #                 self.get_logger().error(f'[API] Failed to initialize API: {e}')
+# #                 self.gui.log_message(f'[ERROR] API initialization failed: {e}')
+# #         else:
+# #             self.api_mode = False
+# #             self.get_logger().warn('[API] Robot control API not available (Test mode)')
+# #             self.gui.log_message('[WARNING] API not loaded - Simulation mode only')
+        
+# #         # === 機器人運動控制參數（策略只改這些數值）===
+# #         self.target_speed_x = 0
+# #         self.target_speed_y = 0
+# #         self.target_theta = 0
+# #         self.target_head_horizontal = 2048
+# #         self.target_head_vertical = 1700
+# #         self.target_head_speed = 50
+        
+# #         # === 機器人行走狀態 ===
+# #         self.robot_walking = False
+# #         self.start_warning_shown = False
+        
+# #         # === IMU 資料 ===
+# #         self.current_yaw = 0.0
+# #         self.target_yaw = None
+# #         self.yaw_tolerance = 5.0  # 角度容忍範圍 (度)
+# #         self.imu_available = False
+        
+# #         # === 影像與偵測資訊 ===
+# #         self.sign_name = None
+# #         self.sign_area = 0
+# #         self.center_x = 0
+# #         self.center_y = 0
+        
+# #         # === 新增：偵測超時機制（針對慢速發布）===
+# #         self.last_detection_time = None
+# #         self.detection_timeout = 1.5  # 1.5秒內沒收到新偵測就視為遺失目標
+        
+# #         self.img_center_x = 160
+# #         self.img_center_y = 120
+# #         self.align_threshold = 20
+        
+# #         # === 狀態機變數 ===
+# #         self.current_state = '[SEARCH] Searching for signs...'
+# #         self.head_searching = True
+# #         self.alignment_done = False
+# #         self.head_search_step = 0
+        
+# #         # === 方向穩定性檢測（調整為適應慢速更新）===
+# #         self.arrow_temp = deque(['None'] * 2, maxlen=2)  # 從5改為2，只需連續2次相同即可確認
+# #         self.arrow_stable = False
+        
+# #         # === 動作執行計時器 ===
+# #         self.action_executing = False
+# #         self.action_start_time = None
+# #         self.action_duration = 0.0
+# #         self.action_timeout = 5.0  # IMU 控制超時時間
+# #         self.current_action_name = ""
+# #         self.use_imu_control = True  # 是否使用 IMU 控制
+        
+# #         # === 基礎運動參數 ===
+# #         self.ORIGIN_THETA = 0
+# #         self.BASE_SPEED = 2000
+# #         self.STRAFE_SPEED = 400
+# #         self.TURN_SPEED = 8  # 轉彎角速度
+        
+# #         # === 建立訂閱 ===
+# #         self.class_id_sub = self.create_subscription(
+# #             String, 
+# #             'class_id_topic', 
+# #             self.class_id_callback, 
+# #             10
+# #         )
+        
+# #         self.coord_sub = self.create_subscription(
+# #             Point,
+# #             'sign_coordinates',
+# #             self.coord_callback,
+# #             10
+# #         )
+        
+# #         # === 主控制迴圈 (100Hz) - 持續發送運動指令 ===
+# #         self.control_timer = self.create_timer(0.01, self.control_loop)
+        
+# #         # === 策略更新迴圈 (10Hz) - 更新策略狀態 ===
+# #         self.strategy_timer = self.create_timer(0.1, self.strategy_update)
+        
+# #         self.get_logger().info('=' * 50)
+# #         self.get_logger().info('   YOLO Sign Action Node Started (IMU + Auto)')
+# #         self.get_logger().info('   Optimized for slow detection (~0.5Hz)')
+# #         if API_AVAILABLE:
+# #             self.get_logger().info('   Robot Control: ENABLED (strategy.API)')
+# #         else:
+# #             self.get_logger().info('   Robot Control: DISABLED (Test Mode)')
+# #         self.get_logger().info('=' * 50 + '\n')
+
+# #     def normalize_angle(self, angle):
+# #         """將角度標準化到 [-180, 180] 範圍"""
+# #         while angle > 180:
+# #             angle -= 360
+# #         while angle < -180:
+# #             angle += 360
+# #         return angle
+
+# #     def angle_difference(self, target, current):
+# #         """計算兩個角度之間的最短差異"""
+# #         diff = self.normalize_angle(target - current)
+# #         return diff
+
+# #     def update_imu(self, yaw):
+# #         """更新 IMU 數據 (從 API 獲取)"""
+# #         self.current_yaw = yaw
+# #         self.imu_available = True
+# #         self.gui.update_imu_status(yaw, self.target_yaw)
+
+# #     def start_robot_walking(self):
+# #         """啟動機器人行走"""
+# #         if not self.api_mode:
+# #             if not self.start_warning_shown:
+# #                 self.get_logger().warn('[ROBOT] API not available - Cannot start walking')
+# #                 self.gui.log_message('[ERROR] Cannot start - API not loaded')
+# #                 self.gui.update_walking_status(False)
+# #                 self.start_warning_shown = True
+# #             return
+            
+# #         if not self.robot_walking:
+# #             try:
+# #                 self.send_body_auto(1)
+# #                 self.robot_walking = True
+# #                 self.get_logger().info('[ROBOT] Walking started (sendbodyAuto(1))')
+# #                 self.gui.log_message('[ROBOT] Walking started ✓')
+# #                 self.gui.update_walking_status(True)
+# #             except Exception as e:
+# #                 self.get_logger().error(f'[ROBOT] Failed to start walking: {e}')
+# #                 self.gui.log_message(f'[ERROR] Failed to start walking: {e}')
+# #                 self.gui.update_walking_status(False)
+    
+# #     def stop_robot_walking(self):
+# #         """停止機器人行走"""
+# #         if not self.api_mode:
+# #             return
+            
+# #         if self.robot_walking:
+# #             try:
+# #                 self.send_body_auto(0)
+# #                 self.robot_walking = False
+# #                 self.get_logger().info('[ROBOT] Walking stopped (sendbodyAuto(0))')
+# #                 self.gui.log_message('[ROBOT] Walking stopped ✓')
+# #                 self.gui.update_walking_status(False)
+# #             except Exception as e:
+# #                 self.get_logger().error(f'[ROBOT] Failed to stop walking: {e}')
+# #                 self.gui.log_message(f'[ERROR] Failed to stop walking: {e}')
+
+# #     def class_id_callback(self, msg):
+# #         """接收偵測結果"""
+# #         try:
+# #             parts = msg.data.split(',')
+# #             if len(parts) == 4:
+# #                 self.sign_name = parts[0]
+# #                 self.center_x = int(parts[1])
+# #                 bbox_y_max = int(parts[2])
+# #                 self.sign_area = int(parts[3])
+                
+# #                 # 更新最後偵測時間
+# #                 self.last_detection_time = self.get_clock().now().nanoseconds / 1e9
+                
+# #                 self.gui.update_detection(self.sign_name, self.center_x, self.center_y, self.sign_area)
+                
+# #                 if self.sign_name != 'None' and self.head_searching:
+# #                     self.head_searching = False
+# #                     self.get_logger().info('[HEAD] Sign detected, stop head searching')
+# #                     self.gui.log_message('[HEAD] Sign detected, stop head searching')
+                
+# #                 self.arrow_temp.append(self.sign_name)
+# #                 self.check_stability()
+                
+# #         except Exception as e:
+# #             self.get_logger().error(f'Parse message failed: {e}')
+
+# #     def coord_callback(self, msg):
+# #         """接收座標資訊"""
+# #         self.center_x = int(msg.x)
+# #         self.center_y = int(msg.y)
+
+# #     def check_stability(self):
+# #         """檢查方向穩定性（針對慢速更新優化）"""
+# #         arrow_set = set(self.arrow_temp)
+        
+# #         # 只需要連續 2 次相同即可確認（適應 0.5Hz 發布）
+# #         if len(arrow_set) == 1 and list(arrow_set)[0] != 'None':
+# #             if not self.arrow_stable:
+# #                 self.arrow_stable = True
+# #                 stable_direction = list(arrow_set)[0]
+# #                 self.get_logger().info(f'[OK] Sign direction stable: {stable_direction.upper()}')
+# #                 self.gui.log_message(f'[OK] Sign direction stable: {stable_direction.upper()}')
+# #         else:
+# #             if self.arrow_stable:
+# #                 self.get_logger().info('[WARN] Sign direction changed, re-confirming...')
+# #             self.arrow_stable = False
+
+# #     def check_detection_timeout(self):
+# #         """檢查偵測是否超時（沒收到新資料）"""
+# #         if self.last_detection_time is None:
+# #             return False
+        
+# #         current_time = self.get_clock().now().nanoseconds / 1e9
+# #         elapsed = current_time - self.last_detection_time
+        
+# #         if elapsed > self.detection_timeout:
+# #             # 偵測超時，清空目標
+# #             if self.sign_name and self.sign_name != 'None':
+# #                 self.get_logger().warn(f'[TIMEOUT] No detection for {elapsed:.1f}s, clearing target')
+# #                 self.gui.log_message(f'[TIMEOUT] Lost sign (no update for {elapsed:.1f}s)')
+# #                 self.sign_name = 'None'
+# #                 self.sign_area = 0
+# #                 self.arrow_stable = False
+# #                 self.alignment_done = False
+# #                 self.head_searching = True
+# #                 return True
+# #         return False
+
+# #     def control_loop(self):
+# #         """主控制迴圈 - 持續發送運動指令 (100Hz)"""
+# #         # 模擬從 API 獲取 IMU (實際應該從 self.api.imu_rpy[2] 讀取)
+# #         if self.api_mode and self.api and hasattr(self.api, 'imu_rpy'):
+# #             self.update_imu(self.api.imu_rpy[2])
+        
+# #         # 更新 GUI 數值顯示
+# #         self.gui.update_motor_status(
+# #             self.target_head_horizontal,
+# #             self.target_head_vertical,
+# #             self.target_speed_x,
+# #             self.target_speed_y,
+# #             self.target_theta
+# #         )
+        
+# #         # === 檢查 Robot Control 是否啟用 ===
+# #         if not self.gui.get_robot_control_enabled():
+# #             # 如果關閉控制，確保機器人停止
+# #             if self.robot_walking:
+# #                 self.stop_robot_walking()
+# #             return
+        
+# #         # === 如果啟用控制但機器人未行走，啟動它 ===
+# #         if not self.robot_walking:
+# #             self.start_robot_walking()
+            
+# #         if self.api_mode and self.api:
+# #             # 持續發送頭部指令
+# #             self.send_head_motor(1, self.target_head_horizontal, self.target_head_speed)
+# #             self.send_head_motor(2, self.target_head_vertical, self.target_head_speed)
+            
+# #             # 持續發送移動指令
+# #             self.send_continuous_value(self.target_speed_x, self.target_speed_y, self.target_theta)
+
+# #     def strategy_update(self):
+# #         """策略更新迴圈 - 根據狀態更新目標值 (10Hz)"""
+# #         current_time = self.get_clock().now().nanoseconds / 1e9
+        
+# #         # === 檢查偵測超時 ===
+# #         if not self.action_executing:
+# #             self.check_detection_timeout()
+        
+# #         # 檢查動作執行時間
+# #         if self.action_executing and self.action_start_time is not None:
+# #             elapsed = current_time - self.action_start_time
+            
+# #             # === IMU 控制模式 ===
+# #             if self.use_imu_control and self.target_yaw is not None:
+# #                 angle_error = abs(self.angle_difference(self.target_yaw, self.current_yaw))
+                
+# #                 if angle_error < self.yaw_tolerance:
+# #                     # 角度達到目標
+# #                     self.get_logger().info(f'[IMU] Target angle reached! Error: {angle_error:.2f}°')
+# #                     self.gui.log_message(f'[IMU] Turn complete (error: {angle_error:.2f}°)')
+# #                     self.action_executing = False
+# #                     self.target_yaw = None
+# #                     self.reset_to_search()
+                    
+# #                 elif elapsed > self.action_timeout:
+# #                     # 超時保護
+# #                     self.get_logger().warn(f'[IMU] Timeout! Angle error: {angle_error:.2f}°')
+# #                     self.gui.log_message(f'[IMU] Timeout (error: {angle_error:.2f}°)')
+# #                     self.action_executing = False
+# #                     self.target_yaw = None
+# #                     self.reset_to_search()
+# #                 else:
+# #                     # 持續轉向
+# #                     remaining = self.action_timeout - elapsed
+# #                     state = f'[TURNING] {self.current_action_name} | Error: {angle_error:.1f}° | Time: {remaining:.1f}s'
+# #                     if state != self.current_state:
+# #                         self.current_state = state
+# #                         self.gui.update_state(state)
+            
+# #             # === 時間控制模式（備用/閃避） ===
+# #             else:
+# #                 if elapsed < self.action_duration:
+# #                     remaining = self.action_duration - elapsed
+# #                     state = f'[EXECUTING] {self.current_action_name} ... {remaining:.1f}s'
+# #                     if state != self.current_state:
+# #                         self.current_state = state
+# #                         self.gui.update_state(state)
+# #                 else:
+# #                     self.action_executing = False
+# #                     self.reset_to_search()
+        
+# #         # 如果沒有在執行動作，更新策略
+# #         if not self.action_executing:
+# #             self.update_strategy()
+
+# #     def reset_to_search(self):
+# #         """重置到搜尋狀態"""
+# #         self.head_searching = True
+# #         self.alignment_done = False
+# #         self.head_search_step = 0
+# #         self.arrow_stable = False
+# #         self.arrow_temp = deque(['None'] * 2, maxlen=2)  # 重置為2個None
+# #         self.target_yaw = None
+        
+# #         # 重置運動參數為前進
+# #         self.target_speed_x = self.BASE_SPEED
+# #         self.target_speed_y = 0
+# #         self.target_theta = self.ORIGIN_THETA
+        
+# #         self.current_state = '[SEARCH] Searching for signs...'
+# #         self.gui.update_state(self.current_state)
+# #         self.get_logger().info('[RESET] Back to search mode')
+# #         self.gui.log_message('[RESET] Back to search mode')
+
+# #     def update_strategy(self):
+# #         """更新策略 - 只改變目標值，不直接發送指令"""
+# #         area_threshold = self.gui.get_area_threshold()
+        
+# #         if self.head_searching:
+# #             new_state = '[HEAD_SEARCH] Moving head to search for signs...'
+# #             self.perform_head_search()
+        
+# #         elif not self.sign_name or self.sign_name == 'None':
+# #             new_state = '[SEARCH] Searching for signs...'
+# #             self.head_searching = True
+# #             # 保持前進
+# #             self.target_speed_x = self.BASE_SPEED
+# #             self.target_speed_y = 0
+# #             self.target_theta = self.ORIGIN_THETA
+            
+# #         elif not self.arrow_stable:
+# #             new_state = f'[DETECT] Found {self.sign_name.upper()} (confirming...)'
+# #             # 保持前進（不要停下來等待確認）
+# #             self.target_speed_x = self.BASE_SPEED
+# #             self.target_speed_y = 0
+# #             self.target_theta = self.ORIGIN_THETA
+            
+# #         elif not self.alignment_done:
+# #             x_diff = abs(self.center_x - self.img_center_x)
+            
+# #             if x_diff > self.align_threshold:
+# #                 new_state = f'[ALIGN] Aligning to center (X offset: {self.center_x - self.img_center_x}px)'
+# #                 self.perform_alignment()
+# #             else:
+# #                 self.alignment_done = True
+# #                 new_state = f'[ALIGNED] Sign centered, checking distance...'
+# #                 self.get_logger().info('[ALIGN] Alignment complete')
+# #                 self.gui.log_message('[ALIGN] Alignment complete')
+                
+# #         elif self.alignment_done:
+# #             if self.sign_area < area_threshold:
+# #                 new_state = f'[LOCK] Target {self.sign_name.upper()} | Area: {self.sign_area} | Status: Approaching'
+# #                 self.perform_approach()
+# #             else:
+# #                 # 達到距離門檻，執行對應動作
+# #                 if self.sign_name in ['left', 'right']:
+# #                     new_state = f'[ACTION] Execute {self.sign_name.upper()} turn'
+# #                     self.execute_action(self.sign_name)
+# #                 elif self.sign_name == 'straight':
+# #                     new_state = f'[ACTION] Execute avoid straight sign'
+# #                     self.execute_action('straight')
+# #         else:
+# #             new_state = '[SEARCH] Searching for signs...'
+        
+# #         if new_state != self.current_state:
+# #             self.current_state = new_state
+# #             self.gui.update_state(new_state)
+# #             self.display_state()
+    
+# #     # === 機器人控制方法（兼容 strategy.API） ===
+# #     def send_head_motor(self, motor_id, position, speed):
+# #         """發送頭部馬達控制指令"""
+# #         if not self.api_mode or not self.api:
+# #             return
+# #         self.api.sendHeadMotor(motor_id, position, speed)
+    
+# #     def send_continuous_value(self, speed_x, speed_y, theta):
+# #         """發送連續移動指令"""
+# #         if not self.api_mode or not self.api:
+# #             return
+# #         self.api.sendContinuousValue(speed_x, speed_y, theta)
+    
+# #     def send_body_auto(self, mode):
+# #         """啟用/停止自動控制模式"""
+# #         if not self.api_mode or not self.api:
+# #             return
+# #         self.api.sendbodyAuto(mode)
+    
+# #     def enable_robot_control(self):
+# #         """啟用機器人控制"""
+# #         if self.api_mode and self.api:
+# #             self.get_logger().info('[CONTROL] Enabling robot body auto mode...')
+# #             self.gui.log_message('[CONTROL] Robot body auto mode ENABLED')
+    
+# #     def disable_robot_control(self):
+# #         """停止機器人控制"""
+# #         if self.api_mode and self.api:
+# #             self.get_logger().info('[CONTROL] Disabling robot body auto mode...')
+# #             # 停止所有運動
+# #             self.target_speed_x = 0
+# #             self.target_speed_y = 0
+# #             self.target_theta = 0
+# #             self.gui.log_message('[CONTROL] Robot body auto mode DISABLED')
+    
+# #     def perform_head_search(self):
+# #         """頭部搜尋 - 只改變目標位置"""
+# #         search_positions = [2048, 2048, 2048, 2048, 2048]
+        
+# #         if self.head_search_step < len(search_positions):
+# #             self.target_head_horizontal = search_positions[self.head_search_step]
+# #             self.target_head_speed = 30
+            
+# #             self.gui.update_robot_action(f"Head Search (Position: {self.target_head_horizontal})")
+# #             self.head_search_step += 1
+# #         else:
+# #             self.head_search_step = 0
+        
+# #         # 搜尋時保持前進
+# #         self.target_speed_x = self.BASE_SPEED
+# #         self.target_speed_y = 0
+# #         self.target_theta = self.ORIGIN_THETA
+    
+# #     def perform_alignment(self):
+# #         """對齊 - 使用左右橫移同時保持前進"""
+# #         x_diff = self.center_x - self.img_center_x
+        
+# #         if x_diff < -self.align_threshold:
+# #             self.gui.update_robot_action("STRAFE LEFT (Aligning)")
+# #             # 同時前進+橫移（適應慢速更新）
+# #             self.target_speed_x = int(self.BASE_SPEED * 0.6)  # 降速前進
+# #             self.target_speed_y = -self.STRAFE_SPEED
+# #             self.target_theta = self.ORIGIN_THETA
+# #             self.get_logger().debug('[ALIGN] STRAFE LEFT + FORWARD')
+            
+# #         elif x_diff > self.align_threshold:
+# #             self.gui.update_robot_action("STRAFE RIGHT (Aligning)")
+# #             # 同時前進+橫移
+# #             self.target_speed_x = int(self.BASE_SPEED * 0.6)
+# #             self.target_speed_y = self.STRAFE_SPEED
+# #             self.target_theta = self.ORIGIN_THETA
+# #             self.get_logger().debug('[ALIGN] STRAFE RIGHT + FORWARD')
+    
+# #     def perform_approach(self):
+# #         """靠近 - 只改變目標速度"""
+# #         self.gui.update_robot_action("Move FORWARD (Approaching)")
+# #         self.target_speed_x = self.BASE_SPEED
+# #         self.target_speed_y = 0
+# #         self.target_theta = self.ORIGIN_THETA
+
+# #     def execute_action(self, action):
+# #         """執行動作 - 設定目標值並開始計時"""
+# #         self.action_executing = True
+# #         self.action_start_time = self.get_clock().now().nanoseconds / 1e9
+        
+# #         if action == 'left':
+# #             self.current_action_name = 'LEFT TURN'
+# #             msg = '<< Execute LEFT turn >>'
+            
+# #             # 使用 IMU 控制
+# #             if self.imu_available:
+# #                 self.use_imu_control = True
+# #                 left_angle = self.gui.get_left_turn_angle()
+# #                 self.target_yaw = self.normalize_angle(self.current_yaw + left_angle)
+                
+# #                 self.target_speed_x = self.BASE_SPEED
+# #                 self.target_speed_y = 0
+# #                 self.target_theta = self.TURN_SPEED
+                
+# #                 self.get_logger().info(f'[IMU] Left turn: {self.current_yaw:.1f}° → {self.target_yaw:.1f}°')
+# #                 self.gui.log_message(f'[IMU] Left turn target: {self.target_yaw:.1f}°')
+# #             else:
+# #                 # 降級為時間控制
+# #                 self.use_imu_control = False
+# #                 self.action_duration = self.gui.get_left_turn_duration()
+# #                 self.target_speed_x = self.BASE_SPEED
+# #                 self.target_speed_y = 0
+# #                 self.target_theta = 8 + self.ORIGIN_THETA
+# #                 self.gui.log_message('[WARN] IMU unavailable, using timed control')
+            
+# #             self.gui.update_robot_action("TURN LEFT (90 degrees)")
+            
+# #         elif action == 'right':
+# #             self.current_action_name = 'RIGHT TURN'
+# #             msg = '>> Execute RIGHT turn >>'
+            
+# #             # 使用 IMU 控制
+# #             if self.imu_available:
+# #                 self.use_imu_control = True
+# #                 right_angle = self.gui.get_right_turn_angle()
+# #                 self.target_yaw = self.normalize_angle(self.current_yaw - right_angle)
+                
+# #                 self.target_speed_x = self.BASE_SPEED
+# #                 self.target_speed_y = 0
+# #                 self.target_theta = -self.TURN_SPEED
+                
+# #                 self.get_logger().info(f'[IMU] Right turn: {self.current_yaw:.1f}° → {self.target_yaw:.1f}°')
+# #                 self.gui.log_message(f'[IMU] Right turn target: {self.target_yaw:.1f}°')
+# #             else:
+# #                 # 降級為時間控制
+# #                 self.use_imu_control = False
+# #                 self.action_duration = self.gui.get_right_turn_duration()
+# #                 self.target_speed_x = self.BASE_SPEED
+# #                 self.target_speed_y = 0
+# #                 self.target_theta = -8 + self.ORIGIN_THETA
+# #                 self.gui.log_message('[WARN] IMU unavailable, using timed control')
+            
+# #             self.gui.update_robot_action("TURN RIGHT (90 degrees)")
+            
+# #         elif action == 'straight':
+# #             # 號誌貼地，直接踩過去（時間控制）
+# #             self.use_imu_control = False
+# #             self.action_duration = self.gui.get_avoid_duration()
+# #             self.current_action_name = 'STRAIGHT THROUGH'
+# #             msg = '|| Execute STRAIGHT THROUGH sign ||'
+            
+# #             # 直走踩過去，不閃避
+# #             self.target_speed_x = self.BASE_SPEED
+# #             self.target_speed_y = 0
+# #             self.target_theta = self.ORIGIN_THETA
+            
+# #             self.gui.update_robot_action("Move FORWARD (Stepping over straight sign)")
+        
+# #         self.get_logger().warn('=' * 45)
+# #         self.get_logger().warn(f'   {msg}')
+# #         self.get_logger().warn('=' * 45)
+# #         self.gui.log_message(f'[ACTION] {msg}')
+
+# #     def display_state(self):
+# #         """顯示狀態"""
+# #         self.get_logger().info(f'\n{"─"*45}')
+# #         self.get_logger().info(f'  {self.current_state}')
+# #         self.get_logger().info(f'{"─"*45}\n')
+
+# import rclpy
+# from rclpy.node import Node
+# from std_msgs.msg import String
+# from geometry_msgs.msg import Point
+# import tkinter as tk
+# from tkinter import ttk
+# import threading
+
+# # 導入機器人控制 API
+# try:
+#     from strategy.API import API
+#     from tku_msgs.msg import Dio
+#     API_AVAILABLE = True
+# except ImportError:
+#     API_AVAILABLE = False
+#     print("[WARNING] strategy.API or tku_msgs not found. Robot control will be disabled.")
+
+
+# class YOLOTestNode(Node):
+#     def __init__(self, gui):
+#         super().__init__('yolo_test_node')
+
+#         self.gui = gui
+
+#         # === 初始化機器人控制 API ===
+#         self.api = None
+#         if API_AVAILABLE:
+#             try:
+#                 self.api = API('yolo_strategy_api')
+#                 self.api_mode = True
+#                 self.get_logger().info('[API] Using strategy.API control')
+#                 self.gui.log_message('[API] Robot API loaded successfully')
+#             except Exception as e:
+#                 self.api_mode = False
+#                 self.get_logger().error(f'[API] Failed to initialize API: {e}')
+#                 self.gui.log_message(f'[ERROR] API initialization failed: {e}')
+#         else:
+#             self.api_mode = False
+#             self.get_logger().warn('[API] Robot control API not available (Test mode)')
+#             self.gui.log_message('[WARNING] API not loaded - Simulation mode only')
+
+#         # === 機器人運動控制參數 ===
+#         self.target_speed_x = 0
+#         self.target_speed_y = 0
+#         self.target_theta = 0
+#         self.target_head_horizontal = 2048
+#         self.target_head_vertical = 1700
+#         self.target_head_speed = 50
+
+#         # === 機器人行走狀態 ===
+#         self.robot_walking = False
+#         self.start_warning_shown = False
+
+#         # === IMU 資料 ===
+#         self.current_yaw = 0.0
+#         self.target_yaw = None
+#         self.yaw_tolerance = 5.0
+#         self.imu_available = False
+
+#         # === 偵測資訊(由 Navigation Node 確認後送來) ===
+#         self.sign_name = None
+#         self.sign_area = 0
+#         self.center_x = 0
+#         self.center_y = 0
+
+#         # === 指令鎖:收到一個動作就鎖住,執行完才接受新的 ===
+#         self.locked_action = None       # 目前鎖定要執行的動作
+#         self.command_received = False   # 是否有新指令待處理
+
+#         self.img_center_x = 160
+#         self.img_center_y = 120
+#         self.align_threshold = 20
+
+#         # === 狀態機變數 ===
+#         self.current_state = '[SEARCH] Waiting for sign command...'
+#         self.alignment_done = False
+
+#         # === 動作執行計時器 ===
+#         self.action_executing = False
+#         self.action_start_time = None
+#         self.action_duration = 0.0
+#         self.action_timeout = 5.0
+#         self.current_action_name = ""
+#         self.use_imu_control = True
+
+#         # === 基礎運動參數 ===
+#         self.ORIGIN_THETA = 0
+#         self.BASE_SPEED = 2000
+#         self.STRAFE_SPEED = 400
+#         self.TURN_SPEED = 8
+
+#         # === 訂閱 ===
+#         self.class_id_sub = self.create_subscription(
+#             String, 'class_id_topic', self.class_id_callback, 10)
+#         self.coord_sub = self.create_subscription(
+#             Point, 'sign_coordinates', self.coord_callback, 10)
+
+#         # === 主控制迴圈 (100Hz) ===
+#         self.control_timer = self.create_timer(0.01, self.control_loop)
+
+#         # === 策略更新迴圈 (10Hz) ===
+#         self.strategy_timer = self.create_timer(0.1, self.strategy_update)
+
+#         self.get_logger().info('=' * 50)
+#         self.get_logger().info('   YOLO Sign Action Node Started (Command-Locked)')
+#         self.get_logger().info('   Each command from Navigation = one action')
+#         if API_AVAILABLE:
+#             self.get_logger().info('   Robot Control: ENABLED (strategy.API)')
+#         else:
+#             self.get_logger().info('   Robot Control: DISABLED (Test Mode)')
+#         self.get_logger().info('=' * 50 + '\n')
+
+#     def normalize_angle(self, angle):
+#         while angle > 180:
+#             angle -= 360
+#         while angle < -180:
+#             angle += 360
+#         return angle
+
+#     def angle_difference(self, target, current):
+#         return self.normalize_angle(target - current)
+
+#     def update_imu(self, yaw):
+#         self.current_yaw = yaw
+#         self.imu_available = True
+#         self.gui.update_imu_status(yaw, self.target_yaw)
+
+#     def start_robot_walking(self):
+#         if not self.api_mode:
+#             if not self.start_warning_shown:
+#                 self.get_logger().warn('[ROBOT] API not available - Cannot start walking')
+#                 self.gui.log_message('[ERROR] Cannot start - API not loaded')
+#                 self.gui.update_walking_status(False)
+#                 self.start_warning_shown = True
+#             return
+
+#         if not self.robot_walking:
+#             try:
+#                 self.send_body_auto(1)
+#                 self.robot_walking = True
+#                 self.get_logger().info('[ROBOT] Walking started')
+#                 self.gui.log_message('[ROBOT] Walking started ✓')
+#                 self.gui.update_walking_status(True)
+#             except Exception as e:
+#                 self.get_logger().error(f'[ROBOT] Failed to start walking: {e}')
+#                 self.gui.update_walking_status(False)
+
+#     def stop_robot_walking(self):
+#         if not self.api_mode:
+#             return
+#         if self.robot_walking:
+#             try:
+#                 self.send_body_auto(0)
+#                 self.robot_walking = False
+#                 self.gui.log_message('[ROBOT] Walking stopped ✓')
+#                 self.gui.update_walking_status(False)
+#             except Exception as e:
+#                 self.get_logger().error(f'[ROBOT] Failed to stop walking: {e}')
+
+#     def class_id_callback(self, msg):
+#         """接收 Navigation Node 確認過的指令 — 收到就鎖定"""
+#         try:
+#             parts = msg.data.split(',')
+#             if len(parts) != 4:
+#                 return
+
+#             new_sign = parts[0]
+#             self.center_x = int(parts[1])
+#             self.sign_area = int(parts[3])
+
+#             # 如果正在執行動作,忽略新指令
+#             if self.action_executing:
+#                 return
+
+#             # 如果已經鎖定一個動作,忽略新指令(直到完成)
+#             if self.locked_action is not None:
+#                 # 但仍更新座標和面積(用於對齊和距離判斷)
+#                 self.sign_name = new_sign
+#                 return
+
+#             # 收到新指令 → 鎖定
+#             if new_sign and new_sign != 'None':
+#                 self.sign_name = new_sign
+#                 self.locked_action = new_sign
+#                 self.command_received = True
+#                 self.get_logger().info(
+#                     f'[CMD] Locked action: {new_sign.upper()} (area={self.sign_area})')
+#                 self.gui.log_message(f'[CMD] Locked: {new_sign.upper()}')
+#                 self.gui.update_detection(new_sign, self.center_x, self.center_y, self.sign_area)
+
+#         except Exception as e:
+#             self.get_logger().error(f'Parse message failed: {e}')
+
+#     def coord_callback(self, msg):
+#         self.center_x = int(msg.x)
+#         self.center_y = int(msg.y)
+
+#     def control_loop(self):
+#         """主控制迴圈 - 持續發送運動指令 (100Hz)"""
+#         if self.api_mode and self.api and hasattr(self.api, 'imu_rpy'):
+#             self.update_imu(self.api.imu_rpy[2])
+
+#         self.gui.update_motor_status(
+#             self.target_head_horizontal, self.target_head_vertical,
+#             self.target_speed_x, self.target_speed_y, self.target_theta)
+
+#         if not self.gui.get_robot_control_enabled():
+#             if self.robot_walking:
+#                 self.stop_robot_walking()
+#             return
+
+#         if not self.robot_walking:
+#             self.start_robot_walking()
+
+#         if self.api_mode and self.api:
+#             self.send_head_motor(1, self.target_head_horizontal, self.target_head_speed)
+#             self.send_head_motor(2, self.target_head_vertical, self.target_head_speed)
+#             self.send_continuous_value(self.target_speed_x, self.target_speed_y, self.target_theta)
+
+#     def strategy_update(self):
+#         """策略更新迴圈 (10Hz)"""
+#         current_time = self.get_clock().now().nanoseconds / 1e9
+
+#         # === 動作執行中的處理 ===
+#         if self.action_executing and self.action_start_time is not None:
+#             elapsed = current_time - self.action_start_time
+
+#             if self.use_imu_control and self.target_yaw is not None:
+#                 angle_error = abs(self.angle_difference(self.target_yaw, self.current_yaw))
+
+#                 if angle_error < self.yaw_tolerance:
+#                     self.get_logger().info(f'[IMU] Target angle reached! Error: {angle_error:.2f}°')
+#                     self.gui.log_message(f'[IMU] Turn complete (error: {angle_error:.2f}°)')
+#                     self.finish_action()
+#                 elif elapsed > self.action_timeout:
+#                     self.get_logger().warn(f'[IMU] Timeout! Angle error: {angle_error:.2f}°')
+#                     self.gui.log_message(f'[IMU] Timeout (error: {angle_error:.2f}°)')
+#                     self.finish_action()
+#                 else:
+#                     remaining = self.action_timeout - elapsed
+#                     state = f'[TURNING] {self.current_action_name} | Err: {angle_error:.1f}° | T: {remaining:.1f}s'
+#                     if state != self.current_state:
+#                         self.current_state = state
+#                         self.gui.update_state(state)
+#             else:
+#                 # 時間控制
+#                 if elapsed < self.action_duration:
+#                     remaining = self.action_duration - elapsed
+#                     state = f'[EXECUTING] {self.current_action_name} ... {remaining:.1f}s'
+#                     if state != self.current_state:
+#                         self.current_state = state
+#                         self.gui.update_state(state)
+#                 else:
+#                     self.finish_action()
+#             return
+
+#         # === 沒在執行動作:看有沒有鎖定的指令 ===
+#         if self.locked_action is None:
+#             # 沒指令 → 前進等候
+#             new_state = '[SEARCH] Waiting for sign command...'
+#             self.target_speed_x = self.BASE_SPEED
+#             self.target_speed_y = 0
+#             self.target_theta = self.ORIGIN_THETA
+#             if new_state != self.current_state:
+#                 self.current_state = new_state
+#                 self.gui.update_state(new_state)
+#             return
+
+#         # === 有鎖定指令:對齊 → 接近 → 執行 ===
+#         area_threshold = self.gui.get_area_threshold()
+
+#         if not self.alignment_done:
+#             x_diff = abs(self.center_x - self.img_center_x)
+#             if x_diff > self.align_threshold:
+#                 new_state = f'[ALIGN] {self.locked_action.upper()} (X off: {self.center_x - self.img_center_x}px)'
+#                 self.perform_alignment()
+#             else:
+#                 self.alignment_done = True
+#                 new_state = f'[ALIGNED] {self.locked_action.upper()} centered'
+#                 self.get_logger().info('[ALIGN] Alignment complete')
+#                 self.gui.log_message('[ALIGN] Alignment complete')
+#         else:
+#             if self.sign_area < area_threshold:
+#                 new_state = f'[LOCK] {self.locked_action.upper()} | Area: {self.sign_area} | Approaching'
+#                 self.perform_approach()
+#             else:
+#                 # 距離夠了,執行動作
+#                 new_state = f'[ACTION] Execute {self.locked_action.upper()}'
+#                 self.execute_action(self.locked_action)
+
+#         if new_state != self.current_state:
+#             self.current_state = new_state
+#             self.gui.update_state(new_state)
+
+#     def finish_action(self):
+#         """動作執行完成,重置所有狀態,準備接受下一個指令"""
+#         self.action_executing = False
+#         self.target_yaw = None
+#         self.alignment_done = False
+#         self.locked_action = None
+#         self.sign_name = None
+#         self.sign_area = 0
+#         self.command_received = False
+
+#         self.target_speed_x = self.BASE_SPEED
+#         self.target_speed_y = 0
+#         self.target_theta = self.ORIGIN_THETA
+
+#         self.current_state = '[SEARCH] Waiting for sign command...'
+#         self.gui.update_state(self.current_state)
+#         self.get_logger().info('[RESET] Ready for next command')
+#         self.gui.log_message('[RESET] Ready for next command')
+
+#     # === 機器人控制方法 ===
+#     def send_head_motor(self, motor_id, position, speed):
+#         if not self.api_mode or not self.api:
+#             return
+#         self.api.sendHeadMotor(motor_id, position, speed)
+
+#     def send_continuous_value(self, speed_x, speed_y, theta):
+#         if not self.api_mode or not self.api:
+#             return
+#         self.api.sendContinuousValue(speed_x, speed_y, theta)
+
+#     def send_body_auto(self, mode):
+#         if not self.api_mode or not self.api:
+#             return
+#         self.api.sendbodyAuto(mode)
+
+#     def enable_robot_control(self):
+#         if self.api_mode and self.api:
+#             self.gui.log_message('[CONTROL] Robot body auto mode ENABLED')
+
+#     def disable_robot_control(self):
+#         if self.api_mode and self.api:
+#             self.target_speed_x = 0
+#             self.target_speed_y = 0
+#             self.target_theta = 0
+#             self.gui.log_message('[CONTROL] Robot body auto mode DISABLED')
+
+#     def perform_alignment(self):
+#         x_diff = self.center_x - self.img_center_x
+#         if x_diff < -self.align_threshold:
+#             self.gui.update_robot_action("STRAFE LEFT (Aligning)")
+#             self.target_speed_x = int(self.BASE_SPEED * 0.6)
+#             self.target_speed_y = -self.STRAFE_SPEED
+#             self.target_theta = self.ORIGIN_THETA
+#         elif x_diff > self.align_threshold:
+#             self.gui.update_robot_action("STRAFE RIGHT (Aligning)")
+#             self.target_speed_x = int(self.BASE_SPEED * 0.6)
+#             self.target_speed_y = self.STRAFE_SPEED
+#             self.target_theta = self.ORIGIN_THETA
+
+#     def perform_approach(self):
+#         self.gui.update_robot_action("Move FORWARD (Approaching)")
+#         self.target_speed_x = self.BASE_SPEED
+#         self.target_speed_y = 0
+#         self.target_theta = self.ORIGIN_THETA
+
+#     def execute_action(self, action):
+#         self.action_executing = True
+#         self.action_start_time = self.get_clock().now().nanoseconds / 1e9
+
+#         if action == 'left':
+#             self.current_action_name = 'LEFT TURN'
+#             if self.imu_available:
+#                 self.use_imu_control = True
+#                 left_angle = self.gui.get_left_turn_angle()
+#                 self.target_yaw = self.normalize_angle(self.current_yaw + left_angle)
+#                 self.target_speed_x = self.BASE_SPEED
+#                 self.target_speed_y = 0
+#                 self.target_theta = self.TURN_SPEED
+#                 self.get_logger().info(f'[IMU] Left turn: {self.current_yaw:.1f}° → {self.target_yaw:.1f}°')
+#                 self.gui.log_message(f'[IMU] Left turn target: {self.target_yaw:.1f}°')
+#             else:
+#                 self.use_imu_control = False
+#                 self.action_duration = self.gui.get_left_turn_duration()
+#                 self.target_speed_x = self.BASE_SPEED
+#                 self.target_speed_y = 0
+#                 self.target_theta = 8 + self.ORIGIN_THETA
+#                 self.gui.log_message('[WARN] IMU unavailable, using timed control')
+#             self.gui.update_robot_action("TURN LEFT")
+
+#         elif action == 'right':
+#             self.current_action_name = 'RIGHT TURN'
+#             if self.imu_available:
+#                 self.use_imu_control = True
+#                 right_angle = self.gui.get_right_turn_angle()
+#                 self.target_yaw = self.normalize_angle(self.current_yaw - right_angle)
+#                 self.target_speed_x = self.BASE_SPEED
+#                 self.target_speed_y = 0
+#                 self.target_theta = -self.TURN_SPEED
+#                 self.get_logger().info(f'[IMU] Right turn: {self.current_yaw:.1f}° → {self.target_yaw:.1f}°')
+#                 self.gui.log_message(f'[IMU] Right turn target: {self.target_yaw:.1f}°')
+#             else:
+#                 self.use_imu_control = False
+#                 self.action_duration = self.gui.get_right_turn_duration()
+#                 self.target_speed_x = self.BASE_SPEED
+#                 self.target_speed_y = 0
+#                 self.target_theta = -8 + self.ORIGIN_THETA
+#                 self.gui.log_message('[WARN] IMU unavailable, using timed control')
+#             self.gui.update_robot_action("TURN RIGHT")
+
+#         elif action == 'straight':
+#             self.use_imu_control = False
+#             self.action_duration = self.gui.get_avoid_duration()
+#             self.current_action_name = 'STRAIGHT THROUGH'
+#             self.target_speed_x = self.BASE_SPEED
+#             self.target_speed_y = 0
+#             self.target_theta = self.ORIGIN_THETA
+#             self.gui.update_robot_action("Move FORWARD (Stepping over)")
+
+#         self.get_logger().warn('=' * 45)
+#         self.get_logger().warn(f'   << Execute {action.upper()} >>')
+#         self.get_logger().warn('=' * 45)
+#         self.gui.log_message(f'[ACTION] Execute {action.upper()}')
+
+
+# # ============================================================
+# # YOLOGUI 類別與 main() 跟原本完全一樣,從你原檔複製過來即可
+# # (這裡省略以節省篇幅,實際檔案會包含完整 GUI)
+# # ============================================================
+# class YOLOGUI:
+#     def __init__(self):
+#         self.root = tk.Tk()
+#         self.root.title("YOLO Sign Control Panel (IMU + Auto) - Slow Detection Mode")
+#         self.root.geometry("850x1070")
+#         self.root.configure(bg='#2c3e50')
+        
+#         self.area_threshold = tk.IntVar(value=8000)
+#         self.left_turn_duration = tk.DoubleVar(value=2.0)
+#         self.right_turn_duration = tk.DoubleVar(value=2.0)
+#         self.avoid_duration = tk.DoubleVar(value=1.5)
+        
+#         # 新增：IMU 控制的轉向角度
+#         self.left_turn_angle = tk.IntVar(value=90)
+#         self.right_turn_angle = tk.IntVar(value=90)
+        
+#         self.robot_control_enabled = tk.BooleanVar(value=False)
+        
+#         self.action_display_label = None
+#         self.control_toggle_btn = None
+#         self.control_status_label = None
+#         self.walking_status_label = None
+#         self.detection_rate_label = None  # 新增：偵測頻率顯示
+        
+#         self.val_labels = {}
+        
+#         self.setup_ui()
+        
+#     def setup_ui(self):
+#         # 1. Title
+#         title_frame = tk.Frame(self.root, bg='#34495e', pady=10)
+#         title_frame.pack(fill='x')
+        
+#         title = tk.Label(title_frame, text="YOLO Sign Control Panel (IMU + Auto)", 
+#                         font=('Arial', 17, 'bold'), bg='#34495e', fg='white')
+#         title.pack()
+        
+#         # 2. ROBOT CONTROL TOGGLE
+#         control_frame = tk.Frame(self.root, bg='#34495e', pady=5)
+#         control_frame.pack(fill='x', padx=10)
+        
+#         tk.Label(control_frame, text="ROBOT CONTROL", 
+#                 font=('Arial', 11, 'bold'), bg='#34495e', fg='white').pack()
+        
+#         self.control_toggle_btn = tk.Button(
+#             control_frame,
+#             text="[ OFF ] Simulation Mode",
+#             font=('Arial', 13, 'bold'),
+#             bg='#e74c3c',
+#             fg='white',
+#             command=self.toggle_robot_control,
+#             padx=20,
+#             pady=5,
+#             relief='raised',
+#             borderwidth=3,
+#             cursor='hand2'
+#         )
+#         self.control_toggle_btn.pack(pady=5)
+        
+#         self.control_status_label = tk.Label(
+#             control_frame,
+#             text="Commands will NOT be sent to robot",
+#             font=('Arial', 10),
+#             bg='#34495e',
+#             fg='#ecf0f1'
+#         )
+#         self.control_status_label.pack()
+        
+#         # 行走狀態指示
+#         self.walking_status_label = tk.Label(
+#             control_frame,
+#             text="Robot Status: STOPPED",
+#             font=('Arial', 11, 'bold'),
+#             bg='#34495e',
+#             fg='#e74c3c'
+#         )
+#         self.walking_status_label.pack(pady=2)
+        
+#         # 3. IMU 轉向角度設定
+#         angle_frame = tk.LabelFrame(self.root, text="Turn Angles (IMU Control)", 
+#                                      font=('Arial', 11, 'bold'),
+#                                      bg='#34495e', fg='#f1c40f', 
+#                                      padx=5, pady=5)
+#         angle_frame.pack(fill='x', padx=10, pady=5)
+        
+#         self.create_compact_slider(angle_frame, "Left Turn (°)", 30, 180, 
+#                                  self.left_turn_angle, self.update_left_angle_label, 
+#                                  resolution=5, is_int=True, color='#3498db')
+#         self.create_compact_slider(angle_frame, "Right Turn (°)", 30, 180, 
+#                                  self.right_turn_angle, self.update_right_angle_label, 
+#                                  resolution=5, is_int=True, color='#e74c3c')
+        
+#         # 4. 其他參數設定
+#         control_params = tk.LabelFrame(self.root, text="Other Parameters", 
+#                                      font=('Arial', 11, 'bold'),
+#                                      bg='#ecf0f1', fg='#2c3e50', 
+#                                      padx=5, pady=5)
+#         control_params.pack(fill='x', padx=10, pady=5)
+        
+#         self.create_compact_slider(control_params, "Area Thres", 100, 1000, 
+#                                  self.area_threshold, self.update_area_label, 
+#                                  is_int=True, color='#3498db')
+#         self.create_compact_slider(control_params, "Left Time (s)", 0.5, 10.0, 
+#                                  self.left_turn_duration, self.update_left_label, 
+#                                  resolution=0.1, color='#95a5a6')
+#         self.create_compact_slider(control_params, "Right Time (s)", 0.5, 10.0, 
+#                                  self.right_turn_duration, self.update_right_label, 
+#                                  resolution=0.1, color='#95a5a6')
+#         self.create_compact_slider(control_params, "Avoid (s)", 0.5, 10.0, 
+#                                  self.avoid_duration, self.update_avoid_label, 
+#                                  resolution=0.1, color='#9b59b6')
+
+#         # 5. Detection Info
+#         info_frame = tk.LabelFrame(self.root, text="Detection Info", 
+#                                   font=('Arial', 11, 'bold'),
+#                                   bg='#ecf0f1', fg='#2c3e50',
+#                                   padx=10, pady=5)
+#         info_frame.pack(fill='x', padx=10, pady=5)
+        
+#         self.sign_label = tk.Label(info_frame, text="Sign: --", font=('Arial', 10), bg='#ecf0f1', width=15, anchor='w')
+#         self.sign_label.grid(row=0, column=0, sticky='w', padx=2)
+        
+#         self.area_label = tk.Label(info_frame, text="Area: 0", font=('Arial', 10), bg='#ecf0f1', width=15, anchor='w')
+#         self.area_label.grid(row=0, column=1, sticky='w', padx=2)
+        
+#         self.coord_label = tk.Label(info_frame, text="Coord: X=0, Y=0", font=('Arial', 10), bg='#ecf0f1', width=25, anchor='w')
+#         self.coord_label.grid(row=1, column=0, columnspan=2, sticky='w', padx=2)
+        
+#         self.action_display_label = tk.Label(info_frame, text="Action: --", 
+#                                              font=('Arial', 11, 'bold'), 
+#                                              bg='#ecf0f1', fg='#e74c3c', anchor='w')
+#         self.action_display_label.grid(row=2, column=0, columnspan=2, sticky='w', pady=(5,0), padx=2)
+
+#         # 6. IMU 狀態監控
+#         imu_frame = tk.LabelFrame(self.root, text="IMU Monitor", 
+#                                    font=('Arial', 11, 'bold'),
+#                                    bg='#2c3e50', fg='#f39c12',
+#                                    padx=10, pady=5)
+#         imu_frame.pack(fill='x', padx=10, pady=5)
+        
+#         lbl_style = {'bg': '#2c3e50', 'fg': '#ecf0f1', 'font': ('Consolas', 10)}
+#         val_style = {'bg': '#2c3e50', 'fg': '#3498db', 'font': ('Consolas', 11, 'bold')}
+        
+#         tk.Label(imu_frame, text="Current Yaw:", **lbl_style).grid(row=0, column=0, sticky='e', padx=2)
+#         self.imu_yaw_val = tk.Label(imu_frame, text="0.0°", **val_style)
+#         self.imu_yaw_val.grid(row=0, column=1, sticky='w', padx=5)
+        
+#         tk.Label(imu_frame, text="Target Yaw:", **lbl_style).grid(row=0, column=2, sticky='e', padx=2)
+#         self.imu_target_val = tk.Label(imu_frame, text="--", **val_style)
+#         self.imu_target_val.grid(row=0, column=3, sticky='w', padx=5)
+
+#         # 7. Motor & Motion Status
+#         motor_frame = tk.LabelFrame(self.root, text="Motor & Motion Monitor", 
+#                                    font=('Arial', 11, 'bold'),
+#                                    bg='#2c3e50', fg='#f1c40f',
+#                                    padx=10, pady=5)
+#         motor_frame.pack(fill='x', padx=10, pady=5)
+        
+#         lbl_style = {'bg': '#2c3e50', 'fg': '#ecf0f1', 'font': ('Consolas', 10)}
+#         val_style = {'bg': '#2c3e50', 'fg': '#2ecc71', 'font': ('Consolas', 11, 'bold')}
+
+#         tk.Label(motor_frame, text="Head H:", **lbl_style).grid(row=0, column=0, sticky='e', padx=2)
+#         self.motor_h_val = tk.Label(motor_frame, text="2048", **val_style)
+#         self.motor_h_val.grid(row=0, column=1, sticky='w', padx=5)
+
+#         tk.Label(motor_frame, text="Head V:", **lbl_style).grid(row=1, column=0, sticky='e', padx=2)
+#         self.motor_v_val = tk.Label(motor_frame, text="2048", **val_style)
+#         self.motor_v_val.grid(row=1, column=1, sticky='w', padx=5)
+
+#         tk.Label(motor_frame, text=" | ", bg='#2c3e50', fg='#7f8c8d').grid(row=0, column=2, rowspan=2)
+
+#         tk.Label(motor_frame, text="Speed X:", **lbl_style).grid(row=0, column=3, sticky='e', padx=2)
+#         self.move_x_val = tk.Label(motor_frame, text="0", **val_style)
+#         self.move_x_val.grid(row=0, column=4, sticky='w', padx=5)
+
+#         tk.Label(motor_frame, text="Speed Y:", **lbl_style).grid(row=1, column=3, sticky='e', padx=2)
+#         self.move_y_val = tk.Label(motor_frame, text="0", **val_style)
+#         self.move_y_val.grid(row=1, column=4, sticky='w', padx=5)
+
+#         tk.Label(motor_frame, text="Theta:", **lbl_style).grid(row=0, column=5, sticky='e', padx=2)
+#         self.move_th_val = tk.Label(motor_frame, text="0.00", **val_style)
+#         self.move_th_val.grid(row=0, column=6, sticky='w', padx=5)
+        
+#         # 8. Current State
+#         state_frame = tk.LabelFrame(self.root, text="State", 
+#                                    font=('Arial', 11, 'bold'),
+#                                    bg='#ecf0f1', fg='#2c3e50',
+#                                    padx=5, pady=5)
+#         state_frame.pack(fill='x', padx=10, pady=5)
+        
+#         self.state_label = tk.Label(state_frame, text="[SEARCH] Ready", 
+#                                     font=('Arial', 11, 'bold'),
+#                                     bg='#f39c12', fg='white',
+#                                     padx=10, pady=5)
+#         self.state_label.pack(fill='x')
+        
+#         # 9. Log
+#         log_frame = tk.LabelFrame(self.root, text="Log", 
+#                                  font=('Arial', 11, 'bold'),
+#                                  bg='#ecf0f1', fg='#2c3e50',
+#                                  padx=5, pady=5)
+#         log_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        
+#         scroll = tk.Scrollbar(log_frame)
+#         scroll.pack(side='right', fill='y')
+        
+#         self.log_text = tk.Text(log_frame, height=5, 
+#                                font=('Consolas', 9),
+#                                bg='#2c3e50', fg='#ecf0f1',
+#                                yscrollcommand=scroll.set,
+#                                state='disabled')
+#         self.log_text.pack(fill='both', expand=True)
+#         scroll.config(command=self.log_text.yview)
+
+#     def create_compact_slider(self, parent, label, from_, to, var, cmd, resolution=1, is_int=False, color='#3498db'):
+#         frame = tk.Frame(parent, bg=parent['bg'])
+#         frame.pack(fill='x', pady=2)
+        
+#         label_bg = parent['bg']
+#         tk.Label(frame, text=label, font=('Arial', 10), bg=label_bg, 
+#                 fg='white' if label_bg == '#34495e' else 'black', width=12, anchor='w').pack(side='left')
+        
+#         val_text = str(var.get())
+#         val_lbl = tk.Label(frame, text=val_text, font=('Arial', 10, 'bold'), 
+#                            bg=color, fg='white', width=6)
+#         val_lbl.pack(side='right', padx=5)
+#         self.val_labels[str(var)] = val_lbl
+        
+#         scale = tk.Scale(frame, from_=from_, to=to, resolution=resolution,
+#                          orient='horizontal', variable=var, command=cmd,
+#                          showvalue=0, bg=label_bg, troughcolor=color, highlightthickness=0,
+#                          width=10)
+#         scale.pack(side='left', fill='x', expand=True, padx=5)
+
+#     def update_val_label(self, var, value, is_int=False):
+#         lbl = self.val_labels.get(str(var))
+#         if lbl:
+#             if is_int:
+#                 lbl.config(text=str(int(float(value))))
+#             else:
+#                 lbl.config(text=f"{float(value):.1f}")
+
+#     def update_area_label(self, value): 
+#         self.update_val_label(self.area_threshold, value, is_int=True)
+    
+#     def update_left_label(self, value): 
+#         self.update_val_label(self.left_turn_duration, value)
+    
+#     def update_right_label(self, value): 
+#         self.update_val_label(self.right_turn_duration, value)
+    
+#     def update_avoid_label(self, value): 
+#         self.update_val_label(self.avoid_duration, value)
+    
+#     def update_left_angle_label(self, value): 
+#         self.update_val_label(self.left_turn_angle, value, is_int=True)
+    
+#     def update_right_angle_label(self, value): 
+#         self.update_val_label(self.right_turn_angle, value, is_int=True)
+    
+#     def toggle_robot_control(self):
+#         current = self.robot_control_enabled.get()
+#         new_state = not current
+#         self.robot_control_enabled.set(new_state)
+        
+#         if new_state:
+#             self.control_toggle_btn.config(text="[ ON ] Active Mode", bg='#2ecc71')
+#             self.control_status_label.config(text="Commands WILL be sent to robot", fg='#2ecc71')
+#             self.log_message('[CONTROL] Robot control ENABLED')
+#             if hasattr(self, 'node'):
+#                 self.node.enable_robot_control()
+#         else:
+#             self.control_toggle_btn.config(text="[ OFF ] Simulation Mode", bg='#e74c3c')
+#             self.control_status_label.config(text="Commands will NOT be sent to robot", fg='#ecf0f1')
+#             self.log_message('[CONTROL] Robot control DISABLED')
+#             if hasattr(self, 'node'):
+#                 self.node.disable_robot_control()
+    
+#     def get_robot_control_enabled(self): 
+#         return self.robot_control_enabled.get()
+    
+#     def get_area_threshold(self): 
+#         return self.area_threshold.get()
+    
+#     def get_left_turn_duration(self): 
+#         return self.left_turn_duration.get()
+    
+#     def get_right_turn_duration(self): 
+#         return self.right_turn_duration.get()
+    
+#     def get_avoid_duration(self): 
+#         return self.avoid_duration.get()
+    
+#     def get_left_turn_angle(self): 
+#         return self.left_turn_angle.get()
+    
+#     def get_right_turn_angle(self): 
+#         return self.right_turn_angle.get()
+    
+#     def update_detection(self, sign_name, x, y, area):
+#         self.sign_label.config(text=f"Sign: {sign_name.upper() if sign_name else '--'}")
+#         self.coord_label.config(text=f"Coord: X={x}, Y={y}")
+#         self.area_label.config(text=f"Area: {area}")
+    
+#     def update_imu_status(self, current_yaw, target_yaw):
+#         """更新 IMU 狀態顯示"""
+#         try:
+#             self.imu_yaw_val.config(text=f"{current_yaw:.1f}°")
+#             if target_yaw is not None:
+#                 self.imu_target_val.config(text=f"{target_yaw:.1f}°", fg='#e74c3c')
+#             else:
+#                 self.imu_target_val.config(text="--", fg='#3498db')
+#         except:
+#             pass
+    
+#     def update_walking_status(self, is_walking):
+#         """更新機器人行走狀態顯示"""
+#         try:
+#             if is_walking:
+#                 self.walking_status_label.config(text="Robot Status: WALKING", fg='#2ecc71')
+#             else:
+#                 self.walking_status_label.config(text="Robot Status: STOPPED", fg='#e74c3c')
+#         except:
+#             pass
+    
+#     def update_motor_status(self, head_h, head_v, spd_x, spd_y, theta):
+#         """更新馬達與移動數值顯示"""
+#         try:
+#             self.motor_h_val.config(text=f"{int(head_h)}")
+#             self.motor_v_val.config(text=f"{int(head_v)}")
+#             self.move_x_val.config(text=f"{int(spd_x)}")
+#             self.move_y_val.config(text=f"{int(spd_y)}")
+#             self.move_th_val.config(text=f"{theta:.2f}")
+#         except:
+#             pass
+
+#     def update_robot_action(self, action):
+#         if self.action_display_label is None: 
+#             return
+#         self.action_display_label.config(text=f"Action: {action}")
+#         if "LEFT" in action or "STRAFE LEFT" in action: 
+#             self.action_display_label.config(fg='#3498db')
+#         elif "RIGHT" in action or "STRAFE RIGHT" in action: 
+#             self.action_display_label.config(fg='#e74c3c')
+#         elif "FORWARD" in action: 
+#             self.action_display_label.config(fg='#2ecc71')
+#         elif "Head Search" in action: 
+#             self.action_display_label.config(fg='#9b59b6')
+#         else: 
+#             self.action_display_label.config(fg='#2c3e50')
+        
+#     def update_state(self, state):
+#         self.state_label.config(text=state)
+#         if 'TURNING' in state or 'EXECUTING' in state: 
+#             self.state_label.config(bg='#e74c3c')
+#         elif 'ACTION' in state: 
+#             self.state_label.config(bg='#c0392b')
+#         elif 'LOCK' in state or 'ALIGNED' in state: 
+#             self.state_label.config(bg='#2ecc71')
+#         elif 'ALIGN' in state: 
+#             self.state_label.config(bg='#27ae60')
+#         elif 'HEAD_SEARCH' in state: 
+#             self.state_label.config(bg='#3498db')
+#         elif 'DETECT' in state: 
+#             self.state_label.config(bg='#f39c12')
+#         else: 
+#             self.state_label.config(bg='#95a5a6')
+    
+#     def log_message(self, message):
+#         self.log_text.config(state='normal')
+#         self.log_text.insert('end', f'{message}\n')
+#         self.log_text.see('end')
+#         self.log_text.config(state='disabled')
+    
+#     def run(self):
+#         self.root.mainloop()
+
+
+# def ros_spin(node):
+#     rclpy.spin(node)
+
+
+# def main(args=None):
+#     rclpy.init(args=args)
+    
+#     gui = YOLOGUI()
+#     node = YOLOTestNode(gui)
+    
+#     # 讓 GUI 可以存取 node
+#     gui.node = node
+    
+#     ros_thread = threading.Thread(target=ros_spin, args=(node,), daemon=True)
+#     ros_thread.start()
+    
+#     try:
+#         gui.run()
+#     except KeyboardInterrupt:
+#         pass
+#     finally:
+#         # 關閉時停止機器人
+#         if node.api_mode and node.api:
+#             node.send_body_auto(0)
+#         node.destroy_node()
+#         rclpy.shutdown()
+
+
+# if __name__ == '__main__':
+#     main()
