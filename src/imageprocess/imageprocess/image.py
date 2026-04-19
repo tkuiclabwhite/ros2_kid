@@ -587,7 +587,7 @@ class ImageNode(Node):
             if up.name == "src" and (up / "strategy" / "strategy").is_dir():
                 return up / "strategy" / "strategy"
         # 找不到就退回家目錄預設
-        return Path.home() / "tku" / "src" / "strategy" / "strategy"
+        return Path.home() / "ros2_kid" / "src" / "strategy" / "strategy"
 
     def _read_strategy_ini_raw(self) -> str:
         try:
@@ -645,7 +645,7 @@ class ImageNode(Node):
                     break
             if p is None:
                 # 萬一找不到就退回家目錄一個預設位置
-                p = Path.home() / "tku/src/strategy/strategy/strategy.ini"
+                p = Path.home() / "ros2_kid/src/strategy/strategy/strategy.ini"
         p.parent.mkdir(parents=True, exist_ok=True)
         return p
 
@@ -679,7 +679,7 @@ class ImageNode(Node):
         else:
             # [修正] 使用 Path.home() 自動抓取當前使用者目錄 (例如 /home/aa)
             # 避免寫死 /home/iclab 導致 Permission denied
-            js_path = Path.home() / "tku" / "hurocup_interface" / "strategy_autoload.js"
+            js_path = Path.home() / "ros2_kid" / "hurocup_interface" / "strategy_autoload.js"
             
         js_path.parent.mkdir(parents=True, exist_ok=True)
 

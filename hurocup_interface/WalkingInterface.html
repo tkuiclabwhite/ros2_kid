@@ -331,12 +331,17 @@
 
 		});
 
-		function strategylocation() {
-			// 获取选定的值
-			location_msg.data = "/home/iclab/ros2_kid/src/strategy/strategy/"+ document.getElementById('strategy_location').value + "/Parameter";
-			console.log(`Selected strategy location: ${location_msg.data}`);
-			location_strategy.publish(location_msg);
-		}
+function strategylocation() {
+    // 既然 HTML 元素被註解了，我們直接指定一個預設的策略名稱 (例如 'ar' 或 'lc')
+    var default_strategy = "ar"; 
+    
+    // 組合出後端需要的路徑
+    location_msg.data = "/home/iclab/ros2_kid/src/strategy/strategy/" + default_strategy + "/Parameter";
+    
+    console.log(`Selected strategy location: ${location_msg.data}`);
+    location_strategy.publish(location_msg);
+
+}
 
 		function ResetFun(){
 			document.getElementById("Xvalue").value = 0;
@@ -496,7 +501,11 @@
 					document.getElementById("lift_height").value = res.lift_height;
 					document.getElementById("stand_height").value = res.stand_height;
 					document.getElementById("com_height").value = res.com_height;
-				});
+				},function (err) {
+        // 失敗時會進來這裡
+        console.error("載入參數失敗，後端 ROS Service 可能尚未準備好或發生錯誤: ", err);
+        alert("參數載入失敗，請確認機器人後端策略是否已啟動！");
+    });
 			} else if (statetype === 1 || statetype === 2) {
 			// --- 載入上/下樓梯步態 ---
 				LoadLCWalkingGaitParameterClient.callService(WalkingGaitParameter_request, function (res) {
@@ -514,7 +523,11 @@
 					document.getElementById(prefix + "Clearance").value = res.clearance;
 					document.getElementById(prefix + "Hip_roll").value = res.hip_roll;
 					document.getElementById(prefix + "Ankle_roll").value = res.ankle_roll;
-				});
+				},function (err) {
+        // 失敗時會進來這裡
+        console.error("載入參數失敗，後端 ROS Service 可能尚未準備好或發生錯誤: ", err);
+        alert("參數載入失敗，請確認機器人後端策略是否已啟動！");
+    });
 			}
 		}
 
@@ -764,12 +777,8 @@
 				SensorSet_msg.reset = false;
 			}
 		}
-	</script>
 
-	<script src="../src/strategy/strategy/strategy.js"></script>
-
-	<script>
-	window.addEventListener('DOMContentLoaded', function () {
+		window.addEventListener('DOMContentLoaded', function () {
 		let loc = window.currentStrategy || "";
 		
 		// 字串處理：把 "/lc/Parameter" 變成單純的 "lc"
@@ -794,8 +803,14 @@
 			document.getElementById("lcupstep").style.display = "none";
 			document.getElementById("lcdownstep").style.display = "none";
 		}
-		// Load()
+		Load()
 	});
+	</script>
+
+	<script src="../src/strategy/strategy/strategy.js"></script>
+
+	<script>
+	
 	</script>
 </head>
 

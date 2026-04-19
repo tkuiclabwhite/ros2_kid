@@ -110,7 +110,7 @@ class WalkingWebBridge(Node):
         for up in Path(__file__).resolve().parents:
             if up.name == "src" and (up / "strategy" / "strategy").is_dir():
                 return up / "strategy" / "strategy"
-        return Path.home() / "tku" / "src" / "strategy" / "strategy"
+        return Path.home() / "ros2_kid" / "src" / "strategy" / "strategy"
 
     def _read_strategy_ini_raw(self) -> str:
         try:
@@ -315,20 +315,61 @@ class WalkingWebBridge(Node):
             self.current_params.update(data)
         except: pass
 
+    # def handle_load_walking_param(self, request, response):
+    #     self.get_logger().info(f"DEBUG: [Service] Load params called. Source: {self.current_save_path}")
+    #     p = self.current_params
+
+    #     # =========================================================================
+    #     # p.get("名稱", 預設值))
+    #     # =========================================================================
+    #     response.com_y_swing= float(p.get("com_y_swing", 0.0))
+    #     response.width_size= float(p.get("width_size", 0.0))
+    #     response.period_t = int(p.get("period_t"))
+    #     response.t_dsp = float(p.get("t_dsp", 0.0))
+    #     response.lift_height = float(p.get("lift_height", 2.5))
+    #     response.stand_height  = float(p.get("stand_height", 23.5))
+    #     response.com_height    = float(p.get("com_height", 29.5))
+        
+    #     # ★ Debug 印出確認
+    #     print(f"DEBUG: [Check] com_y_swing 最終回傳值: {response.com_y_swing}", flush=True)
+    #     print(f"DEBUG: [Check] width_size 最終回傳值: {response.width_size}", flush=True)
+    #     print(f"DEBUG: [Check] period_t 最終回傳值: {response.period_t}", flush=True)
+    #     print(f"DEBUG: [Check] t_dsp 最終回傳值: {response.t_dsp}", flush=True)
+    #     print(f"DEBUG: [Check] lift_height 最終回傳值: {response.lift_height}", flush=True)
+    #     print(f"DEBUG: [Check] stand_height 最終回傳值: {response.stand_height}", flush=True)
+    #     print(f"DEBUG: [Check] com_height 最終回傳值: {response.com_height}", flush=True)
+
+    #     return response
     def handle_load_walking_param(self, request, response):
         self.get_logger().info(f"DEBUG: [Service] Load params called. Source: {self.current_save_path}")
-        p = self.current_params
+        
+        # --- 修改重點：強制從硬碟讀取最新檔案，確保不被記憶體舊資料干擾 ---
+        loaded_data = {}
+        if os.path.exists(self.current_save_path):
+            with open(self.current_save_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    # 略過空行與註解
+                    if '=' in line and not line.startswith(('#', ';', '[')):
+                        parts = line.split('=', 1)
+                        try:
+                            loaded_data[parts[0].strip()] = float(parts[1].strip())
+                        except ValueError:
+                            pass
 
-        # =========================================================================
-        # p.get("名稱", 預設值))
-        # =========================================================================
-        response.com_y_swing= float(p.get("com_y_swing", 0.0))
-        response.width_size= float(p.get("width_size", 0.0))
-        response.period_t = int(p.get("period_t"))
-        response.t_dsp = float(p.get("t_dsp", 0.0))
+        # 把檔案讀到的真實數據，與原有的 self.current_params 合併 (檔案優先)
+        p = self.current_params.copy()
+        p.update(loaded_data)
+        # -------------------------------------------------------------
+
+        # 寫入 response
+        response.com_y_swing = float(p.get("com_y_swing", 0.0))
+        response.width_size  = float(p.get("width_size", 0.0))
+        response.period_t    = int(p.get("period_t", 360))
+        response.t_dsp       = float(p.get("t_dsp", 0.0))
         response.lift_height = float(p.get("lift_height", 2.5))
-        response.stand_height  = float(p.get("stand_height", 23.5))
-        response.com_height    = float(p.get("com_height", 29.5))
+        response.stand_height= float(p.get("stand_height", 23.5))
+        response.com_height  = float(p.get("com_height", 29.5))
         
         # ★ Debug 印出確認
         print(f"DEBUG: [Check] com_y_swing 最終回傳值: {response.com_y_swing}", flush=True)
