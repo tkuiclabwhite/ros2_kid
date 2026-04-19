@@ -5,6 +5,7 @@ from std_msgs.msg import String
 from geometry_msgs.msg import Point
 import threading
 import time
+import math
 
 # 導入機器人控制 API
 try:
@@ -185,16 +186,45 @@ class YOLOSignNode(Node):
     #  ROS2 回呼
     # ================================================================
 
+    # def class_id_callback(self, msg):
+    #     try:
+    #         parts = msg.data.split(',')
+    #         if len(parts) != 4:
+    #             return
+
+    #         new_sign = parts[0]
+    #         self.center_x = int(parts[1])
+    #         self.bbox_bottom_y = int(parts[2])
+    #         self.sign_area = int(parts[3])
+
+    #         if self.action_executing:
+    #             return
+
+    #         if self.locked_action is not None:
+    #             self.sign_name = new_sign
+    #             return
+
+    #         if new_sign and new_sign != 'None':
+    #             self.sign_name = new_sign
+    #             self.locked_action = new_sign
+    #             self.command_received = True
+    #             self.get_logger().info(
+    #                 f'[CMD] Locked: {new_sign.upper()} '
+    #                 f'(x={self.center_x}, botY={self.bbox_bottom_y}, area={self.sign_area})')
+
+    #     except Exception as e:
+    #         self.get_logger().error(f'Parse failed: {e}')
     def class_id_callback(self, msg):
         try:
             parts = msg.data.split(',')
-            if len(parts) != 4:
+            if len(parts) < 4:
                 return
 
             new_sign = parts[0]
-            self.center_x = int(parts[1])
-            self.bbox_bottom_y = int(parts[2])
-            self.sign_area = int(parts[3])
+            self.center_x = int(float(parts[1]))
+            self.bbox_bottom_y = int(float(parts[2]))
+            self.sign_area = int(float(parts[3]))
+            # parts[4] 是 angle，有需要再接
 
             if self.action_executing:
                 return
@@ -209,12 +239,22 @@ class YOLOSignNode(Node):
                 self.command_received = True
                 self.get_logger().info(
                     f'[CMD] Locked: {new_sign.upper()} '
-                    f'(x={self.center_x}, botY={self.bbox_bottom_y}, area={self.sign_area})')
+                    f'(x={self.center_x}, botY={self.bbox_bottom_y}, area={self.sign_area})'
+                )
 
         except Exception as e:
             self.get_logger().error(f'Parse failed: {e}')
 
+    # def coord_callback(self, msg):
+    #     self.center_x = int(msg.x)
+    #     self.center_y = int(msg.y)
     def coord_callback(self, msg):
+        if not math.isfinite(msg.x) or not math.isfinite(msg.y):
+            # 上游無偵測時會送 NaN，這裡不要轉 int
+            self.center_x = self.img_center_x
+            self.center_y = 0
+            return
+
         self.center_x = int(msg.x)
         self.center_y = int(msg.y)
 

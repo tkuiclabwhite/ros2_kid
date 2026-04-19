@@ -29,11 +29,8 @@ class WalkingGaitByLIPM:
         self.stand_height  = parameter.STAND_HEIGHT       # [cm]   站姿高度
         self.length_pelvis = parameter.LENGTH_PELVIS      # [cm]   骨盆寬度
 
-        self.STARTSTEPCOUNTER = getattr(parameter, "STARTSTEPCOUNTER", 2)
+        self.STARTSTEPCOUNTER = getattr(parameter, "STARTSTEPCOUNTER", 4)
 
-        self.Hip_roll = parameter.Hip_roll
-        self.Ankle_roll = parameter.Ankle_roll
-        self.Clearance = parameter.Clearance
 
         # ====== 內部狀態 ======
         self.sample_point_ = 0                            # 全域 sample 計數
@@ -129,6 +126,11 @@ class WalkingGaitByLIPM:
 
         # ★ 內部離散設定（在 process() 動態更新）
         self._N = 0
+        
+        self.current_lift_height = 0
+        
+        self.com_start_x_ = 0
+        self.com_start_y_ = 0
 
     # ====== 主流程（同前一版）======
     def process(self):
@@ -200,15 +202,8 @@ class WalkingGaitByLIPM:
                 self.left_step_ += 1
             elif (self.now_step_ % 2) == 0 and self.now_step_ > 1:
                 self.right_step_ += 1
-
-            # 更新 now_right_* 或 now_left_* 的落地點
-            if (self.pre_step_ % 2) == 1:
-                self.now_right_x_ = self.footstep_x
-                self.now_right_y_ = self.footstep_y
-            elif (self.pre_step_ % 2) == 0:
-                self.now_left_x_ = self.footstep_x
-                self.now_left_y_ = self.footstep_y
-            elif self.pre_step_ == -1:
+                
+            if self.pre_step_ == -1:
                 self.footstep_x = 0.0
                 half_w = 0.5 * self.width_size_
                 self.footstep_y = -half_w
@@ -216,6 +211,28 @@ class WalkingGaitByLIPM:
                 self.now_right_y_ = self.footstep_y
                 self.now_left_x_  = 0.0
                 self.now_left_y_  = half_w
+            elif (self.pre_step_ % 2) == 1:
+                self.now_right_x_ = self.footstep_x
+                self.now_right_y_ = self.footstep_y
+            elif (self.pre_step_ % 2) == 0:
+                self.now_left_x_ = self.footstep_x
+                self.now_left_y_ = self.footstep_y
+
+            # 更新 now_right_* 或 now_left_* 的落地點
+            # if (self.pre_step_ % 2) == 1:
+            #     self.now_right_x_ = self.footstep_x
+            #     self.now_right_y_ = self.footstep_y
+            # elif (self.pre_step_ % 2) == 0:
+            #     self.now_left_x_ = self.footstep_x
+            #     self.now_left_y_ = self.footstep_y
+            # elif self.pre_step_ == -1:
+            #     self.footstep_x = 0.0
+            #     half_w = 0.5 * self.width_size_
+            #     self.footstep_y = -half_w
+            #     self.now_right_x_ = self.footstep_x
+            #     self.now_right_y_ = self.footstep_y
+            #     self.now_left_x_  = 0.0
+            #     self.now_left_y_  = half_w
 
             # ZMP跟支撐腳落點一致
             self.last_zmp_x = self.zmp_x
@@ -236,6 +253,13 @@ class WalkingGaitByLIPM:
             
             # 起步，只有左右換支撐，沒有前進步長
             if self.walking_state == StartStep:
+                if self.now_step_ == 0:
+                    self.com_start_x_= 0.0
+                    self.com_start_y_= 0.0
+                else:
+                    self.com_start_x_= self.px_
+                    self.com_start_y_= self.py_
+                    
                 self.theta_ = 0.0
                 self.var_theta_ = 0.0
                 self.now_width_ = self.width_size_ * (-pow(-1.0, self.now_step_ + 1))  # FULL width
@@ -282,11 +306,36 @@ class WalkingGaitByLIPM:
         t, T, Tc, Tdsp = self.t_, self.TT_, self.Tc_, self.T_DSP_
         if self.walking_state == StartStep:
             # === StartStep ===
-            self.vx0_ = self.wComVelocityInit(0.0, 0.0, self.zmp_x, T, Tc)
-            self.px_  = self.wComPosition(0.0, self.vx0_, self.zmp_x, t, Tc)
-            self.vy0_ = self.wComVelocityInit(0.0, 0.0, self.zmp_y, T, Tc)
-            tar = self.vy0_ + self.com_y_swing
-            self.py_ = self.wComPosition(0.0, tar, self.zmp_y, t, Tc)
+            if self.pre_step_ == self.now_step_ and self.walking_state == StartStep:  # 或依據你的變數命名可能是 self.timepoint == 0
+                
+                if self.now_step_ == 0:
+                    # 真正的第 0 步，從完美的 0 點起步
+                    self.com_start_x_ = 0.0
+                    self.com_start_y_ = 0.0
+                else:
+                    # 第 1 步到第 5 步，完美繼承上一刻的真實物理座標
+                    self.com_start_x_ = self.px_
+                    self.com_start_y_ = self.py_
+            
+            # print(f"self.com_start_x_: {self.com_start_x_}", flush = True)
+            # print(f"self.com_start_y_: {self.com_start_y_}", flush = True)
+            
+            
+            self.vx0_ = self.wComVelocityInit(self.com_start_x_, 0.0, self.zmp_x, T, Tc)
+            self.px_  = self.wComPosition(self.com_start_x_, self.vx0_, self.zmp_x, t, Tc)
+
+            self.vy0_ = self.wComVelocityInit(self.com_start_y_, 0.0, self.zmp_y, T, Tc)
+            # 確保目標點是 0.0，讓質心每一步都能平滑地被拉回中心
+            self.py_  = self.wComPosition(self.com_start_y_, self.vy0_, self.zmp_y, t, Tc)
+
+            if self.now_step_<= 1:
+                scale = 1/3
+            elif self.now_step_<= 3:
+                scale = 2/3
+            else:
+                scale = 1.0
+            
+            current_lift_height = self.lift_height_ * scale
 
             if (self.now_step_ % 2) == 1:
                 # 奇數步：右腳擺
@@ -294,7 +343,7 @@ class WalkingGaitByLIPM:
                 self.lpx_, self.lpy_, self.lpz_ = self.zmp_x, self.zmp_y, 0.0
                 self.rpx_ = self.wFootPositionRepeat(self.now_right_x_, 0.0, t, T, Tdsp)
                 self.rpy_ = self.wFootPositionRepeat(self.now_right_y_, 0.0, t, T, Tdsp)
-                self.rpz_ = self.wFootPositionZ(self.lift_height_ * (1/3), t, T, Tdsp)
+                self.rpz_ = self.wFootPositionZ(current_lift_height, t, T, Tdsp)
                 self.lpt_, self.rpt_ = 0.0, 0.0
             else:
                 # 偶數步：左腳擺
@@ -302,7 +351,7 @@ class WalkingGaitByLIPM:
                 self.rpx_, self.rpy_, self.rpz_ = self.zmp_x, self.zmp_y, 0.0
                 self.lpx_ = self.wFootPositionRepeat(self.now_left_x_, 0.0, t, T, Tdsp)
                 self.lpy_ = self.wFootPositionRepeat(self.now_left_y_, 0.0, t, T, Tdsp)
-                self.lpz_ = self.wFootPositionZ(self.lift_height_* (1/3), t, T, Tdsp)
+                self.lpz_ = self.wFootPositionZ(current_lift_height, t, T, Tdsp)
                 self.lpt_, self.rpt_ = 0.0, 0.0
 
         elif self.walking_state == FirstStep:
@@ -389,7 +438,7 @@ class WalkingGaitByLIPM:
 
     # ====== 參數同步 ======
     def readWalkParameter(self):
-        self.period_t     = parameter.period_t
+        self.period_t      = parameter.period_t
         self.sample_time_  = parameter.sample_time
         self.T_DSP_        = parameter.Tdsp
         self.lift_height_  = parameter.lift_height
@@ -407,10 +456,6 @@ class WalkingGaitByLIPM:
         self.shift_length_ = float(getattr(parameter, "shift_length", 0.0))
         self.var_theta_    = float(getattr(parameter, "theta", 0.0))
 
-        self.Hip_roll = parameter.Hip_roll
-        self.Ankle_roll = parameter.Ankle_roll
-        self.Clearance = parameter.Clearance
-        
     def readWalkData(self):
         def _set_param(name, value):
             if hasattr(parameter, name):

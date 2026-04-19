@@ -248,7 +248,8 @@ class NavigationNode(Node):
 
         print("[Nav] Loading YOLO model...")
         # self.yolo_model = YOLO(os.path.join(BASE_DIR, 'best1.onnx'))
-        self.yolo_model = YOLO('strategy/strategy/mar/best1.onnx')
+        # self.yolo_model = YOLO('strategy/strategy/mar/best1.onnx')
+        self.yolo_model = YOLO('/home/iclab/ros2_kid/src/strategy/strategy/mar/best1.onnx')
         self.yolo_class_names = {1: "left", 2: "right", 0: "straight"}
         self.yolo_to_action = {"left": "LEFT", "right": "RIGHT", "straight": "STRAIGHT"}
         print("[Nav] YOLO ready.")
