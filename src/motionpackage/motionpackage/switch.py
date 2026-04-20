@@ -20,7 +20,7 @@ class IMUService:
     """
     串口讀取 IMU 的 YPR 並加入外部回呼處理開關訊號
     """
-    def __init__(self, port="/dev/esp32", baud=115200, rel_mode=True, debug_raw=False, open_wait_sec=2.0):
+    def __init__(self, port="/dev/ttyACM0", baud=115200, rel_mode=True, debug_raw=False, open_wait_sec=2.0):
         self.port = port
         self.baud = baud
         self.rel_mode = rel_mode
@@ -133,7 +133,7 @@ class UnifiedSensorNode(Node):
         super().__init__('unified_sensor_node')
 
         # 讀取原本 imu_node.py 的參數
-        self.declare_parameter('port', '/dev/esp32')
+        self.declare_parameter('port', '/dev/ttyACM0')
         self.declare_parameter('baud', 115200)
         self.declare_parameter('pub_hz', 20.0)
         self.declare_parameter('open_wait_sec', 2.0)

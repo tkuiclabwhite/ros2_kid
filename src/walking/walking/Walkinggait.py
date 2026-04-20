@@ -329,9 +329,9 @@ class WalkingGaitByLIPM:
             self.py_  = self.wComPosition(self.com_start_y_, self.vy0_, self.zmp_y, t, Tc)
 
             if self.now_step_<= 1:
-                scale = 1/3
+                scale = 1/2
             elif self.now_step_<= 3:
-                scale = 2/3
+                scale = 1/2
             else:
                 scale = 1.0
             

@@ -27,7 +27,7 @@ class IMUService:
 
     def __init__(
         self,
-        port: str = "/dev/imu",
+        port: str = "/dev/ttyACM0",
         baud: int = 115200,
         rel_mode: bool = True,
         debug_raw: bool = False,

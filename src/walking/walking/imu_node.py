@@ -23,7 +23,7 @@ class IMUBridgeNode(Node):
         super().__init__('imu_node')
 
         # ---- 參數 ----
-        self.declare_parameter('port', '/dev/imu')
+        self.declare_parameter('port', '/dev/ttyACM0')
         self.declare_parameter('baud', 115200)
         self.declare_parameter('pub_hz', 20.0)          # 建議先跟 Arduino DMP rate 一致（你那邊是 20）
         self.declare_parameter('debug_raw', False)      # true 時會印出解析不到的原始行
