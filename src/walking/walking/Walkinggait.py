@@ -29,7 +29,8 @@ class WalkingGaitByLIPM:
         self.stand_height  = parameter.STAND_HEIGHT       # [cm]   站姿高度
         self.length_pelvis = parameter.LENGTH_PELVIS      # [cm]   骨盆寬度
 
-        self.STARTSTEPCOUNTER = getattr(parameter, "STARTSTEPCOUNTER", 4)
+        self.STARTSTEPCOUNTER = getattr(parameter, "STARTSTEPCOUNTER", 8)#起步步數
+        self.min_scale = 0.3 #起始比例
 
 
         # ====== 內部狀態 ======
@@ -328,14 +329,52 @@ class WalkingGaitByLIPM:
             # 確保目標點是 0.0，讓質心每一步都能平滑地被拉回中心
             self.py_  = self.wComPosition(self.com_start_y_, self.vy0_, self.zmp_y, t, Tc)
 
-            if self.now_step_<= 1:
-                scale = 1/2
-            elif self.now_step_<= 3:
-                scale = 1/2
-            else:
-                scale = 1.0
+            #兩腳同高
+            # foot_swing_idx = self.now_step_ // 2
+            # n = max(self.STARTSTEPCOUNTER // 2 - 1, 1)
+            # s = min(foot_swing_idx / n, 1.0)
+            # scale = self.min_scale + (1.0 - self.min_scale) * 0.5 * (1 - math.cos(math.pi * s))
+
+
+            #兩腳不同高
+            # 曲線偏前
+            # s = self.now_step_ / max(self.STARTSTEPCOUNTER - 1, 1)
+            # scale = self.min_scale + (1.0 - self.min_scale) * 0.5 * (1 - math.cos(math.pi * s))
             
+            # 曲線偏後
+            s_raw = self.now_step_ / max(self.STARTSTEPCOUNTER - 1, 1)
+            s     = s_raw ** 2
+            scale = self.min_scale + (1.0 - self.min_scale) * 0.5 * (1 - math.cos(math.pi * s))
+
+            # print(f"scale{scale}")
+
+            
+            #原本的 50 50 50 50 100 100
+            # if self.now_step_<= 1:
+            #     scale = 1/2
+            # elif self.now_step_<= 3:
+            #     scale = 1/2
+            # else:
+            #     scale = 1.0
+
             current_lift_height = self.lift_height_ * scale
+
+            if self.now_step_ <=self.STARTSTEPCOUNTER-1:#com_y_shift影響跟起步一樣多
+            # if self.now_step_ <=5:#com_y_shift影響前6步
+                #根據抬腳比例減少com_y_shift
+                s_y = self.now_step_ / max(self.STARTSTEPCOUNTER - 1, 1)
+                scale_y = self.min_scale + (1.0 - self.min_scale) * 0.5 * (1 - math.cos(math.pi * s_y))
+                direction = 1.0 if (self.now_step_ % 2 == 1) else -1.0
+
+                #吃新曲線
+                # self.py_ += direction * self.com_y_swing * (1.0 - scale) * self.smooth_step(self.t_ / self.TT_)
+
+                #吃舊曲線
+                self.py_ += direction * self.com_y_swing * (1.0 - scale_y) * self.smooth_step(self.t_ / self.TT_)
+
+                #定值com_y_shift
+                # direction = 1.0 if (self.now_step_ % 2 == 1) else -1.0
+                # self.py_ += direction * self.com_y_swing * self.smooth_step(self.t_ / self.TT_)
 
             if (self.now_step_ % 2) == 1:
                 # 奇數步：右腳擺
@@ -455,6 +494,9 @@ class WalkingGaitByLIPM:
         self.step_length_  = float(getattr(parameter, "step_length", 0.0))
         self.shift_length_ = float(getattr(parameter, "shift_length", 0.0))
         self.var_theta_    = float(getattr(parameter, "theta", 0.0))
+        self.Clearance  = parameter.Clearance
+        self.Ankle_roll = parameter.Ankle_roll
+        self.Hip_roll = parameter.Hip_roll
 
     def readWalkData(self):
         def _set_param(name, value):

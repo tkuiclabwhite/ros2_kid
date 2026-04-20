@@ -17,7 +17,7 @@ WIGHT = 70
 HEAD_MOTOR_START = 1500    
 HEAD_MOTOR_FINISH = 1350    
 FLAG1 = False  
-PRETURN = 2
+PRETURN = 1
 
 # 原始權重邏輯判斷 (修正重複判斷與賦值錯誤)
 if WIGHT == 86:
@@ -47,7 +47,7 @@ elif WIGHT == 80:
     FINAL = 805
 
 elif WIGHT == 70:
-    THIRD_LINE = 223
+    THIRD_LINE = 220
     SPEED = 1300
     PICK_ONE = 701
     PICK_TWO = 702
@@ -196,9 +196,9 @@ class WeightLift(API):
         self.theta = self.imu_fix()
         if self.ctrl_status == 'fourth_line':
             #if self.speed < 1800: self.speed += 200
-            self.sendContinuousValue(1300, -400, self.theta-1)
+            self.sendContinuousValue(1300, -300, self.theta-1)
         elif self.ctrl_status == 'second_line':
-            self.sendContinuousValue(1300, -400, self.theta-1)
+            self.sendContinuousValue(1300, -300, self.theta-1)
         else:
             self.sendContinuousValue(0, 0, self.theta)
 
@@ -207,8 +207,8 @@ class WeightLift(API):
             self.get_logger().info(f'ctrl_status : {self.ctrl_status}')
             if self.ctrl_status == 'head_shake':
                 print("head_shake")
-                self.sendBodySector(123)
-                time.sleep(1)
+                #self.sendBodySector(123)  #提右手拉左腳
+                #time.sleep(1)
                 # self.sendSensorReset(True)
     
                 self.stop = False
@@ -256,17 +256,17 @@ class WeightLift(API):
                 self.get_logger().info(f"紅色preturn (Y) = {self.bar.center.y}")
                 self.bar.update(1)
                 if self.imu_rpy[2] > 1.5 or self.imu_rpy[2] < -1.5:
-                    if self.bar.center.x > 150:
+                    if self.bar.center.x > 170:
                         self.sendContinuousValue(800, -500, -1)
                         print("右轉")
-                    elif self.bar.center.x < 143 and self.bar.center.x > 0:
+                    elif self.bar.center.x < 140 and self.bar.center.x > 0:
                         self.sendContinuousValue(800, 400, -1)
                         print("左轉") 
                 else:
-                    if self.bar.center.x > 150:
+                    if self.bar.center.x > 170:
                         self.sendContinuousValue(800, -500, 0)
                         print("右平移")
-                    elif self.bar.center.x < 143 and self.bar.center.x > 0:
+                    elif self.bar.center.x < 140 and self.bar.center.x > 0:
                         self.sendContinuousValue(800, 400, 0)
                         print("左平移")  
                     else:
@@ -287,6 +287,8 @@ class WeightLift(API):
                 if self.body_auto: 
                     self.walk_switch()
                 time.sleep(2.5)
+                self.sendBodySector(123)  #提右手拉左腳
+                time.sleep(1)
                 self.sendHeadMotor(2, 1320, 100)
                 self.sendBodySector(PICK_ONE)
                 self.crew = True
@@ -326,12 +328,12 @@ class WeightLift(API):
                 if self.body_auto: 
                     self.walk_switch()
                 time.sleep(2)
+                self.sendBodySector(234)  #縮左腳
+                time.sleep(1)
                 self.sendBodySector(int(LIFT))
                 # 根據重量決定舉起後的等待時間
-                wait_time = 20.5 if WIGHT == 90 else 17.5 if WIGHT == 80 else 16.5 if WIGHT == 70 else 17
+                wait_time = 23.5 if WIGHT == 90 else 21 if WIGHT == 80 else 21 if WIGHT == 70 else 21
                 time.sleep(wait_time)
-                # self.sendBodySector(123)
-                time.sleep(1)
                 # 根據舉起時的中心偏移進行位移修正
                 if 165 < self.real_bar_center < 210:
                     for _ in range(min(int((self.real_bar_center - 165) // 7), 4)):
@@ -344,7 +346,6 @@ class WeightLift(API):
                 if FLAG1:
                     sector_fix = 3336 if WIGHT == 90 else 3335 if WIGHT == 80 else 3334 if WIGHT == 70 else 3333 if WIGHT == 60 else None
                     if sector_fix: self.sendBodySector(int(sector_fix))
-                
                 self.ctrl_status = 'fourth_line'
 
             elif self.ctrl_status == 'fourth_line':
