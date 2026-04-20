@@ -29,7 +29,7 @@ class WalkingGaitByLIPM:
         self.stand_height  = parameter.STAND_HEIGHT       # [cm]   站姿高度
         self.length_pelvis = parameter.LENGTH_PELVIS      # [cm]   骨盆寬度
 
-        self.STARTSTEPCOUNTER = getattr(parameter, "STARTSTEPCOUNTER", 8)#起步步數
+        self.STARTSTEPCOUNTER = getattr(parameter, "STARTSTEPCOUNTER", 6)#起步步數
         self.min_scale = 0.3 #起始比例
 
 
