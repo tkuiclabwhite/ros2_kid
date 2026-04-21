@@ -46,7 +46,7 @@ SMALL_BACK_THETA                = -1
 IMU_RIGHT_X                     = -700
 IMU_RIGHT_Y                     = -200              
 #===========================================                 
-TURN_RIGHT_X                    = -700                                                   
+TURN_RIGHT_X                    = -500                                                   
 TURN_RIGHT_Y                    = 0                                                     
 TURN_RIGHT_THETA                = -4          #3 
 #=========================================== 
@@ -65,7 +65,7 @@ SLOPE_LEFT_TRANSLATE_X          = -500
 SLOPE_LEFT_TRANSLATE_Y          = 900
 SLOPE_LEFT_TRANSLATE_THETA      = 0
 #===========================================
-YY_WALKWAY            =     110 #黃黃通道大小
+YY_WALKWAY            =     100 #黃黃通道大小
 YY_ERRO               =     15 #黃黃通道中心與畫面中心誤差值
 #===========================================     
 CRMAX           = 110 # red door 前後修正3 值越大離門越近 #68
@@ -82,9 +82,9 @@ PRETURN_LEFT_ANGLE    = 50
 
 PRETURN_RIGHT         = False
 # PRETURN_RIGHT         = True #預轉身右
-PRETURN_RIGHT_ANGLE   = 80
+PRETURN_RIGHT_ANGLE   = 50
 #===========================================
-YELLOW_WALKWAY              = False
+YELLOW_WALKWAY              = True      #如果沒有黃黃通道就把它關了
 YELLOW_SMALL_TURNHEAD       = False #通道不夠大轉頭
 YELLOW_BLUE                 = True#黃線接藍牆
 YELLOW_IMU_LEFT        = False #黃色與藍牆夠近時 或 兩個藍色中有洞使用深度判斷 走完轉頭先imu_fix
@@ -197,9 +197,9 @@ class Walk(): #步態、轉彎、直走速度、IMU
                         (8,  -3), 
                         (6,  -3), 
                         (4,  -2), 
-                        (2,  -1),  
+                        (2,  -2),  
                         (0,   0),
-                        (-2,  1),
+                        (-2,  2),
                         (-4,  2),
                         (-6,  3),
                         (-8,  3),
@@ -220,8 +220,8 @@ class Walk(): #步態、轉彎、直走速度、IMU
                         (5,   -3), 
                         (2,   -4), 
                         (0,    0),
-                        (-2,    1),
-                        (-5,    2),
+                        (-2,   3),
+                        (-5,   3),
                         (-10,   3),
                         (-20,   3),
                         (-45,   4),
@@ -426,7 +426,7 @@ class Normal_Obs_Parameter: #計算各種深度
         is_walkway = False
         if has_yellow_objs:
              min_size = min(send.object_sizes[1][0], send.object_sizes[1][1])
-             if min_size > 8000 and send.color_counts[1] == 2 and YELLOW_WALKWAY:
+             if min_size > 1700 and send.color_counts[1] == 2 and YELLOW_WALKWAY:
                  is_walkway = True
         self.yellow_size = is_walkway
 
@@ -1428,23 +1428,25 @@ class Obs(Node): #各種避障動作
                             YELLOW_SMALL_TURNHEAD:
                             self.yb = True
                             status.turnHead_state ="yysmall"
-                            while ( abs(send.imu_rpy[2]) > 2) :
+                            while ( abs(send.imu_rpy[2]) > 5) :
                                 self.walk.move('imu_fix')
                                 # send.imu_rpy[2] =2
+                                #print(abs(send.imu_rpy[2]))
                         
-                            time.sleep(1)
+                            # time.sleep(1)
                             if self.image.center_deep_y <10:
                                 self.turn_head()
                         
-                        if 13 > self.image.deep_x > 4 : #deep_x = dx  #normal turn 右轉 範圍越大越容易旋轉 三個地方要調整 大的數字不動
+                        if 10 > self.image.deep_x > 4 : #deep_x = dx  #normal turn 右轉 範圍越大越容易旋轉 三個地方要調整 大的數字不動
                             # self.walk.straight_speed()                        
                             if ((abs(send.imu_rpy[2]) > 5) and (not self.imu_ok)) and (self.image.deep_x >= 6) :       #normal turn 右轉 數值越大 越不容易 修imu
-                                while(abs(send.imu_rpy[2]) > 2):
+                                while(abs(send.imu_rpy[2]) > 5):
                                     self.walk.move('imu_fix')
+                                    #print(abs(send.imu_rpy[2]))
                                     # send.imu_rpy[2] =2
 
                                 self.walk.move('stay')                            
-                                time.sleep(0.5)
+                                # time.sleep(0.5)
 
                             else:
                                 self.walk.move('dx_turn')
@@ -1452,23 +1454,24 @@ class Obs(Node): #各種避障動作
                             if abs(send.imu_rpy[2]) <= 5 :
                                 self.imu_ok = True
                             
-                        elif -3 > self.image.deep_x > -13 :     #normal turn 左轉 範圍越大越容易旋轉 三個地方要調整 大的數字不動
+                        elif -3 > self.image.deep_x > -10 :     #normal turn 左轉 範圍越大越容易旋轉 三個地方要調整 大的數字不動
                             # self.walk.straight_speed()
                             
                             if ((abs(send.imu_rpy[2]) > 5) and (not self.imu_ok)) and (self.image.deep_x <= -3.5) :   #normal turn 左轉 數值越大 越不容易 修imu   
                                 while(abs(send.imu_rpy[2]) > 2):
                                     self.walk.move('imu_fix')
+                                    #print(abs(send.imu_rpy[2]))
                                     # send.imu_rpy[2] =2
 
                                 self.walk.move('stay')                            
-                                time.sleep(0.5)                            
+                                # time.sleep(0.5)                            
                             else:
                                 self.walk.move('dx_turn')
 
                             if abs(send.imu_rpy[2]) <= 2 :
                                 self.imu_ok = True
                             
-                        elif (self.image.deep_x < 17 and self.image.deep_x >= 13) or (self.image.deep_x <= -13 and self.image.deep_x > -17) :                        
+                        elif (self.image.deep_x < 17 and self.image.deep_x >= 10) or (self.image.deep_x <= -10 and self.image.deep_x > -17) :                        
 
                             if (self.image.b_y_max >= 170) and ( abs(send.imu_rpy[2]) <= 5 ) and (self.need_imu_back) and (abs(self.image.deep_x) > 3) and (self.image.center_deep != 24) :        #離障礙物太近-->後退
                                 while (self.image.b_y_max >= 170) and status.running:                                
@@ -1479,6 +1482,7 @@ class Obs(Node): #各種避障動作
                             if ( abs(send.imu_rpy[2]) > 2) and (not self.imu_ok) :                   #IMU修正
                                 while ( abs(send.imu_rpy[2]) > 2) and (not self.imu_ok) and status.running:                                
                                     self.walk.move('imu_fix')
+                                    #print(abs(send.imu_rpy[2]))
                                     # send.imu_rpy[2] = 2                       
                                     if abs(send.imu_rpy[2]) < 2:        #轉頭策略
                                         if ( self.image.left_deep < 15 ) and ( self.image.right_deep < 15 ) and ( self.image.center_deep < 15 ): #左中右深度皆小於15
