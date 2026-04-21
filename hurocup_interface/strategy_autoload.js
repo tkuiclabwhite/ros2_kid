@@ -1,1 +1,1 @@
-window._strategy_location = "sp";
+window._strategy_location = "wl";

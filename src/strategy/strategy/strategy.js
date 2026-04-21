@@ -1,1 +1,1 @@
-window.currentStrategy = "sp/Parameter";
+window.currentStrategy = "wl/Parameter";
