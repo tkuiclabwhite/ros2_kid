@@ -18,11 +18,11 @@ from tku_msgs.msg import SensorPackage
 
 # 頭部俯角（看地板標記）
 HEAD_DOWN_X = 2048   # 水平置中
-HEAD_DOWN_Y = 1600   # 俯角位置（看地板）
+HEAD_DOWN_Y = 1500   # 俯角位置（看地板）
 
 # 行走速度
 WALK_SPEED_NORMAL  = 2000   # 正常前進速度
-WALK_SPEED_SLOW    = 1000   # 接近標記 / 搜尋時的慢速
+WALK_SPEED_SLOW    = 2000   # 接近標記 / 搜尋時的慢速
 # 畫面參數
 FRAME_W       = 320
 FRAME_H       = 240
@@ -30,27 +30,29 @@ FRAME_CX      = FRAME_W // 2   # 320
 ALIGN_DEADBAND = 40            # X 軸對準死區（像素）
 
 # 標記 Y 座標閾值（畫面高度 320，值越大越靠近畫面底部）
-SIGN_Y_THRESHOLD = 190         # 標記 Y 座標超過此值視為「進入下方」
+SIGN_Y_THRESHOLD = 210          # 標記 Y 座標小於此值視為「進入下方」（Y 越小越靠近底部）
 
 # 靠近累積幀數（Y 座標連續超過閾值幾幀才觸發，3fps 下 5 幀約 1.7 秒）
-APPROACH_COUNT = 5             # 累積幀數（實測後調整）
+APPROACH_COUNT = 10             # 累積幀數（實測後調整）
 
 # 動作參數
 TURN_TARGET_ANGLE = 85      # 轉彎目標角度（度）
 TURN_SPEED        = 8       # 轉彎角速度
 # 搜尋參數
 LOST_WAIT_TIME    = 2.0     # 跟丟後等待時間（秒）才開始慢速前進
+SIGN_LOST_TIMEOUT = 3.0     # ALIGN 狀態下連續幾秒沒資料才真的退回 WALK（容忍低幀率）
+INIT_COOLDOWN     = 2.0     # 初始化後冷卻時間（秒），避免辨識 node 殘留發布觸發 ALIGN
 
 # IMU 補正參數
 IMU_CORRECT_DEADBAND = 5    # yaw 在此範圍內不補正（度）
-IMU_CORRECT_SPEED    = 3    # IMU 補正角速度
+IMU_CORRECT_SPEED    = 5    # IMU 補正角速度
 
 # ═══════════════════════════════════════════════
 #  子狀態定義
 # ═══════════════════════════════════════════════
 # WALK   : 底層持續前進，同時掃描標記
 # ALIGN  : 看到標記，對準中心 + 慢速靠近
-#          標記 Y 座標連續超過閾值 APPROACH_COUNT 幀後觸發
+#          標記 Y 座標連續低於閾值 APPROACH_COUNT 幀後觸發（Y 越小越靠近底部）
 #          直接進入 ACTION
 # ACTION : 收到 left/right 執行轉彎；straight 視同直走直接回 WALK
 
@@ -88,7 +90,8 @@ class Mar(API):
         self.action_start_time = 0.0
         self.target_label      = 'none'
         self.lost_start_time   = 0.0    # 第一次跟丟的時間點
-        self.approach_count    = 0      # Y 座標連續超過閾值的累積幀數
+        self._cooldown_until   = 0.0      # 初始化冷卻期結束時間
+        self.approach_count    = 5      # Y 座標連續超過閾值的累積幀數
 
         # === 訂閱 navigation_node 發布的結果 ===
         self.yolo_sub = self.create_subscription(
@@ -111,9 +114,12 @@ class Mar(API):
     # ───────────────────────────────────────────
     def _sign_callback(self, msg: String):
         """接收 navigation_node 發布的標記資訊"""
+        # 冷卻期內忽略所有視覺資料，避免辨識 node 殘留發布誤觸發
+        if time.time() < self._cooldown_until:
+            return
         try:
             parts = msg.data.split(',')
-            if len(parts) == 4:
+            if len(parts) >= 4:
                 self.sign_label = parts[0].lower()
                 self.sign_cx    = int(parts[1])
                 self.sign_cy    = int(parts[2])
@@ -154,10 +160,11 @@ class Mar(API):
         self._look_down()
         self.sub_state      = 'WALK'
         self.target_label   = 'none'
-        self.last_sign_time = time.time()
+        self.last_sign_time  = time.time() - 999  # 歸零，讓 _sign_visible 先回 False
         self.lost_start_time = 0.0
         self.approach_count  = 0
-        self.get_logger().info("[Init] 完成，進入 WALK 狀態")
+        self._cooldown_until = time.time() + INIT_COOLDOWN  # 冷卻期結束時間
+        self.get_logger().info(f"[Init] 完成，進入 WALK 狀態（冷卻 {INIT_COOLDOWN}s）")
 
     # ───────────────────────────────────────────
     #  狀態：WALK（底層持續前進 + 掃描標記）
@@ -216,11 +223,13 @@ class Mar(API):
         """
         self._look_down()
 
-        if not self._sign_visible():
-            self.get_logger().info("[ALIGN] 標記消失 -> WALK")
-            self.approach_count = 0
-            self.target_label   = 'none'
-            self.sub_state      = 'WALK'
+        if (time.time() - self.last_sign_time) > SIGN_LOST_TIMEOUT:
+            self.get_logger().info(
+                f"[ALIGN] 標記消失 {SIGN_LOST_TIMEOUT}s -> WALK"
+            )
+            self.approach_count  = 0
+            self.target_label    = 'none'
+            self.sub_state       = 'WALK'
             self.lost_start_time = time.time()
             return
 
@@ -244,7 +253,7 @@ class Mar(API):
             )
             return
 
-        # Y 座標超過閾值：累積計數
+        # Y 座標低於閾值（夠靠近）：累積計數
         self.approach_count += 1
         if self.target_label == 'none':
             self.target_label = self.sign_label  # 第一次超過時記錄 label
@@ -257,7 +266,6 @@ class Mar(API):
 
         if self.approach_count >= APPROACH_COUNT:
             # 累積足夠 -> 進入 ACTION
-            self.sendContinuousValue(0, 0, 0)
             self.sendSensorReset(True)
             self.approach_count    = 0
             self.action_start_time = time.time()
@@ -288,8 +296,6 @@ class Mar(API):
                 self.get_logger().info(
                     f"[ACTION] {label} 轉彎完成 yaw={current_yaw:.1f}"
                 )
-                self.sendContinuousValue(0, 0, 0)
-                time.sleep(0.1)
                 self._initialize()  # 直接回到 WALK
             else:
                 turn_speed = TURN_SPEED if label == 'left' else -TURN_SPEED
