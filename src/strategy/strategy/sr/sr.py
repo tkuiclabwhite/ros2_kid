@@ -7,16 +7,6 @@ import numpy as np
 import math
 import time
 
-# send.sendWalkParameter('send'   ,\ mode = 1
-#                                             ,\ com_y_swing = Y_COM
-#                                             ,\ y_size = 4.5
-#                                             ,\ period_t = 330
-#                                             ,\ t_dsp = 0.1
-#                                             ,\ lift_height = 3
-#                                             ,\ com_height = 29.5
-#                                             ,\ stand_height = 23.5
-#                                             ,\ back_flag = False)
-
 
 #--校正量--#
 #前進量校正
@@ -26,7 +16,7 @@ TRANSLATION_CORRECTION     = -100
 #旋轉校正
 THETA_CORRECTION           = 0
 #基礎變化量(前進&平移)
-BASE_CHANGE                = 500
+BASE_CHANGE                = 300
 HEAD_CHANGE_H              = 5
 HEAD_CHANGE_V              = 100
 # ---微調站姿開關---#
@@ -37,17 +27,17 @@ TARGET_COLOAR_2              = 'Blue'
 
 W_CENTER = 30  # 距離中心點的權重 
 W_ALIGN = 70  # 水平對齊的權重 
-W_HEIGHT = 0  #高度權重
+W_HEIGHT = -50  #高度權重
 
 
 #------------------#
 HEAD_HORIZONTAL            = 2048               #頭水平
 HEAD_VERTICAL              = 2048              #頭垂直 #30cm2150
 
-HEAD_LEFT_HAND_H = 2600
-HEAD_LEFT_HAND_V = 2100
+HEAD_LEFT_HAND_H = 2550
+HEAD_LEFT_HAND_V = 2100  #2100
 
-HEAD_RIGHT_HAND_H = 1600
+HEAD_RIGHT_HAND_H = 1550
 HEAD_RIGHT_HAND_V = 2100
  
 HEAD_LEFT_LEG_H = 1750
@@ -76,28 +66,23 @@ MOTOR_RIGHT_HEAP = 0
 # FOOTLADDER_LINE            = 215                   #上梯基準線
 MY_LINE_Y= 120 #攀岩基準線
 MY_LINE_X =160 #攀岩基準線
-MY_SIZE = 850
+MY_SIZE = 1020
 ROI_RADIUS = 120
 
 #前後值
-BACK_MIN                   = -600              #小退後
-FORWARD_MIN               = -450
-FORWARD_LOW               = -  400           #小前進 300
-FORWARD_NORMAL             = -300                 #前進
-FORWARD_HIGH                = -200               #大前進
+BACK_MIN                   = -300                #小退後
+FORWARD_MIN               = 100
+FORWARD_LOW               = 200             #小前進 300
+FORWARD_NORMAL             = 300                 #前進
+FORWARD_HIGH                = 500               #大前進
 
 #平移值
-TRANSLATION_BIG            = 800                  #大平移
-TRANSLATION_NORMAL         = 400
+TRANSLATION_BIG            = 500                  #大平移
+TRANSLATION_NORMAL         = 300
 #旋轉值
 # THETA_MIN                  = 3                     #小旋轉
-THETA_NORMAL               = 1                    #旋轉
+# THETA_NORMAL               = 1                    #旋轉
 # THETA_BIG                  = 5                     #大旋轉
-
-#左基礎參數
-LEFT_THETA                 = 1
-#右基礎參數
-RIGHT_THETA                = -1
 #----------------------------------------手校正
 LHEAD_X_CA = 2576
 LHEAD_Y_CA = 2101
@@ -117,8 +102,6 @@ HEAD_X_CA2 = 2190
 LEG_X_CA = 1
 LEG_Y_CA = 1
 #---------------------------------------腳高度校正
-TARGET_SIZE = 500
-HEAP_HEIGHT = 2048
 
 
 class WallClimbing(API):
@@ -236,6 +219,7 @@ class WallClimbing(API):
                             self.move_ok = False
                             self.okcnt = 0
                             self.climb_step += 1
+                            self.been_done = False
                         else:
                             self.state = "視覺追蹤與姿態準備中"
                             self.climbmode(self.action, self.value)
@@ -278,6 +262,9 @@ class WallClimbing(API):
 
         self.lost_target_count = 0
 
+        self.forward_ok = False
+        self.dist_ok = False
+        self.pos_x_ok = False
 
         self.head = True
         self.action = None
@@ -291,6 +278,7 @@ class WallClimbing(API):
         self.track_ok = False
         self.beseen_lamb = False
         self.allontarget = False
+        self.been_done = False
 
         self.object_x = 0  #debug default 0
         self.object_y = 0  # 0
@@ -319,7 +307,6 @@ class WallClimbing(API):
         self.score_right_hand = 0
         self.score_left_leg = 0
         self.score_right_leg = 0
-
 
         head1 = np.array([[LHEAD_X_CA,0],[0,LHEAD_X_CA]])
         hand1 = np.array([[LHAND_X_CA],[LHAND_Y_CA]])
@@ -414,15 +401,14 @@ class WallClimbing(API):
             self.translation = 0.0
             if self.lost_target_count > 20: # 連續 1 秒沒看到
                 self.state = "目標丟失：搜尋中"
-                self.forward= 1000 # 緩慢直走找尋
-            return 'walking'  #walking" debug 
+                self.forward= 500 # 緩慢直走找尋
+            return 'walking'  
         else:
             self.lost_target_count = 0
 
         # 偏差計算 ---
 
         error_x = MY_LINE_X - self.object_x
-        # error_y = MY_LINE_Y - self.object_y
         error_size = MY_SIZE - self.size
 
         self.get_logger().info(f"目前面積:{self.size}")
@@ -430,38 +416,31 @@ class WallClimbing(API):
         self.get_logger().info(f"誤差size:{error_size}, 誤差x:{error_x}")
         
         # 前後距離控制 ---
-        if abs(error_size) <= 400:   #前進死區值
-            self.forward = 0.0
-            self.sendContinuousValue(0,0,0)
-            dist_ok = True 
-        else:
-            dist_ok = False
-            if error_size > 0:
-                if abs(error_size) > 350:
-                    self.forward = FORWARD_NORMAL
-                elif abs(error_size) > 500:
-                    self.forward = FORWARD_HIGH
+        if not self.forward_ok :
+            if abs(error_size) <= 10:   #前進死區值
+                self.forward = 0.0 
+                time.sleep(2)
+                self.forward_ok = True 
+            else:
+                if error_size > 0:
+                    if error_size > 200 and error_size <400:
+                        self.forward = FORWARD_NORMAL
+                    elif error_size > 401:
+                        self.forward = FORWARD_HIGH
+                    else:
+                        self.forward = FORWARD_LOW
                 else:
-                    self.forward = FORWARD_LOW
-            else:
-                self.forward = BACK_MIN
+                    self.forward = BACK_MIN
+        else:
+                self.get_logger().info("前進對齊,準備平移")
+                if self.object_x > 0:            
+                    self.translation = max(min(error_x * 35, 1000), -1000) if abs(error_x) > 10.0 else 0.0
+                else:
+                    self.translation = 0.0
 
-        if dist_ok:
-            self.get_logger().info("前進對齊,準備平移")
-            if self.object_x > 15:            
-                self.translation = max(min(error_x * 17, 500), -500) if abs(error_x) > 4.0 else 0.0
-            else:
-                self.translation = 0.0
+                self.pos_x_ok = abs(error_x) <= 15 or self.object_x == 0      #平移死區值
 
-            pos_x_ok = abs(error_x) <= 5 or self.object_x == 0      #平移死區值
-
-        # if dist_ok and self.stoptime == 0 :
-        #     self.sendbodyAuto(0)
-        #     time.sleep(3)
-        #     self.stoptime += 1
-        #     self.sendbodyAuto(1)
-
-        if dist_ok and pos_x_ok : 
+        if self.forward_ok  and self.pos_x_ok : 
             if not hasattr(self, 'ready_count'): self.ready_count = 0
             self.get_logger().info("穩定加一")
             time.sleep(0.25)
@@ -469,11 +448,11 @@ class WallClimbing(API):
         else:
             self.ready_count = 0
 
-        if  self.ready_count > 1: #  5 幀穩定
+        if  self.ready_count > 2: #  5 幀穩定
             self.state = "對齊完成：切換攀爬模式"
             return "ready_to_cw"
         else:
-            self.state = f"對齊中...穩定度:{int(self.ready_count/5*100)}%"
+            self.state = f"對齊中...穩定度:{int(self.ready_count/2*100)}%"
             return "walking"
          
 
@@ -485,12 +464,9 @@ class WallClimbing(API):
             self.forward = 0.0
             self.translation = 0.0
 
-            self.sendContinuousValue(0,0,0)
             self.sendbodyAuto(0)        #停止步態
             time.sleep(0.5)
             self.sendSensorReset(True)  #IMU reset 避免機器人步態修正錯誤
-            self.sendBodySector(29)     #這是基本站姿的磁區
-            time.sleep(2)
             self.state = 'ready_finish'
             self.readyclimb = True  
 
@@ -498,21 +474,20 @@ class WallClimbing(API):
         else:
             self.now_forward = self.ramp_speed(self.now_forward, self.forward, BASE_CHANGE)
             self.now_translation = self.ramp_speed(self.now_translation, self.translation, BASE_CHANGE)
-            # self.now_theta = self.ramp_speed(self.now_theta, self.theta, BASE_CHANGE)
                
-            f = max(min(int(self.now_forward), 301), -301)
-            t = max(min(int(self.now_translation), 301), -301)
-            # r = max(min(int(self.now_theta), 11), -11)
+            f = max(min(int(self.now_forward), 501), -501)
+            t = max(min(int(self.now_translation), 1001), -1001)
+
             self.get_logger().info(f"now_forward   :{self.now_forward}")
             self.get_logger().info(f"now_translation  : {self.now_translation}")
-            # self.get_logger().info(f"now_theta   :{self.now_theta}")
+            
             self.get_logger().info(f"f   :{f}")
             self.get_logger().info(f"t   :{t}")
-            # self.get_logger().info(f"r   :{r}")
-
-
-            self.sendContinuousValue(f, t ,-1)
-    
+            
+            if not self.forward_ok:
+                self.sendContinuousValue(f, -300 ,-1)
+            else:
+                self.sendContinuousValue(-500,t,-1)
 
     def ramp_speed(self, current, target, step):
         if abs(current - target) < step:
@@ -527,15 +502,6 @@ class WallClimbing(API):
     def climbmode(self, action,target_data):        #目前需增加攀爬後重心轉移，攀爬中若脫鉤的應變
 
         current_target = self.get_best_climbing_target()
-
-        # if current_target == 'no_object' or current_target is None:
-        #     self.get_logger().info("目標丟失！停止動作重新尋找")
-        #     self.sendHeadMotor(1,self.now_head_Horizontal + HEAD_CHANGE_H * self.cnt,30)
-        #     self.cnt += 1
-        #     if self.cnt > 20 :
-        #         self.okcnt = 0
-        #         self.sendbodyAuto(0)  # 讓機器人先暫停動作確保安全
-        #     return
         
         if current_target == 'no_object' or current_target is None:
             self.get_logger().info(f"目標丟失！當前追蹤側: {action}，啟動分段搜尋...")
@@ -545,36 +511,27 @@ class WallClimbing(API):
                 self.cnt = 0
             
             if self.search_stage == 1:
-                # 決定移動增量的方向 (假設 HEAD_CHANGE_H 為正值)
-                # 這裡假設：往左是正增量，往右是負增量 (請依你實際的馬達轉向調整)
                 step_h = -HEAD_CHANGE_H if action == 'left' else HEAD_CHANGE_H
                 self.sendHeadMotor(1, self.now_head_Horizontal + step_h, 30)
                 self.now_head_Horizontal += step_h 
                 
-                # 判斷是否已經抵達中心點 (需要你定義 HEAD_CENTER_POS)
-                # 設定一個容錯區間，避免相對增量錯過絕對的中心數值
                 if abs(self.now_head_Horizontal - 2048) <= abs(HEAD_CHANGE_H):
                     self.get_logger().info("頭部已抵達中心，準備往上掃描")
                     self.search_stage = 2
                     
-            # --- 階段 2：往上抬頭 ---
             elif self.search_stage == 2:
-                # 假設上下控制的馬達 ID 是 2，HEAD_CHANGE_V 是垂直相對增量
                 self.sendHeadMotor(2, HEAD_CHANGE_V, 30) 
-                self.now_head_Vertical += HEAD_CHANGE_V # 如果有記錄垂直位置的話
+                self.now_head_Vertical += HEAD_CHANGE_V
                 
                 self.get_logger().info("抬頭完成，準備反向掃描")
                 self.search_stage = 3
                 
-            # --- 階段 3：往反方向掃描過去 ---
             elif self.search_stage == 3:
-                # 方向與階段 1 完全相反
                 step_h = HEAD_CHANGE_H if action == 'left' else -HEAD_CHANGE_H
                 
                 self.sendHeadMotor(1, self.now_head_Horizontal + step_h, 30)
                 self.now_head_Horizontal += step_h
 
-            # 計數器與超時安全機制
             self.cnt += 1
             if self.cnt > 20 :
                 self.get_logger().info("搜尋超時！停止動作確保安全")
@@ -583,9 +540,6 @@ class WallClimbing(API):
                 self.sendbodyAuto(0)   # 讓機器人先暫停動作確保安全
             return
         
-        # ========== 注意 ==========
-        # 如果程式執行到這裡，代表找到了目標 (current_target 有值)
-        # 你必須在這裡重置搜尋狀態，為下一次可能的丟失做準備！
         else:
             if self.search_stage != 0:
                 self.get_logger().info("重新鎖定目標！恢復正常追蹤")
@@ -613,17 +567,25 @@ class WallClimbing(API):
                 },
                 'left_leg': {
                     'ids': [12, 10], 'base_m': [HEAD_LEFT_LEG_H, HEAD_LEFT_LEG_V],
-                    'weight_sector': 875, 'climb_sector_1': 40 ,'climb_sector_2': 41 ,'heap_sector': 42 ,
+                    'weight_sector': 875, 'climb_sector_1': 0 ,'climb_sector_2': 0 ,'heap_sector': 0 ,
                     'ready_heap' :[MOTOR_LEFT_HEAP],
                     'ready_climb' : [MOTOR_LEFT_LEG_X , MOTOR_LEFT_LEG_Y]
                 },
                 'right_leg': {
                     'ids': [18, 16], 'base_m': [HEAD_RIGHT_LEG_H, HEAD_RIGHT_LEG_V],
-                    'weight_sector': 877, 'climb_sector_1': 43 ,'climb_sector_2': 44 ,'heap_sector': 45 ,
+                    'weight_sector': 877, 'climb_sector_1': 0 ,'climb_sector_2': 0 ,'heap_sector': 0 ,
                     'ready_heap' :[MOTOR_RIGHT_HEAP],
                     'ready_climb' : [MOTOR_RIGHT_LEG_X , MOTOR_RIGHT_LEG_Y]
                 }
             }
+
+            # if action == 'left_hand' and not self.been_done :
+            #     self.sendSingleMotor(9,-200,20)
+            #     self.been_done = True
+            # elif action == 'right_hand' and not self.been_done:
+            #     self.sendSingleMotor(9,400,20)
+            #     time.sleep(1)
+            #     self.been_done = True
 
             if action not in config:
                 self.get_logger().error(f"蛤—這是甚摸: {action}")
@@ -633,6 +595,7 @@ class WallClimbing(API):
 
             if not self.move_ok:
                 self.keep_head(current_target['center'])
+            
 
             if self.track_ok:
                 if not hasattr(self, 'okcnt'): self.okcnt = 0
@@ -665,38 +628,15 @@ class WallClimbing(API):
                     self.sendBodySector(cfg['default_sector'])
                     time.sleep(2)
                     self.get_logger().info(f"動作中")
-                DS  = 1 #math.sqrt(MY_SIZE / current_target['size'])
-                # RAD_FACTOR = 2 * math.pi / 4096
+
                 left_value = (2251-2363)/100
                 right_value = left_value
-                # rad_h = (self.now_head_Horizontal - 2048) * RAD_FACTOR
-                # rad_v = (self.now_head_Vertical - 2048) * RAD_FACTOR
-
-                # H_READY = cfg['ready_climb_head'][0]
-                # V_READY = cfg['ready_climb_head'][1]
-
+           
                 if action == 'left_hand':
-
-                    # rad_h_extreme = (2511 - H_READY) * RAD_FACTOR
-                    # rad_v_extreme = (2161 - V_READY) * RAD_FACTOR
-
-                    # S_x = (1842 - cfg['ready_climb'][0])/(math.tan(rad_h_extreme)) * DS  #參數
-                    # S_y = (1586- cfg['ready_climb'][1])/(math.tan(rad_v_extreme))  * DS
-                    
-                    # rad_h_ready = (H_READY - 2048) * RAD_FACTOR
-                    # rad_v_ready = (V_READY - 2048) * RAD_FACTOR
-                    
-                    # motor_value_x = S_x * (math.tan(rad_h) - math.tan(rad_h_ready))
-                    # motor_value_y = S_y * (math.tan(rad_v) - math.tan(rad_v_ready))
-
-                    # self.get_logger().info(f"左手計算: offset_x={motor_value_x:.1f}, offset_y={ motor_value_y:.1f}")
-
-                    # motor_value_x = max(-2000, min(2000, int(motor_value_x)))
-                    # motor_value_y = max(-2000, min(2000, int(motor_value_y)))
                     
                     #motor_value_x = ((self.now_head_Horizontal-2394) * self.p_x1 * DS) - cfg['ready_climb'][0]
                     motor_value_x = (self.now_head_Horizontal-2550) * left_value
-                    motor_value_y = ((self.now_head_Vertical * self.p_y1) - cfg['ready_climb'][1]) + 175
+                    motor_value_y = ((self.now_head_Vertical * self.p_y1) - cfg['ready_climb'][1]) + 325 #175
                     
 
 
@@ -705,100 +645,35 @@ class WallClimbing(API):
    
 
                 elif action == 'right_hand':
-                    # rad_h_extreme = (1530 - H_READY) * RAD_FACTOR
-                    # rad_v_extreme = (1891 - V_READY) * RAD_FACTOR
-
-                    # S_x = (2410 - cfg['ready_climb'][0])/(math.tan(rad_h_extreme)) * DS #參數
-                    # S_y = (2148- cfg['ready_climb'][1])/(math.tan(rad_v_extreme)) * DS
-
-                    # rad_h_ready = (H_READY - 2048) * RAD_FACTOR
-                    # rad_v_ready = (V_READY - 2048) * RAD_FACTOR
                     
-                    # motor_value_x = S_x * (math.tan(rad_h) - math.tan(rad_h_ready))
-                    # motor_value_y = S_y * (math.tan(rad_v) - math.tan(rad_v_ready))
-
                     #motor_value_x = abs((self.now_head_Horizontal * self.p_x2 * DS) - cfg['ready_climb'][0] )
                     motor_value_x = (self.now_head_Horizontal - 1546) * right_value  + 100 
-                    motor_value_y = ((self.now_head_Vertical * self.p_y1) - cfg['ready_climb'][1]) + 275
+                    motor_value_y = ((self.now_head_Vertical * self.p_y1) - cfg['ready_climb'][1]) + 125 #275
 
                     self.get_logger().info(f"{action} 最終輸出: M1(Y)={int(motor_value_y) }, M2(X)={int(motor_value_x) }")
                     
-                    # self.sendSingleMotor(2, int(motor_value_x) , 20)
-                    # time.sleep(2)
-                    # self.sendSingleMotor(1, int(motor_value_y) , 20)
-                    # time.sleep(2)
-
                 if action == 'left_hand' or action == 'right_hand':
-
-                    # motor_value_x = max(-2000, min(2000, int(motor_value_x)))
-                    # motor_value_y = max(-2000, min(2000, int(motor_value_y)))
-                    # self.get_logger().info(f"{action} 最終輸出: M1(Y)={motor_value_y}, M2(X)={motor_value_x}")
                     
                     self.sendSingleMotor(cfg['ids'][1], int(motor_value_x), 20)
                     time.sleep(2)
                     self.sendSingleMotor(cfg['ids'][0], int(motor_value_y), 20)
                     time.sleep(2)
-
-                elif action == 'left_leg' or action == 'right_leg':
-                    time.sleep(5) #避免機器人沒抓住時,我們可以抓住機器人
-                    if action =='left_leg':
-                        self.sendBodySector(40)
-                        time.sleep(2)
-                        self.sendBodySector(41)
-                        time.sleep(2)
-                        self.sendBodySector(42)
-                        time.sleep(2)
-                    elif action == 'right_leg':
-                        self.sendBodySector(43)
-                        time.sleep(2)
-                        self.sendBodySector(44)
-                        time.sleep(2)
-                        self.sendBodySector(45)
-                        time.sleep(2)
-                        
+                if action == 'left_leg' :
+                    self.sendBodySector(19)
+                    time.sleep(2)
+                    self.sendBodySector(20)
+                    time.sleep(2)
+                    self.sendBodySector(21)
+                    time.sleep(3)
+                    self.sendBodySector(22)
+                    time.sleep(2)
+                    self.sendBodySector(23)
+                    time.sleep(2)
+                    self.sendBodySector(24)
+                    time.sleep(2)
+                    
 
 
-                    # 腳部暫時維持原來的線性邏輯
-                    # motor_value_hight = (current_target['size'] * self.p_height) - cfg['ready_heap'][0]
-                    # motor_value_x = (self.now_head_Horizontal * self.p_x2) - cfg['ready_climb'][0] 
-                    # motor_value_y = (self.now_head_Vertical * self.p_y2) - cfg['ready_climb'][1]
-                    # self.get_logger().info(f"腳部 {action} P_x={self.p_x2}, P_y={self.p_y2}")    
-
-
-                # if action == 'left_hand' or action == 'right_hand':
-                #     S_x = 800  
-                #     S_y = 800
-                #     if action == 'right_hand':
-                #         motor_value_x = cfg['ready_climb'][0] - (S_x * math.tan(rad_h))
-                #     motor_value_x = cfg['ready_climb'][0] + (S_x * math.tan(rad_h))
-                #     motor_value_y = cfg['ready_climb'][1] + (S_y * math.tan(rad_v))
-
-                #     self.get_logger().info(f"{action} 計算完畢: X={motor_value_x:.1f}, Y={motor_value_y:.1f}")
-
-                #     self.sendSingleMotor(cfg['ids'][1], int(motor_value_x), 20)
-                #     time.sleep(2)
-                #     self.sendSingleMotor(cfg['ids'][0], int(motor_value_y), 20)
-                #     time.sleep(2)
-                #     # motor_value_x = (self.now_head_Horizontal * self.p_x1) - cfg['ready_climb'][0] 
-                #     # motor_value_y = (self.now_head_Vertical * self.p_y1) - cfg['ready_climb'][1]
-                #     # self.get_logger().info(f"P_x={self.p_x1}, P_y={self.p_y1}")
-
-                # elif action == 'left_leg' or action == 'right_leg':
-                #     motor_value_hight = (current_target['size'] * self.p_height) - cfg['ready_heap'][0]
-                #     motor_value_x = (self.now_head_Horizontal * self.p_x2) - cfg['ready_climb'][0] 
-                #     motor_value_y = (self.now_head_Vertical * self.p_y2) - cfg['ready_climb'][1]
-                #     self.get_logger().info(f"P_x={self.p_x2}, P_y={self.p_y2}")
-
-                # self.get_logger().info(f"{action} 動作執行完畢: M1={motor_value_y}, M2={motor_value_x}")
-                
-                # if action =='left_leg' or action == 'right_leg':
-                #     self.sendSingleMotor(cfg['ids'][1],int(motor_value_hight,20))
-                #     time.sleep(2)
-                # self.sendSingleMotor(cfg['ids'][1],int(motor_value_x),20)
-                # time.sleep(2)
-                # self.sendSingleMotor(cfg['ids'][0],int(motor_value_y),20)
-                # time.sleep(2)
-                
                 self.move_ok = True
                 self.state = '攀爬結束'
 
@@ -903,7 +778,7 @@ class WallClimbing(API):
                 ymax = self.object_y_max[color][i]
                 ymin = self.object_y_min[color][i]
                 
-                # --- 限制 1: 邊緣截斷過濾 (不可碰到畫面邊緣) ---
+                # # --- 限制 1: 邊緣截斷過濾 (不可碰到畫面邊緣) ---
                 if xmin <= 0 or xmax >= 320 or ymin <= 0 or ymax >= 240:
                     continue
 
@@ -1017,106 +892,6 @@ class WallClimbing(API):
                 
 
         else:
-            # if not self.beseen_lamb or not self.lookok:
-            #     if self.times >= 5:
-            #         self.times = 1
-            #         self.lookok = True
-            #         self.beseen_lamb = True
-
-            #         if self.last_limb == 'left_hand':
-            #             self.score_left_hand = -1
-            #         elif self.last_limb == 'right_hand':
-            #             self.score_right_hand = -1
-            #         elif self.last_limb == 'left_leg':
-            #             self.score_left_leg = -1
-            #         elif self.last_limb == 'right_leg':
-            #             self.score_right_leg = -1
-                    
-            #         if (self.score_left_hand > self.score_right_hand and self.score_left_hand > self.score_left_leg and self.score_left_hand > self.score_right_leg):
-            #             self.any_lamb = 'left_hand'
-            #             return ('left_hand',self.val_left_hand)
-            #         elif(self.score_right_hand > self.score_left_hand and self.score_right_hand > self.score_left_leg and self.score_right_hand > self.score_right_leg):
-            #             self.any_lamb = 'right_hand'
-            #             return ('right_hand',self.val_right_hand)
-            #         elif (self.score_left_leg > self.score_left_hand and self.score_left_leg > self.score_right_hand and self.score_left_leg > self.score_right_leg):
-            #             self.any_lamb = 'left_leg'
-            #             return ('left_leg',self.val_left_leg)
-            #         elif(self.score_right_leg > self.score_left_hand and self.score_right_leg > self.score_right_hand and self.score_right_leg > self.score_left_leg):
-            #             self.any_lamb = 'right_leg'
-            #             return ('right_leg',self.val_right_leg)
-            #         else:
-            #             return('none','no_object')
-
-
-            #     else:
-            #         self.lookok = False
-
-            #         if self.times == 1:
-            #             self.sendHeadMotor(1, HEAD_LEFT_HAND_H, 40)
-            #             self.sendHeadMotor(2, HEAD_LEFT_HAND_V, 40)
-            #             time.sleep(2)
-            #             self.val_left_hand = self.get_best_climbing_target()
-            #             if self.val_left_hand == None:
-            #                 self.score_left_hand = -1
-            #             else:
-            #                 self.score_left_hand = self.val_left_hand['score']
-            #         elif self.times == 2:
-            #             self.sendHeadMotor(1, HEAD_RIGHT_HAND_H, 40)
-            #             self.sendHeadMotor(2, HEAD_RIGHT_HAND_V, 40)
-            #             time.sleep(2)
-            #             self.val_right_hand = self.get_best_climbing_target()
-            #             if self.val_right_hand == None:
-            #                 self.score_right_hand = -1
-            #             else:
-            #                 self.score_right_hand = self.val_right_hand['score']
-
-            #         elif self.times == 3:
-            #             self.sendHeadMotor(1, HEAD_LEFT_LEG_H, 40)
-            #             self.sendHeadMotor(2, HEAD_LEFT_LEG_V, 40)
-            #             time.sleep(2)
-            #             self.val_left_leg = self.get_best_climbing_target()
-            #             if self.val_left_leg == None:
-            #                 self.score_left_leg = -1
-            #             else:
-            #                 self.score_left_leg = self.val_left_leg['score']
-
-            #         elif self.times == 4:
-            #             self.sendHeadMotor(1, HEAD_RIGHT_LEG_H, 40)
-            #             self.sendHeadMotor(2, HEAD_RIGHT_LEG_V, 40)
-            #             time.sleep(2)
-            #             self.val_right_leg = self.get_best_climbing_target()
-            #             if self.val_right_leg == None:
-            #                 self.score_right_leg = -1
-            #             else:
-            #                 self.score_right_leg = self.val_right_leg['score']
-                    
-            #             self.times += 1 
-            # else:
-            #     if self.climbing and not self.move_ok:
-            #         if self.any_lamb == 'left_hand':
-            #             return ('left_hand',self.val_left_hand)
-            #         elif self.any_lamb == 'right_hand':
-            #             return ('right_hand',self.val_right_hand)
-            #         elif self.any_lamb == 'left_leg':
-            #             return ('right_hand',self.val_right_hand)
-            #         elif self.any_lamb == 'right_leg':
-            #             return ('right_leg',self.val_right_leg)
-            #     elif self.climbing and self.move_ok:
-            #         if self.any_lamb == 'left_hand':
-            #             self.last_limb = 'left_hand'
-            #             self.climb_step += 1
-            #         elif self.any_lamb == 'right_hand':
-            #             self.last_limb = 'right_hand'
-            #             self.climb_step += 1
-            #         elif self.any_lamb == 'left_leg':
-            #             self.last_limb = 'left_leg'
-            #             self.climb_step += 1
-            #         elif self.any_lamb == 'right_leg':
-            #             self.last_limb = 'right_leg'
-            #             self.climb_step += 1
-            #     else:
-            #         return
-            #----------------------------------------------------------------------
             if self.lookok:
                 if self.any_lamb is None:
                     return ('none', 'no_object')
@@ -1169,11 +944,9 @@ class WallClimbing(API):
                     self.times = 5
                     return ('searching', 'no_object')
 
-                # 四個方向都看完了，開始比較分數
                 elif self.times >= 5:
-                    self.times = 1 # 重置計數器
+                    self.times = 1 
                     
-                    # 避免連續動同一隻手/腳
                     if self.last_limb == 'left_hand': self.score_left_hand = -1
                     elif self.last_limb == 'right_hand': self.score_right_hand = -1
                     elif self.last_limb == 'left_leg': self.score_left_leg = -1
@@ -1190,7 +963,6 @@ class WallClimbing(API):
                     best_limb = max(scores, key=scores.get)
                     best_score = scores[best_limb]
 
-                    # 如果連最高分都是 -1，代表四個方向都沒看到點
                     if best_score == -1:
                         self.get_logger().info("四個方向都找不到點...")
                         return ('none', 'no_object')
@@ -1198,9 +970,9 @@ class WallClimbing(API):
                     self.any_lamb = best_limb
                     self.lookok = True # 標記已經看好目標
                     self.get_logger().info(f"Any 模式選定目標: {best_limb}, 分數: {best_score}")
-                    
+                
                     # 準備進入追蹤與攀爬階段，回傳對應的目標
-                    return self.lambs_select() # 遞迴呼叫一次，走上面
+                    return self.lambs_select() 
 
     
 class Coordinate:
