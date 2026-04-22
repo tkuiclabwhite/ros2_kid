@@ -21,19 +21,19 @@ from rclpy.executors import MultiThreadedExecutor
 from strategy.API import API
 
 HEAD_HORIZONTAL = 2048 #頭水平，位置為馬達目標刻度，2048為正朝前方
-HEAD_HEIGHT     = 1550 #頭高，位置為馬達目標刻度，2048為正朝前方
+HEAD_HEIGHT     = 1450 #頭高，位置為馬達目標刻度，2048為正朝前方
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
 STAY_X                          = -600
 STAY_Y                          = -300
 STAY_THETA                      = -1
 #=========================================== 
-MAX_FORWARD_X                   = 1500                                                     
+MAX_FORWARD_X                   = 2500                                                     
 # MAX_FORWARD_Y                   = 100                                                            
 MAX_FORWARD_Y                   = -200
 MAX_FORWARD_THETA               = -1
 #=========================================== 
-SMALL_FORWARD_X                 = 1000                                                     
+SMALL_FORWARD_X                 = 1500                                                     
 SMALL_FORWARD_Y                 = -200
 SMALL_FORWARD_Y                 = 0
 SMALL_FORWARD_THETA             = -1             
@@ -84,7 +84,7 @@ PRETURN_RIGHT         = False
 # PRETURN_RIGHT         = True #預轉身右
 PRETURN_RIGHT_ANGLE   = 50
 #===========================================
-YELLOW_WALKWAY              = True      #如果沒有黃黃通道就把它關了
+YELLOW_WALKWAY              = False      #如果沒有黃黃通道就把它關了
 YELLOW_SMALL_TURNHEAD       = False #通道不夠大轉頭
 YELLOW_BLUE                 = True#黃線接藍牆
 YELLOW_IMU_LEFT        = False #黃色與藍牆夠近時 或 兩個藍色中有洞使用深度判斷 走完轉頭先imu_fix
@@ -483,7 +483,7 @@ class Normal_Obs_Parameter: #計算各種深度
             status.yellow_line = ""
             status.yellow_state = "未進黃黃"
             if self.yy:
-                time.sleep(1)
+                # time.sleep(1)
                 self.yy = False
             else:
                 self.deep_x = x_center - x_boundary
@@ -708,22 +708,32 @@ class Obs(Node): #各種避障動作
             self.first_reddoor = True   
             send.sendHeadMotor(1,HEAD_HORIZONTAL,100) #頭在中間
             send.sendHeadMotor(2,HEAD_HEIGHT + 150,100)
-            time.sleep(0.2)
+            # time.sleep(0.2)
             send.sendContinuousValue(0, 0 , 0)
 
         # while send.object_y_max[5][0] > 120 and status.running: #red door 前後修正1 值越大離門越近 #離紅門太近了            
         #     self.walk.move('small_back')
         #     status.reddoor_state = "離紅門太近"            
+        if REDDOOR_FIX=="imu":
+            if abs(send.imu_rpy[2]) > 2 :     # red door 修斜率
+                status.reddoor_state = "修斜率1"
+                while ( abs(send.imu_rpy[2]) > 2) and status.running:
+                    self.walk.move('imu_fix')
+                    self.image.calculate()
 
-        if abs(deep.slope) > 0.1 :     # red door 修斜率
-            status.reddoor_state = "修斜率1"
-            while abs(deep.slope) > 0.1 and status.running:                
-                self.walk.move(f'{REDDOOR_FIX}_fix') #self.walk.move('imu_fix') #根據斜率修正IMU
-                self.image.calculate()
+                self.walk.move('stay')    
+                time.sleep(0.1)
+                self.walk.face_imu = send.imu_rpy[2]
+        elif REDDOOR_FIX == "slope":
+            if abs(deep.slope) > 0.1 :     # red door 修斜率
+                status.reddoor_state = "修斜率1"
+                while abs(deep.slope) > 0.1 and status.running:                
+                    self.walk.move('slope_fix') #self.walk.move('imu_fix') #根據斜率修正IMU
+                    self.image.calculate()
 
-            self.walk.move('stay')    
-            time.sleep(1)    
-            self.walk.face_imu = send.imu_rpy[2]
+                self.walk.move('stay')    
+                time.sleep(0.1)
+                self.walk.face_imu = send.imu_rpy[2]
         
         if len(send.object_y_max[5]) > 0:
             if send.object_y_max[5][0] > 110:
@@ -747,15 +757,29 @@ class Obs(Node): #各種避障動作
             if (self.image.red_x_min < 2 and self.image.red_x_max > 250) and send.object_sizes[5][0] > 5000: #紅門在眼前
                 
                 if  self.translate:
-                    while abs(deep.slope) > 0.1 and status.running:
-                        # self.walk.move('slope_fix')
-                        self.walk.move(f'{REDDOOR_FIX}_fix') 
-                        status.reddoor_state = "修斜率2"
-                    self.walk.move('stay')    
-                    # time.sleep(0.5)
-                    self.walk.face_imu = send.imu_rpy[2]
-                    self.crawl()
-                    break
+                    if REDDOOR_FIX=="imu":
+                        if abs(send.imu_rpy[2]) > 2 :     # red door 修斜率
+                            while ( abs(send.imu_rpy[2]) > 2) and status.running:
+                                self.walk.move('imu_fix')
+                                status.reddoor_state = "修斜率2"
+                                self.image.calculate()
+
+                            self.walk.move('stay')    
+                            time.sleep(0.1)
+                            self.walk.face_imu = send.imu_rpy[2]
+                            self.crawl()
+                            break
+                    elif REDDOOR_FIX == "slope":
+                        if abs(deep.slope) > 0.1 :
+                            while abs(deep.slope) > 0.1 and status.running:
+                                # self.walk.move('slope_fix')
+                                self.walk.move('slope_fix') 
+                                status.reddoor_state = "修斜率2"
+                            self.walk.move('stay')    
+                            # time.sleep(0.5)
+                            self.walk.face_imu = send.imu_rpy[2]
+                            self.crawl()
+                            break
                 elif (send.color_counts[2] == 1):
                     if (self.image.b_x_min < 2 and self.image.b_x_max > 40):                        
                         self.translate = False
@@ -857,14 +881,26 @@ class Obs(Node): #各種避障動作
         self.translate = False        
         while 1 and status.running:
             if self.translate :
-                while abs(deep.slope) > 0.1 and status.running:
-                    # self.walk.move('slope_fix')                    
-                    self.walk.move(f'{REDDOOR_FIX}_fix') 
-                    status.reddoor_state = "修斜率3"
-                self.walk.move('stay')    
-                # time.sleep(0.5)                
-                self.walk.face_imu = send.imu_rpy[2]                                        
-                break
+                if REDDOOR_FIX=="imu":
+                    if abs(send.imu_rpy[2]) > 2 :     # red door 修斜率
+                        while ( abs(send.imu_rpy[2]) > 2) and status.running:
+                            self.walk.move('imu_fix')
+                            status.reddoor_state = "修斜率3"
+                            self.image.calculate()
+
+                        self.walk.move('stay')    
+                        # time.sleep(0.5)                
+                        self.walk.face_imu = send.imu_rpy[2]                                        
+                        break
+                if REDDOOR_FIX=="slope":
+                    if abs(deep.slope) > 0.1 : 
+                        while abs(deep.slope) > 0.1 and status.running:
+                            self.walk.move('slope_fix')
+                            status.reddoor_state = "修斜率3"
+                        self.walk.move('stay')    
+                        # time.sleep(0.5)                
+                        self.walk.face_imu = send.imu_rpy[2]                                        
+                        break
 
             elif (send.color_counts[2] == 1):
                 if (self.image.b_x_min < 2 and self.image.b_x_max > 20):
@@ -1163,7 +1199,7 @@ class Obs(Node): #各種避障動作
             if (self.image.center_deep > 8) and (not self.yb):
                 while ( self.image.center_deep > 8 ) and status.running and (not self.yb):
                     status.turnHead_state = "距離牆太遠"
-                    self.walk.move('small_forward') 
+                    self.walk.move('small_forward')
             elif ( self.image.center_deep < 5 ) and (not self.yb):
                 while ( self.image.center_deep < 5 ) and status.running and (not self.yb):
                     status.turnHead_state = "距離牆太近"
@@ -1440,7 +1476,7 @@ class Obs(Node): #各種避障動作
                         if 10 > self.image.deep_x > 4 : #deep_x = dx  #normal turn 右轉 範圍越大越容易旋轉 三個地方要調整 大的數字不動
                             # self.walk.straight_speed()                        
                             if ((abs(send.imu_rpy[2]) > 5) and (not self.imu_ok)) and (self.image.deep_x >= 6) :       #normal turn 右轉 數值越大 越不容易 修imu
-                                while(abs(send.imu_rpy[2]) > 5):
+                                while(abs(send.imu_rpy[2]) > 2):
                                     self.walk.move('imu_fix')
                                     #print(abs(send.imu_rpy[2]))
                                     # send.imu_rpy[2] =2
@@ -1555,7 +1591,7 @@ class Obs(Node): #各種避障動作
                     self.walk.move('stop')
                     send.sendContinuousValue(0,0,0) #x,y,z,theta填入walking介面移動數值
                     send.sendbodyAuto(0) #mode=1為continue步態
-                    time.sleep(0.5)
+                    # time.sleep(0.5)
                     self.initt()
                     self.start_walking = False
                 
