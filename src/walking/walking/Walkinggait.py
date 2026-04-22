@@ -364,17 +364,15 @@ class WalkingGaitByLIPM:
                 #根據抬腳比例減少com_y_shift
                 s_y = self.now_step_ / max(self.STARTSTEPCOUNTER - 1, 1)
                 scale_y = self.min_scale + (1.0 - self.min_scale) * 0.5 * (1 - math.cos(math.pi * s_y))
-                direction = 1.0 if (self.now_step_ % 2 == 1) else -1.0
 
                 #吃新曲線
-                # self.py_ += direction * self.com_y_swing * (1.0 - scale) * self.smooth_step(self.t_ / self.TT_)
+                # self.py_ += self.com_y_swing * (1.0 - scale) * self.smooth_step(self.t_ / self.TT_)
 
-                #吃舊曲線
-                self.py_ += direction * self.com_y_swing * (1.0 - scale_y) * self.smooth_step(self.t_ / self.TT_)
+                #吃舊曲線              
+                self.py_ += self.com_y_swing * (1.0 - scale_y) * self.smooth_step(self.t_ / self.TT_)
 
                 #定值com_y_shift
-                # direction = 1.0 if (self.now_step_ % 2 == 1) else -1.0
-                # self.py_ += direction * self.com_y_swing * self.smooth_step(self.t_ / self.TT_)
+                # self.py_ += self.com_y_swing  * self.smooth_step(self.t_ / self.TT_)
 
             if (self.now_step_ % 2) == 1:
                 # 奇數步：右腳擺
