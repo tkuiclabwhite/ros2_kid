@@ -18,12 +18,12 @@ HEAD_CHECK = 2080
 HAND_BACK = 222
 LEG_BACK = 1812
 VERTICAL_HEAD = 2048
-X_BENCHMARK = [228, 203, 221, 209, 210] # [最左,中左,中間,中右,最右]
+X_BENCHMARK = [201, 200, 209, 209, 209] # [最左,中左,中間,中右,最右]
 Y_BENCHMARK = 143
-SHOOT_DELAY = 0.80                    # 
-                                        #shoot_delay range: 0.7~0.75~0.8
+SHOOT_DELAY = 0.75       # +0.1s -0.004s   7.3    5.18       4.5     3    2.8       2.36s     
+                         #shoot_delay:     0.58   0.75       0.7~  0.77   0.78 ~    0.80
 # motion sector
-PREPARE = 9999   
+PREPARE = 9999                              
 SHOOT = 456       
 HAND_UP = 111
 LEG_DOWN = 1218
@@ -298,9 +298,9 @@ class Archery(Node):
                 elif self.ctrl_status == 'archery_action':
                     # 決定要轉多少
                     if 0 < self.lowest_x <= 115: self.x_benchmark_type = 4
-                    elif 115 < self.lowest_x <= 160: self.x_benchmark_type = 3
-                    elif self.lowest_x >= 220: self.x_benchmark_type = 0
-                    elif 220 > self.lowest_x >= 185: self.x_benchmark_type = 1
+                    elif 115 < self.lowest_x <= 150: self.x_benchmark_type = 3
+                    elif self.lowest_x >= 200: self.x_benchmark_type = 0
+                    elif 200 > self.lowest_x >= 185: self.x_benchmark_type = 1
                     else: self.x_benchmark_type = 2 
                     
                     self.get_logger().info(f'Action Type: {self.x_benchmark_type}')
@@ -334,6 +334,7 @@ class Archery(Node):
                         while self.hand_move_cnt != 0:
                             self.get_logger().info(f"HAND_UP")
                             self.send.sendBodySector(HAND_UP)
+                       
                             self.hand_move_cnt -= 1
                             time.sleep(0.5)
                     
