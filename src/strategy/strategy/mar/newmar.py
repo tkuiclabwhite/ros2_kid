@@ -23,6 +23,8 @@ HEAD_DOWN_Y = 1500   # 俯角位置（看地板）
 # 行走速度
 WALK_SPEED_NORMAL  = 2000   # 正常前進速度
 WALK_SPEED_SLOW    = 1500   # 接近標記 / 搜尋時的慢速
+RIGHT_TURN_SPEED = 800
+LEFT_TURN_SPEED = 800
 # 畫面參數
 FRAME_W       = 320
 FRAME_H       = 240
@@ -30,13 +32,13 @@ FRAME_CX      = FRAME_W // 2   # 320
 ALIGN_DEADBAND = 40            # X 軸對準死區（像素）
 
 # 標記 Y 座標閾值（畫面高度 320，值越大越靠近畫面底部）
-SIGN_Y_THRESHOLD = 210          # 標記 Y 座標小於此值視為「進入下方」（Y 越小越靠近底部）
+SIGN_Y_THRESHOLD = 215          # 標記 Y 座標小於此值視為「進入下方」（Y 越小越靠近底部）
 
 # 靠近累積幀數（Y 座標連續超過閾值幾幀才觸發，3fps 下 5 幀約 1.7 秒）
 APPROACH_COUNT = 20             # 累積幀數（實測後調整）
 
 # 動作參數
-TURN_TARGET_ANGLE = 85      # 轉彎目標角度（度）
+TURN_TARGET_ANGLE = 80      # 轉彎目標角度（度）
 TURN_SPEED        = 8       # 轉彎角速度
 # 搜尋參數
 LOST_WAIT_TIME    = 2.0     # 跟丟後等待時間（秒）才開始慢速前進
@@ -243,7 +245,7 @@ class Mar(API):
             theta = self._imu_correction()  # 對齊後用 IMU 維持直走
  
         # Y 座標未到閾值：持續慢速前進，重置計數
-        if self.sign_cy > SIGN_Y_THRESHOLD:
+        if self.sign_cy < SIGN_Y_THRESHOLD:
             self.approach_count = 0
             self.target_label   = 'none'
             self.sendContinuousValue(WALK_SPEED_SLOW, 0, theta)
@@ -299,7 +301,7 @@ class Mar(API):
                 self._initialize()  # 直接回到 WALK
             else:
                 turn_speed = TURN_SPEED if label == 'left' else -TURN_SPEED
-                self.sendContinuousValue(0, 0, turn_speed)
+                self.sendContinuousValue(RIGHT_TURN_SPEED, 0, turn_speed)
                 self.get_logger().info(
                     f"[ACTION] 轉彎中 yaw={current_yaw:.1f} / 目標={target_yaw}",
                     throttle_duration_sec=0.5
