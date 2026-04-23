@@ -40,11 +40,11 @@ HEAD_LEFT_HAND_V = 2100  #2100
 HEAD_RIGHT_HAND_H = 1550
 HEAD_RIGHT_HAND_V = 2100
  
-HEAD_LEFT_LEG_H = 1750
-HEAD_LEFT_LEG_V = 1750
+HEAD_LEFT_LEG_H = 2550
+HEAD_LEFT_LEG_V = 1900
 
-HEAD_RIGHT_LEG_H = 2350
-HEAD_RIGHT_LEG_V = 1750
+HEAD_RIGHT_LEG_H = 1550
+HEAD_RIGHT_LEG_V = 1900
 
 MOTOR_LEFT_HAND_Y = 1071
 MOTOR_LEFT_HAND_X = 1919
@@ -90,11 +90,11 @@ LHEAD_Y_CA = 2101
 LHAND_X_CA = 1791
 LHAND_Y_CA = 1836
 
-RHEAD_X_CA = 1618
-RHEAD_Y_CA = 2357
+RHEAD_X_CA = 2661
+RHEAD_Y_CA = 2505
 
-RHAND_X_CA = 2060
-RHAND_Y_CA = 2701
+RHAND_X_CA = 1960
+RHAND_Y_CA = 1312
 #----------------------------------------腳校正
 HEAD_X_CA2 = 2600
 HEAD_X_CA2 = 2190
@@ -291,9 +291,7 @@ class WallClimbing(API):
         self.target_1_size = 0
         self.target_2_size = 0
 
-        self.track = 0
-        self.stoptime = 0
-
+        self.track = 0  
         self.cnt = 1
 
 
@@ -303,6 +301,7 @@ class WallClimbing(API):
        
         self.times = 1
 
+        self.climb_step = 1
         self.score_left_hand = 0
         self.score_right_hand = 0
         self.score_left_leg = 0
@@ -636,6 +635,8 @@ class WallClimbing(API):
                     
                     #motor_value_x = ((self.now_head_Horizontal-2394) * self.p_x1 * DS) - cfg['ready_climb'][0]
                     motor_value_x = (self.now_head_Horizontal-2550) * left_value
+                    #     motor_value_y = ((self.now_head_Vertical * self.p_y2) - cfg['ready_climb'][1]) + 325
+                    # else:
                     motor_value_y = ((self.now_head_Vertical * self.p_y1) - cfg['ready_climb'][1]) + 325 #175
                     
 
@@ -648,6 +649,9 @@ class WallClimbing(API):
                     
                     #motor_value_x = abs((self.now_head_Horizontal * self.p_x2 * DS) - cfg['ready_climb'][0] )
                     motor_value_x = (self.now_head_Horizontal - 1546) * right_value  + 100 
+                    # if(current_target['size'] > 1300 ):
+                    #     motor_value_y = ((self.now_head_Vertical * self.p_y2) - cfg['ready_climb'][1]) + 125
+                    # else:
                     motor_value_y = ((self.now_head_Vertical * self.p_y1) - cfg['ready_climb'][1]) + 125 #275
 
                     self.get_logger().info(f"{action} 最終輸出: M1(Y)={int(motor_value_y) }, M2(X)={int(motor_value_x) }")
