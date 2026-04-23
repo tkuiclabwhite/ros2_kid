@@ -235,7 +235,7 @@ class PersonCoordinateNode(API):
 
     def trace_revise(self, x_target, y_target, speed):
         x_difference, y_difference = x_target - 160, y_target - 120
-        Kp, Kd = 0.1, 0.2 
+        Kp, Kd = 0.15, 0.2 
         
         x_pd = (x_difference * Kp) + ((x_difference - self.prev_x_diff) * Kd)
         y_pd = (y_difference * Kp) + ((y_difference - self.prev_y_diff) * Kd)
@@ -260,7 +260,7 @@ class PersonCoordinateNode(API):
             self.sys_msg = f"啟動腰部補償 ID:{WAIST_ID}"
             
             # --- 補回：腰部專用 PD 參數，方便隨時微調 ---
-            Kp_waist = 0.05
+            Kp_waist = 0.08
             Kd_waist = 0.1  
             
             x_pd_waist = (x_difference * Kp_waist) + ((x_difference - self.prev_x_diff) * Kd_waist)
