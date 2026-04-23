@@ -18,9 +18,9 @@ HEAD_CHECK = 2080
 HAND_BACK = 222
 LEG_BACK = 1812
 VERTICAL_HEAD = 2048
-X_BENCHMARK = [201, 200, 209, 209, 209] # [最左,中左,中間,中右,最右]
+X_BENCHMARK = [201, 203, 205, 209, 211] # [最左,中左,中間,中右,最右]
 Y_BENCHMARK = 143
-SHOOT_DELAY = 0.75       # +0.1s -0.004s   7.3    5.18       4.5     3    2.8       2.36s     
+SHOOT_DELAY = 0.84       # +0.1s -0.004s   7.3    5.18       4.5     3    2.8       2.36s     
                          #shoot_delay:     0.58   0.75       0.7~  0.77   0.78 ~    0.80
 # motion sector
 PREPARE = 9999                              
@@ -300,7 +300,7 @@ class Archery(Node):
                     if 0 < self.lowest_x <= 115: self.x_benchmark_type = 4
                     elif 115 < self.lowest_x <= 150: self.x_benchmark_type = 3
                     elif self.lowest_x >= 200: self.x_benchmark_type = 0
-                    elif 200 > self.lowest_x >= 185: self.x_benchmark_type = 1
+                    elif 200 > self.lowest_x >= 180: self.x_benchmark_type = 1
                     else: self.x_benchmark_type = 2 
                     
                     self.get_logger().info(f'Action Type: {self.x_benchmark_type}')
