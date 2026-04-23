@@ -43,6 +43,7 @@ setup(
             'nav = strategy.mar.navigation_node:main',
             'hahafinal = strategy.mar.hahafinal:main',
             'newmar = strategy.mar.newmar:main',
+            'mp = strategy.lc.mp:main',
             ],
     },
 )

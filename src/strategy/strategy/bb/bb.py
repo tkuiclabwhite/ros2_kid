@@ -18,7 +18,7 @@ from rclpy.node import Node
 #======================================================================================
 
 CORRECT       = [-550, -350, 0]        # 原地踏步修正
-LEFT_CORRECT  = [-650, -350, 3]        # 左旋修正
+LEFT_CORRECT  = [-650, -350, 4]        # 左旋修正
 RIGHT_CORRECT = [-600, -350, -3]       # 右旋修正
 #                 x , y , theta
 
@@ -31,8 +31,8 @@ FIVEPOINT_HEAD_Y_DEGREE = [2010]      #投出去偏向左邊＝>頭 往左轉（
 CATCH_BALL_CORRECT = 1230        #1500   900
 
 #CATCH_BALL_LINE  = [1680, 1, 1580]            # slow_degree, stop_degree, backward_degree
-CATCH_BALL_LINE  = [1520, 1490, 1470]         #1535, 1525]   1590, 1580
-TWO_POINT_LINE   = [1800, 1670, 1650]            # slow_degree, stop_degree, backward_degree 
+CATCH_BALL_LINE  = [1520, 1510, 1495]         #1535, 1525]   1590, 1580
+TWO_POINT_LINE   = [1800, 1665, 1650]            # slow_degree, stop_degree, backward_degree 
 THREE_POINT_LINE = [77, 67, 64, 58]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 FIVE_POINT_LINE  = [105, 96, 93, 88]           # srward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 #67 65 / 66 64
@@ -292,7 +292,7 @@ class MotorMove():
                 y_degree = y_difference * (38 / 240)         #目標與中心y角度
                 self.move_head(1, self.head_horizon - round(x_degree * 4096 / 360 *0.15), 1000, 1000, speed)
                 self.move_head(2, self.head_vertical - round(y_degree * 4096 / 360 *0.15), 1000, 1000, speed)
-                time.sleep(0.1)
+                time.sleep(0.05)
             else :
                 self.api.get_logger().info(f'miss_target -> 需重新尋求')
                 self.move_head(2, 1800, 880, 880, 50)
@@ -339,7 +339,7 @@ class MotorMove():
                 self.MoveW = -2 if self.MoveW < 0 else 2 
                 # elif self.MoveW < -3:
                     #  self.MoveW = -3
-            self.waist_rotate((self.waist_position + self.MoveW), 30)
+            self.waist_rotate((self.waist_position + self.MoveW), 15)
             self.api.get_logger().info(f"貓頭鷹修腰 head_horizon = {self.head_horizon}")
             self.api.get_logger().info(f'self.MoveW = {self.MoveW}')
             time.sleep(0.5)
@@ -684,9 +684,9 @@ class BasketBall(API):
         self.motor.bodyauto_close(1)
         time.sleep(0.05)
 
-        if (self.motor.head_vertical <= CATCH_BALL_LINE[2]-50): # 球太近，先後退一段距離
+        if (self.motor.head_vertical <= CATCH_BALL_LINE[2]+50): # 球太近，先後退一段距離
             self.get_logger().info(f'球太大 -> 大倒退')
-            self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 30) 
+            self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 100) 
             self.motor.MoveContinuous(-600+CORRECT[0], 0+CORRECT[1], 0+CORRECT[2], 100, 100, 1) # 超大後退
 
         else:
@@ -895,7 +895,7 @@ class BasketBall(API):
                     self.get_logger().info(f'頭部馬達水平刻度偏差 -> 步態影響')
                     self.get_logger().info(f'rotate調整')
                     time.sleep(0.05)
-                    self.motor.body_trace_rotate(30)
+                    self.motor.body_trace_rotate(40)
 
                 else :
                     self.get_logger().info(f'頭部馬達垂直刻度與抓球角度差太多')
@@ -906,16 +906,16 @@ class BasketBall(API):
         else: 
             if self.target.basket_x != 0 :
             
-                if abs(self.target.basket_x- 160) > 9  or abs(self.target.basket_y - 120) > 10:  #讓匡在畫面中心
+                if abs(self.target.basket_x- 160) > 5  or abs(self.target.basket_y - 120) > 7:  #讓匡在畫面中心
                     self.get_logger().info(f'匡在視野中夠大 -> 鎖定匡')
-                    self.motor.trace_revise(self.target.basket_x, self.target.basket_y, 100) 
+                    self.motor.trace_revise(self.target.basket_x, self.target.basket_y, 55) 
                     self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
                     time.sleep(0.05)
                 else:
-                    if abs(self.motor.head_horizon-1935) >20: 
+                    if abs(self.motor.head_horizon-1850) > 20: 
                         self.get_logger().info(f'匡不在視野中間 -> 貓頭鷹修腰')
                         # self.get_logger().info(f"motor.head_horizon = {motor.head_horizon}")
-                        self.motor.Owl_Rotate(1935)    #2030
+                        self.motor.Owl_Rotate(1850)    #2030
     
                     # if abs(self.target.basket_x-160) > 3:
                     #     self.target.basket_parameter()
@@ -950,13 +950,12 @@ class BasketBall(API):
                 self.get_logger().info(f'line_flag = {self.motor.line_flag}')
                 
                 time.sleep(0.25)
-                
                 if (self.motor.line_flag >= 5):
                     self.ready_shoot = True
                     self.get_logger().info(f'到達可投籃大小 STOP!!, 籃球框距離 = {self.motor.basket_distance_x}')
                     self.motor.bodyauto_close(0)
                     self.target.basket_parameter()
-                    time.sleep(1)
+                    time.sleep(1.5)
                     self.get_logger().info(f'3分球預備動作')
                     self.sendBodySector(887)
                     time.sleep(2)
@@ -981,16 +980,16 @@ class BasketBall(API):
         else:
             if self.target.basket_x != 0 :
                 self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
-                if abs(self.target.basket_x- 160) > 8 or abs(self.target.basket_y - 120) > 8:  #讓匡在畫面中心
+                if abs(self.target.basket_x- 160) > 5 or abs(self.target.basket_y - 120) > 5:  #讓匡在畫面中心
                     self.get_logger().info(f'匡在視野中夠大 -> 鎖定匡')
                     self.motor.trace_revise(self.target.basket_x, self.target.basket_y, 100) 
                     # self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
                     time.sleep(0.1)
                 else: 
-                    if abs(self.motor.head_horizon-1990) > 15: #10
+                    if abs(self.motor.head_horizon-1950) > 20: #10
                         self.get_logger().info(f'匡不在視野中間->貓頭鷹修腰')
                         # self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
-                        self.motor.Owl_Rotate(1990)
+                        self.motor.Owl_Rotate(1950)
                         
                     else:
                         time.sleep(0.5)
