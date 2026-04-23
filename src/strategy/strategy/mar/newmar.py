@@ -25,9 +25,9 @@ WALK_SPEED_NORMAL  = 2000   # 正常前進速度
 WALK_SPEED_SLOW    = 1500   # 接近標記 / 搜尋時的慢速
 
 # 轉彎參數（左右分開，邊走邊轉）
-LEFT_FORWARD_SPEED  = 1300   # 左轉時的前進速度
+LEFT_FORWARD_SPEED  = 1600   # 左轉時的前進速度
 LEFT_TURN_SPEED     = 8     # 左轉時的旋轉速度（正值）
-RIGHT_FORWARD_SPEED = 800   # 右轉時的前進速度
+RIGHT_FORWARD_SPEED = 1500   # 右轉時的前進速度
 RIGHT_TURN_SPEED    = -8    # 右轉時的旋轉速度（負值）
 
 # 畫面參數
