@@ -23,47 +23,50 @@ HEAD_DOWN_Y = 1500   # 俯角位置（看地板）
 # 行走速度
 WALK_SPEED_NORMAL  = 2000   # 正常前進速度
 WALK_SPEED_SLOW    = 1500   # 接近標記 / 搜尋時的慢速
-RIGHT_TURN_SPEED = 800
-LEFT_TURN_SPEED = 800
+
+# 轉彎參數（左右分開，邊走邊轉）
+LEFT_FORWARD_SPEED  = 1300   # 左轉時的前進速度
+LEFT_TURN_SPEED     = 8     # 左轉時的旋轉速度（正值）
+RIGHT_FORWARD_SPEED = 800   # 右轉時的前進速度
+RIGHT_TURN_SPEED    = -8    # 右轉時的旋轉速度（負值）
+
 # 畫面參數
 FRAME_W       = 320
 FRAME_H       = 240
-FRAME_CX      = FRAME_W // 2   # 320
+FRAME_CX      = FRAME_W // 2   # 160
 ALIGN_DEADBAND = 40            # X 軸對準死區（像素）
 
-# 標記 Y 座標閾值（畫面高度 320，值越大越靠近畫面底部）
-SIGN_Y_THRESHOLD = 215          # 標記 Y 座標小於此值視為「進入下方」（Y 越小越靠近底部）
+# 標記 Y 座標閾值（畫面高度 240，Y 越大越靠近底部）
+SIGN_Y_THRESHOLD = 215         # 標記 Y 座標超過此值視為「夠靠近」
 
-# 靠近累積幀數（Y 座標連續超過閾值幾幀才觸發，3fps 下 5 幀約 1.7 秒）
-APPROACH_COUNT = 20             # 累積幀數（實測後調整）
+# 靠近累積幀數（Y 座標連續超過閾值幾幀才觸發）
+APPROACH_COUNT = 20            # 累積幀數（實測後調整）
 
 # 動作參數
-TURN_TARGET_ANGLE = 80      # 轉彎目標角度（度）
-TURN_SPEED        = 8       # 轉彎角速度
+TURN_TARGET_ANGLE = 85         # 轉彎目標角度（度）
+
 # 搜尋參數
-LOST_WAIT_TIME    = 2.0     # 跟丟後等待時間（秒）才開始慢速前進
-SIGN_LOST_TIMEOUT = 3.0     # ALIGN 狀態下連續幾秒沒資料才真的退回 WALK（容忍低幀率）
-INIT_COOLDOWN     = 2.0     # 初始化後冷卻時間（秒），避免辨識 node 殘留發布觸發 ALIGN
+LOST_WAIT_TIME    = 2.0        # 跟丟後等待時間（秒）才開始慢速前進
+SIGN_LOST_TIMEOUT = 3.0        # ALIGN 狀態下連續幾秒沒資料才真的退回 WALK
+INIT_COOLDOWN     = 2.0        # 初始化後冷卻時間（秒），避免殘留發布誤觸發
 
 # IMU 補正參數
-IMU_CORRECT_DEADBAND = 5    # yaw 在此範圍內不補正（度）
-IMU_CORRECT_SPEED    = 5    # IMU 補正角速度
+IMU_CORRECT_DEADBAND = 3       # yaw 在此範圍內不補正（度）
+IMU_CORRECT_SPEED    = 8       # IMU 補正角速度
 
 # ═══════════════════════════════════════════════
 #  子狀態定義
 # ═══════════════════════════════════════════════
 # WALK   : 底層持續前進，同時掃描標記
 # ALIGN  : 看到標記，對準中心 + 慢速靠近
-#          標記 Y 座標連續低於閾值 APPROACH_COUNT 幀後觸發（Y 越小越靠近底部）
-#          直接進入 ACTION
-# ACTION : 收到 left/right 執行轉彎；straight 視同直走直接回 WALK
-
+#          Y 座標連續超過閾值 APPROACH_COUNT 幀後進入 ACTION
+# ACTION : left/right 邊走邊轉；straight 視同直走直接回 WALK
 
 
 class Mar(API):
     def __init__(self):
         super().__init__('mar_strategy')
- 
+
         # === 覆寫 IMU 訂閱為 Best Effort ===
         if self.imu_sub:
             self.destroy_subscription(self.imu_sub)
@@ -75,48 +78,45 @@ class Mar(API):
             qos_be,
             callback_group=self.imu_cbg
         )
- 
+
         # === 狀態 ===
-        # is_start 由 API 的 parameter 'start' 自動控制，不在這裡設定
+        # is_start 由 API 的 parameter 'start' 自動控制
         self.initialized    = False
         self.sub_state      = 'WALK'
- 
+
         # === 視覺資料 ===
         self.sign_label     = 'none'
         self.sign_cx        = FRAME_CX
         self.sign_cy        = FRAME_H // 2
         self.sign_area      = 0.0
         self.last_sign_time = 0.0
- 
+
         # === 動作計時 ===
         self.action_start_time = 0.0
         self.target_label      = 'none'
-        self.lost_start_time   = 0.0    # 第一次跟丟的時間點
-        self._cooldown_until   = 0.0      # 初始化冷卻期結束時間
-        self.approach_count    = 0      # Y 座標連續超過閾值的累積幀數
- 
+        self.lost_start_time   = 0.0
+        self._cooldown_until   = 0.0
+        self.approach_count    = 0
+
         # === 訂閱 navigation_node 發布的結果 ===
         self.yolo_sub = self.create_subscription(
             String, 'class_id_topic', self._sign_callback, 10
         )
- 
+
         # === 主迴圈 20Hz ===
         self.create_timer(0.05, self._main_loop)
- 
+
         self.get_logger().info("=== Mar Strategy Initialized (Event-Driven Mode) ===")
- 
+
     # ───────────────────────────────────────────
     #  is_start 由 API 的 ROS2 parameter 'start' 控制
-    #  指撥開關撥動時，API 的 _sync_start_from_param
-    #  會自動每 20Hz 同步 self.is_start，不需要覆寫
     # ───────────────────────────────────────────
- 
+
     # ───────────────────────────────────────────
     #  視覺 callback
     # ───────────────────────────────────────────
     def _sign_callback(self, msg: String):
         """接收 navigation_node 發布的標記資訊"""
-        # 冷卻期內忽略所有視覺資料，避免辨識 node 殘留發布誤觸發
         if time.time() < self._cooldown_until:
             return
         try:
@@ -129,11 +129,11 @@ class Mar(API):
                 self.last_sign_time = time.time()
         except Exception as e:
             self.get_logger().error(f"Sign parse error: {e}")
- 
+
     def _sign_visible(self):
-        """標記是否在有效時間內（0.5 秒內有新資料）"""
+        """標記是否在有效時間內（1.0 秒內有新資料）"""
         return (time.time() - self.last_sign_time) < 1.0
- 
+
     # ───────────────────────────────────────────
     #  頭部控制
     # ───────────────────────────────────────────
@@ -141,7 +141,7 @@ class Mar(API):
         """頭部俯角看地板"""
         self.sendHeadMotor(1, HEAD_DOWN_X, 50)
         self.sendHeadMotor(2, HEAD_DOWN_Y, 50)
- 
+
     # ───────────────────────────────────────────
     #  IMU 補正計算
     # ───────────────────────────────────────────
@@ -153,35 +153,28 @@ class Mar(API):
         elif yaw < -IMU_CORRECT_DEADBAND:
             return IMU_CORRECT_SPEED
         return 0
- 
+
     # ───────────────────────────────────────────
     #  初始化
     # ───────────────────────────────────────────
     def _initialize(self):
         self.sendSensorReset(True)
         self._look_down()
-        self.sub_state      = 'WALK'
-        self.target_label   = 'none'
-        self.last_sign_time  = time.time() - 999  # 歸零，讓 _sign_visible 先回 False
+        self.sub_state       = 'WALK'
+        self.target_label    = 'none'
+        self.last_sign_time  = time.time() - 999
         self.lost_start_time = 0.0
         self.approach_count  = 0
-        self._cooldown_until = time.time() + INIT_COOLDOWN  # 冷卻期結束時間
+        self._cooldown_until = time.time() + INIT_COOLDOWN
         self.get_logger().info(f"[Init] 完成，進入 WALK 狀態（冷卻 {INIT_COOLDOWN}s）")
- 
+
     # ───────────────────────────────────────────
-    #  狀態：WALK（底層持續前進 + 掃描標記）
+    #  狀態：WALK
     # ───────────────────────────────────────────
     def _state_walk(self):
-        """
-        核心設計：機器人永遠在走，不等待。
-        - 看到標記 → 進入 ALIGN
-        - 跟丟超過 LOST_WAIT_TIME → 慢速前進繼續找
-        - 跟丟未超時 → 正常速度前進（標記可能就在前方）
-        """
         self._look_down()
- 
+
         if self._sign_visible():
-            # 看到標記 -> 進入對準
             self.lost_start_time = 0.0
             self.get_logger().info(
                 f"[WALK] 發現標記 {self.sign_label} area={self.sign_area:.0f} -> ALIGN",
@@ -189,42 +182,33 @@ class Mar(API):
             )
             self.sub_state = 'ALIGN'
             return
- 
-        # 沒看到標記
+
         now = time.time()
         if self.lost_start_time == 0.0:
             self.lost_start_time = now
- 
+
         lost_duration = now - self.lost_start_time
- 
+        correction = self._imu_correction()
+
         if lost_duration < LOST_WAIT_TIME:
-            # 剛跟丟，正常速度前進（標記可能快到了）
-            correction = self._imu_correction()
             self.sendContinuousValue(WALK_SPEED_NORMAL, 0, correction)
             self.get_logger().info(
                 f"[WALK] 搜尋中... ({lost_duration:.1f}s) yaw={self.imu_rpy[2]:.1f}",
                 throttle_duration_sec=1.0
             )
         else:
-            # 超過等待時間，改慢速確保不跨過標記
-            correction = self._imu_correction()
             self.sendContinuousValue(WALK_SPEED_SLOW, 0, correction)
             self.get_logger().info(
                 "[WALK] 慢速搜尋中...",
                 throttle_duration_sec=1.0
             )
- 
+
     # ───────────────────────────────────────────
-    #  狀態：ALIGN（對準標記中心 + 邊走邊靠近）
+    #  狀態：ALIGN
     # ───────────────────────────────────────────
     def _state_align(self):
-        """
-        看到標記後，用畫面 X 軸位置修正航向，同時慢速前進。
-        標記 Y 座標連續超過 SIGN_Y_THRESHOLD 達 APPROACH_COUNT 幀後，
-        直接進入 ACTION。低幀率環境下比計時更穩定。
-        """
         self._look_down()
- 
+
         if (time.time() - self.last_sign_time) > SIGN_LOST_TIMEOUT:
             self.get_logger().info(
                 f"[ALIGN] 標記消失 {SIGN_LOST_TIMEOUT}s -> WALK"
@@ -234,17 +218,17 @@ class Mar(API):
             self.sub_state       = 'WALK'
             self.lost_start_time = time.time()
             return
- 
-        # 根據標記 X 位置計算修正量
+
+        # X 軸對準
         x_error = self.sign_cx - FRAME_CX
         if x_error < -ALIGN_DEADBAND:
-            theta = IMU_CORRECT_SPEED       # 標記偏左，向左修正
+            theta = IMU_CORRECT_SPEED
         elif x_error > ALIGN_DEADBAND:
-            theta = -IMU_CORRECT_SPEED      # 標記偏右，向右修正
+            theta = -IMU_CORRECT_SPEED
         else:
-            theta = self._imu_correction()  # 對齊後用 IMU 維持直走
- 
-        # Y 座標未到閾值：持續慢速前進，重置計數
+            theta = self._imu_correction()
+
+        # Y 座標未到閾值：繼續靠近，重置計數
         if self.sign_cy < SIGN_Y_THRESHOLD:
             self.approach_count = 0
             self.target_label   = 'none'
@@ -254,20 +238,19 @@ class Mar(API):
                 throttle_duration_sec=0.5
             )
             return
- 
-        # Y 座標低於閾值（夠靠近）：累積計數
+
+        # Y 座標超過閾值：累積計數
         self.approach_count += 1
         if self.target_label == 'none':
-            self.target_label = self.sign_label  # 第一次超過時記錄 label
- 
+            self.target_label = self.sign_label
+
         self.sendContinuousValue(WALK_SPEED_SLOW, 0, theta)
         self.get_logger().info(
             f"[ALIGN] 靠近計數 {self.approach_count}/{APPROACH_COUNT} "
             f"cy={self.sign_cy} label={self.target_label}"
         )
- 
+
         if self.approach_count >= APPROACH_COUNT:
-            # 累積足夠 -> 進入 ACTION
             self.sendSensorReset(True)
             self.approach_count    = 0
             self.action_start_time = time.time()
@@ -275,48 +258,47 @@ class Mar(API):
                 f"[ALIGN] ✅ 靠近確認完成 -> ACTION label={self.target_label}"
             )
             self.sub_state = 'ACTION'
- 
+
     # ───────────────────────────────────────────
-    #  狀態：ACTION（執行轉彎或直走）
+    #  狀態：ACTION
     # ───────────────────────────────────────────
     def _state_action(self):
-        """
-        根據 target_label 執行對應動作：
-        - left / right：IMU 控制轉到目標角度
-        - forward/straight：視同直走，直接回 WALK
-        """
         label = self.target_label
- 
-        if label in ('left', 'right'):
-            target_yaw = TURN_TARGET_ANGLE if label == 'left' else -TURN_TARGET_ANGLE
+
+        if label == 'left':
+            target_yaw  = TURN_TARGET_ANGLE
             current_yaw = self.imu_rpy[2]
- 
-            done = (label == 'left'  and current_yaw >= target_yaw) or \
-                   (label == 'right' and current_yaw <= target_yaw)
- 
-            if done:
-                self.get_logger().info(
-                    f"[ACTION] {label} 轉彎完成 yaw={current_yaw:.1f}"
-                )
-                self._initialize()  # 直接回到 WALK
+            if current_yaw >= target_yaw:
+                self.get_logger().info(f"[ACTION] left 轉彎完成 yaw={current_yaw:.1f}")
+                self._initialize()
             else:
-                turn_speed = TURN_SPEED if label == 'left' else -TURN_SPEED
-                self.sendContinuousValue(RIGHT_TURN_SPEED, 0, turn_speed)
+                self.sendContinuousValue(LEFT_FORWARD_SPEED, 0, LEFT_TURN_SPEED)
                 self.get_logger().info(
-                    f"[ACTION] 轉彎中 yaw={current_yaw:.1f} / 目標={target_yaw}",
+                    f"[ACTION] 左轉中 yaw={current_yaw:.1f} / 目標={target_yaw}",
                     throttle_duration_sec=0.5
                 )
- 
+
+        elif label == 'right':
+            target_yaw  = -TURN_TARGET_ANGLE
+            current_yaw = self.imu_rpy[2]
+            if current_yaw <= target_yaw:
+                self.get_logger().info(f"[ACTION] right 轉彎完成 yaw={current_yaw:.1f}")
+                self._initialize()
+            else:
+                self.sendContinuousValue(RIGHT_FORWARD_SPEED, 0, RIGHT_TURN_SPEED)
+                self.get_logger().info(
+                    f"[ACTION] 右轉中 yaw={current_yaw:.1f} / 目標={target_yaw}",
+                    throttle_duration_sec=0.5
+                )
+
         elif label in ('forward', 'straight'):
-            # 直走標記不需要特別處理，直接回 WALK 繼續 IMU 直走
             self.get_logger().info("[ACTION] straight -> 直接回 WALK")
             self._initialize()
- 
+
         else:
-            # 未知 label，退回 WALK
             self.get_logger().warn(f"[ACTION] 未知 label={label}，退回 WALK")
             self.sub_state = 'WALK'
- 
+
     # ───────────────────────────────────────────
     #  主迴圈
     # ───────────────────────────────────────────
@@ -327,24 +309,22 @@ class Mar(API):
                 self.initialized = False
                 self.get_logger().info("=== 指撥關閉 -> 機器人停止 ===")
             return
- 
-        # 第一次執行初始化
+
         if not self.initialized:
             self._initialize()
             self.sendbodyAuto(1)
             self.initialized = True
             self.get_logger().info("=== 比賽開始 ===")
             return
- 
-        # 狀態分派
+
         if   self.sub_state == 'WALK':   self._state_walk()
         elif self.sub_state == 'ALIGN':  self._state_align()
         elif self.sub_state == 'ACTION': self._state_action()
         else:
             self.get_logger().warn(f"未知狀態 {self.sub_state}，退回 WALK")
             self.sub_state = 'WALK'
- 
- 
+
+
 def main(args=None):
     rclpy.init(args=args)
     node = Mar()
@@ -355,7 +335,7 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
- 
- 
+
+
 if __name__ == '__main__':
     main()
