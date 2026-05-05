@@ -1652,25 +1652,38 @@ function Speed(){
 // 全域變數記住狀態
 var isTorqueOn = false; 
 
+// Interface2.js 中的 TorqueSwitch 修改
 function TorqueSwitch() {
-  document.getElementById('label').innerHTML = "Switching Torque (1~21)...";
-  
-  // 定義狀態 (這裡簡化邏輯，請依你原本的全域變數管理)
-  var targetState = isTorqueOn ? 0 : 1; // 0:關, 1:開
-  if (isTorqueOn == false) { targetState = 1; }
+    document.getElementById('label').innerHTML = "Switching Torque (1~21)...";
+    
+    // 定義狀態 (1:開, 0:關)
+    var targetState = isTorqueOn ? 0 : 1; 
 
-  console.log("執行扭力切換: " + (targetState == 1 ? "ON" : "OFF"));
-  var fullPackage = [83, 84, 246, 0, targetState, 78, 69];
-  SendPackage.package = fullPackage; 
-  interface.publish(SendPackage);
-  
-  console.log("已發送全體扭力指令 (ID=0)");
+    console.log("執行扭力切換: " + (targetState == 1 ? "ON" : "OFF"));
+    var fullPackage = [83, 84, 246, 0, targetState, 78, 69];
+    SendPackage.package = fullPackage; 
+    interface.publish(SendPackage);
+    
+    console.log("已發送全體扭力指令 (ID=0)");
 
-  // 更新狀態 UI
-  isTorqueOn = !isTorqueOn;
-  var statusText = isTorqueOn ? "Torque is ON" : "Torque is OFF";
-  document.getElementById('label').innerHTML = statusText;
-  console.log(statusText);
+    // 更新狀態 UI
+    isTorqueOn = !isTorqueOn;
+    var statusText = isTorqueOn ? "Torque is ON" : "Torque is OFF";
+    document.getElementById('label').innerHTML = statusText;
+
+    // === 新增：連動更新圖片按鈕的狀態 ===
+    for (let i = 1; i <= 23; i++) {
+        motorTorqueStates[i] = targetState; // 更新狀態陣列
+        const btn = document.getElementById(`pos-btn-${i}`);
+        if (btn) {
+            if (targetState === 1) {
+                btn.classList.add('torque-on');
+            } else {
+                btn.classList.remove('torque-on');
+            }
+        }
+    }
+    // =====================================
 }
 
 
@@ -1727,35 +1740,54 @@ function Update_Motor_Input_Values(motorValues) {
 // =================================================================
 // 輔助函式：整組開關扭力
 // =================================================================
+// Interface2.js 中的 Torque_Choose 修改
 function Torque_Choose(partName, buttonID) {
     const targetButton = document.getElementById(buttonID);
     if (!targetButton) return;
 
-    // 判斷目前狀態：如果沒有 active 類別，代表現在要「開啟調整」
+    // 判斷目前狀態：如果沒有 active 類別，代表現在要「開啟調整 (洩力)」
     const isEnteringAdjustMode = !targetButton.classList.contains('button_active');
 
+    let targetState = 0; // 預設洩力 (0)
+
     if (isEnteringAdjustMode) {
-        // --- 進入調整模式 ---
+        // --- 進入調整模式 (洩力) ---
         targetButton.classList.add('button_active');
-        activeParts[partName] = true;  // 【動作 1】允許這個部位更新刻度到畫面上
-        SetGroupTorque(partName, 0);   // 【動作 2】關閉馬達扭力 (讓馬達變軟可以扳動)
-        
-        // UI 視覺反饋 (選配)
-        updateTableUI(partName, true);
+        activeParts[partName] = true;  
+        SetGroupTorque(partName, 0);   
+        targetState = 0; // 記錄狀態為關閉
     } else {
-        // --- 退出調整模式 ---
+        // --- 退出調整模式 (鎖死) ---
         targetButton.classList.remove('button_active');
-        activeParts[partName] = false; // 【動作 1】停止更新該部位刻度
-        SetGroupTorque(partName, 1);   // 【動作 2】開啟馬達扭力 (鎖死馬達)
-        
-        // UI 視覺反饋 (選配)
-        updateTableUI(partName, false);
+        activeParts[partName] = false; 
+        SetGroupTorque(partName, 1);   
+        targetState = 1; // 記錄狀態為開啟
     }
+
+    // === 新增：連動更新該部位的圖片按鈕狀態 ===
+    const motors = robotConfig[partName]; // 從 robotConfig 取得該部位的馬達 ID 清單
+    if (motors) {
+        motors.forEach(motor => {
+            const id = motor.id;
+            motorTorqueStates[id] = targetState; // 更新狀態陣列
+            
+            const btn = document.getElementById(`pos-btn-${id}`);
+            if (btn) {
+                if (targetState === 1) {
+                    btn.classList.add('torque-on');
+                } else {
+                    btn.classList.remove('torque-on');
+                }
+            }
+        });
+    }
+    // ==========================================
 }
 
 // =================================================================
 // 輔助函式：單顆開關扭力
 // =================================================================
+// Interface2.js 中的 SetSingleTorque 修改
 function SetSingleTorque(state) {
     const inputVal = document.getElementById('single_motor_id').value;
     const motorID = parseInt(inputVal);
@@ -1772,22 +1804,32 @@ function SetSingleTorque(state) {
         SendPackage.package = dataPackage;
         interface.publish(SendPackage);
         
-        // --- UI 視覺反饋邏輯 ---
+        // --- 原有 UI 視覺反饋邏輯 ---
         const btnOn = document.getElementById('btn_single_on');
         const btnOff = document.getElementById('btn_single_off');
 
         if (state === 1) {
-            // 按下開啟：ON 亮起，OFF 熄滅
             btnOn.classList.add('active');
             btnOff.classList.remove('active');
         } else {
-            // 按下關閉：OFF 亮起，ON 熄滅
             btnOff.classList.add('active');
             btnOn.classList.remove('active');
         }
 
         const stateText = state === 1 ? "ON (鎖死)" : "OFF (洩力)";
         document.getElementById('label').innerHTML = `Motor ID: ${motorID} Torque is ${stateText}`;
+
+        // === 新增：連動更新圖片按鈕的狀態 ===
+        motorTorqueStates[motorID] = state; // 更新狀態陣列
+        const posBtn = document.getElementById(`pos-btn-${motorID}`);
+        if (posBtn) {
+            if (state === 1) {
+                posBtn.classList.add('torque-on');
+            } else {
+                posBtn.classList.remove('torque-on');
+            }
+        }
+        // =====================================
     }
 }
 

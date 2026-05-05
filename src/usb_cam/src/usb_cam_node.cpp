@@ -41,6 +41,7 @@
 #include "tku_msgs/msg/camera_save.hpp"
 #include "tku_msgs/srv/camera_info.hpp"
 #include "tku_msgs/msg/location.hpp"
+#include <iomanip>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
@@ -389,6 +390,7 @@ void UsbCamNode::camera_param_callback(const tku_msgs::msg::Camera &msg) {
   }
   // std::cout << "camera_param_callback_auto_exposure: " << msg.auto_exposure << std::endl;
   auto_exposure_ = msg.auto_exposure;
+  zoomin_ = msg.zoomin;
 
   // 設置相機參數
   if (!auto_exposure_) {
@@ -433,11 +435,11 @@ void UsbCamNode::camera_save_callback(const tku_msgs::msg::CameraSave &msg) {
     white_balance_      = msg.whitebalance;
     auto_white_balance_ = msg.autowhitebalance;
     auto_exposure_      = msg.auto_exposure;
-
+    zoomin_             = msg.zoomin;
     RCLCPP_INFO(this->get_logger(),
-        "[camera_save_callback] b=%d c=%d s=%d wb=%d awb=%d ae=%d",
+        "[camera_save_callback] b=%d c=%d s=%d wb=%d awb=%d ae=%d zi=%f",
         brightness_, contrast_, saturation_, white_balance_,
-        (int)auto_white_balance_, (int)auto_exposure_);
+        (int)auto_white_balance_, (int)auto_exposure_ , zoomin_);
 
     // ---- 小工具：trim / 展開 ~ ----
     auto trim_copy = [](std::string s) {
@@ -472,6 +474,7 @@ void UsbCamNode::camera_save_callback(const tku_msgs::msg::CameraSave &msg) {
         return;
     }
 
+
     // 4) 找 strategy 根目錄：優先 tku_STRATEGY_ROOT，否則 ~/tku/src/strategy/strategy，再往上找
     auto find_strategy_root = [&]() -> fs::path {
         if (const char* env = std::getenv("tku_STRATEGY_ROOT")) {
@@ -505,6 +508,7 @@ void UsbCamNode::camera_save_callback(const tku_msgs::msg::CameraSave &msg) {
     const char* home = std::getenv("HOME");
     fs::path last_resort = (home ? fs::path(home) : fs::path(".")) / ".ros" / "usb_cam" / "config" / "CameraSet.ini";
 
+
     // 6) 依序嘗試寫入（primary → fallback → last_resort）
     auto try_write = [&](const fs::path& path) -> bool {
         if (path.empty()) return false;
@@ -521,6 +525,8 @@ void UsbCamNode::camera_save_callback(const tku_msgs::msg::CameraSave &msg) {
             OutFile << "white_balance = " << white_balance_ << "\n";
             OutFile << "auto_white_balance = " << (auto_white_balance_ ? 1 : 0) << "\n";
             OutFile << "auto_exposure = " << (auto_exposure_ ? 1 : 0) << "\n";
+            OutFile << std::fixed << std::setprecision(1); 
+            OutFile << "zoomin = " << zoomin_ << "\n";
             OutFile.close();
             RCLCPP_INFO(this->get_logger(), "[camera_save_callback] Saved to: %s", path.string().c_str());
             return true;
@@ -663,6 +669,7 @@ void UsbCamNode::LoadSet() {
                 else if (key == "white_balance")      white_balance_      = std::stoi(value);
                 else if (key == "auto_white_balance") auto_white_balance_ = std::stoi(value);
                 else if (key == "auto_exposure")      auto_exposure_      = std::stoi(value);
+                else if (key == "zoomin")             zoomin_             = std::stof(value);
                 else {
                     RCLCPP_WARN(this->get_logger(), "[LoadSet] Unknown key: %s", key.c_str());
                 }
@@ -690,6 +697,7 @@ bool UsbCamNode::LoadCameraSetFile(const std::shared_ptr<tku_msgs::srv::CameraIn
     response->white_balance = white_balance_;
     response->auto_white_balance = auto_white_balance_;
     response->auto_exposure = auto_exposure_;
+    response->zoomin = zoomin_;
     return true;
 }
 /// @brief Send current parameters to V4L2 device

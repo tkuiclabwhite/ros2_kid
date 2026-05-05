@@ -842,3 +842,35 @@ function MotionList(mode)
       break;
     }
 }
+
+
+// 建立一個物件來儲存馬達狀態，預設全為 0 (關閉)
+let motorTorqueStates = {};
+for (let i = 1; i <= 21; i++) {
+    motorTorqueStates[i] = 0;
+}
+
+/**
+ * 直接切換指定 ID 的扭力狀態
+ * @param {number} id 馬達編號
+ */
+function toggleTorqueAtPosition(id) {
+    // 1. 切換狀態值 (0 變 1, 1 變 0)
+    motorTorqueStates[id] = motorTorqueStates[id] === 0 ? 1 : 0;
+    let newState = motorTorqueStates[id];
+
+    // 2. 更新 UI 視覺回饋 (變色)
+    const btn = document.getElementById(`pos-btn-${id}`);
+    if (newState === 1) {
+        btn.classList.add('torque-on');
+    } else {
+        btn.classList.remove('torque-on');
+    }
+
+    // 3. 呼叫原本的 SetSingleTorque 功能
+    // 為了不影響原本的 UI，我們手動指定 ID 給原本的輸入框再執行
+    document.getElementById("single_motor_id").value = id;
+    SetSingleTorque(newState); 
+
+    console.log(`馬達 ${id} 狀態已更改為: ${newState === 1 ? 'ON' : 'OFF'}`);
+}

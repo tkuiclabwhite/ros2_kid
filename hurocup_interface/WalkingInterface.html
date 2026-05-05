@@ -42,6 +42,35 @@
 				background-size: cover;
 			}
 
+        .strategy-box {
+            display: inline-block;
+            background-color: #222; 
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 8px 20px;
+            box-shadow: inset 0 0 10px #000;
+            
+            /* ★ 核心修改：讓框內所有元素水平置中 */
+            text-align: center; 
+            min-width: 120px;
+        }
+
+        .strategy-label {
+            color: #888; 
+            font-size: 12px;
+            text-transform: uppercase;
+            /* 設定為 block 才能受 text-align: center 影響 */
+            display: block; 
+            margin-bottom: 3px;
+        }
+
+        #current-strategy-name {
+            color: #00D600; 
+            font-family: 'Consolas', 'Monaco', monospace; 
+            font-size: 22px;
+            font-weight: bold;
+            text-shadow: 0 0 8px rgba(0, 214, 0, 0.5);
+        }
 		</style>
 	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
 	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
@@ -99,6 +128,7 @@
 						loc = parts[0].trim();
 					}
 				}
+				document.getElementById('current-strategy-name').innerText = loc;
 				console.log(loc)
 				let targetDisplay = (loc === 'lc') ? 'block' : 'none';
 
@@ -332,15 +362,17 @@
 		});
 
 function strategylocation() {
-    // 既然 HTML 元素被註解了，我們直接指定一個預設的策略名稱 (例如 'ar' 或 'lc')
-    var default_strategy = "ar"; 
+    // 優先讀取目前畫面上顯示的策略名稱
+    var current_display = document.getElementById('current-strategy-name').innerText;
     
-    // 組合出後端需要的路徑
-    location_msg.data = "/home/iclab/ros2_kid/src/strategy/strategy/" + default_strategy + "/Parameter";
+    // 如果畫面上是 --- 或 WAITING，才使用預設值 ar
+    var target_strategy = (current_display === "---" || current_display === "WAITING...") ? "ar" : current_display;
     
-    console.log(`Selected strategy location: ${location_msg.data}`);
+    // 組合路徑
+    location_msg.data = "/home/iclab/ros2_kid/src/strategy/strategy/" + target_strategy + "/Parameter";
+    
+    console.log(`連線後保持策略: ${target_strategy}, 路徑: ${location_msg.data}`);
     location_strategy.publish(location_msg);
-
 }
 
 		function ResetFun(){
@@ -786,6 +818,9 @@ function strategylocation() {
 			loc = loc.replace(/^\/+/, '');
 			loc = loc.split('/')[0].trim();
 		}
+
+		document.getElementById('current-strategy-name').innerText = loc;
+
 		console.log('開機讀取到的 location:', loc);
 
 		// 判斷是不是 lc，直接改變 extra-options 的顯示狀態
@@ -825,11 +860,22 @@ function strategylocation() {
 			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
 		</li>
 	</ul>
-	<br />
-
-	<p id="connected" style="color:#00D600; display: none; font-size: 20px;">
-		Connected
-	</p>
+<br>
+    <!-- 1. 狀態容器：固定在左側，不加 margin-left 確保位置不變 -->
+    <div style="padding-left: 20px; height: 100px;"> 
+        <!-- 固定高度容器，避免 Connected 顯示時下方框框往下跳 -->
+        <div style="height: 30px;">
+            <p id="connected" style="color:#00D600; display:none; font-size: 20px; margin: 0;">
+                Connected
+            </p>
+        </div>
+        
+        <!-- 狀態顯示窗：緊跟在 Connected 下方 -->
+        <div class="strategy-box" style="margin-top: 10px;">
+            <span class="strategy-label">Strategy</span>
+            <span id="current-strategy-name">---</span>
+        </div>
+    </div>
 	<form>
 		<div id="head" align="center">
 			<h1 align="center" id="header" style="color: white;">Walking Interface</h1>

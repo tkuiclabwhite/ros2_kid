@@ -72,37 +72,109 @@
             transform: scale(1.05);    /* 稍微放大，表示能量充滿 */
         }
                 /* 單顆控制按鈕基礎樣式 */
-.btn-single-torque {
-    width: 80px;
-    font-weight: bold;
-    color: white;
-    border: 2px solid transparent;
-    border-radius: 3px;
-    cursor: pointer;
-    padding: 3px;
-    margin-right: 10px;
-    transition: 0.3s;
-    opacity: 0.6; /* 未按下時稍微透明 */
-}
+        .btn-single-torque {
+            width: 80px;
+            font-weight: bold;
+            color: white;
+            border: 2px solid transparent;
+            border-radius: 3px;
+            cursor: pointer;
+            padding: 3px;
+            margin-right: 10px;
+            transition: 0.3s;
+            opacity: 0.6; /* 未按下時稍微透明 */
+        }
 
-/* 開啟 (ON) 的顏色 */
-.btn-on {
-    background-color: #00D600;
-}
+        /* 開啟 (ON) 的顏色 */
+        .btn-on {
+            background-color: #00D600;
+        }
 
-/* 關閉 (OFF) 的顏色 */
-.btn-off {
-    background-color: #D60000;
-}
+        /* 關閉 (OFF) 的顏色 */
+        .btn-off {
+            background-color: #D60000;
+        }
 
-/* 亮起狀態 (最後按下) */
-.btn-single-torque.active {
-    opacity: 1;
-    border-color: white;
-    box-shadow: 0 0 15px currentColor; /* 根據背景色產生對應光暈 */
-    transform: scale(1.05);
-}
+        /* 亮起狀態 (最後按下) */
+        .btn-single-torque.active {
+            opacity: 1;
+            border-color: white;
+            box-shadow: 0 0 15px currentColor; /* 根據背景色產生對應光暈 */
+            transform: scale(1.05);
+        }
+
+        .strategy-box {
+            display: inline-block;
+            background-color: #222; 
+            border: 1px solid #444;
+            border-radius: 5px;
+            padding: 8px 20px;
+            box-shadow: inset 0 0 10px #000;
+            
+            /* ★ 核心修改：讓框內所有元素水平置中 */
+            text-align: center; 
+            min-width: 120px;
+        }
+
+        .strategy-label {
+            color: #888; 
+            font-size: 12px;
+            text-transform: uppercase;
+            /* 設定為 block 才能受 text-align: center 影響 */
+            display: block; 
+            margin-bottom: 3px;
+        }
+
+        #current-strategy-name {
+            color: #00D600; 
+            font-family: 'Consolas', 'Monaco', monospace; 
+            font-size: 22px;
+            font-weight: bold;
+            text-shadow: 0 0 8px rgba(0, 214, 0, 0.5);
+        }
+
+        .robot-overlay-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        /* 點擊點的基礎樣式：圓形、透明、有數字 */
+        .pos-motor-btn {
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            background-color: rgba(255, 0, 0, 0.4); 
+            border: 2px solid #ff4d4d;
+            border-radius: 50%;
+            
+            color: black;              /* ★ 改為黑色 */
+            font-weight: bold;         /* ★ 加粗讓數字更明顯 */
+            
+            font-size: 14px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 10;
+            user-select: none;
+        }
+
+        /* 2. 確保開啟狀態（綠色）時，文字依然是黑色 */
+        .pos-motor-btn.torque-on {
+            background-color: rgba(0, 255, 0, 0.6);
+            border-color: #00ff00;
+            box-shadow: 0 0 15px #00ff00;
+            
+            color: black;              /* ★ 確保綠色背景下也是黑色字 */
+        }
+
+        .pos-motor-btn:hover {
+            transform: scale(1.2);
+            background-color: rgba(3, 233, 244, 0.5); /* 滑鼠懸停提示 */
+        }
     </style>
+    <script src="../src/strategy/strategy/strategy.js"></script>
 </head>
 
 <body>
@@ -116,12 +188,25 @@
         <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
 		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
     </ul>
-    <br>
-    <p id="connected" style="color:#00D600; display:none; font-size: 20px;">
-        Connected
-    </p>
+<!-- <br> -->
+    <!-- 1. 狀態容器：固定在左側，不加 margin-left 確保位置不變 -->
+    <div style="padding-left: 20px; height: 100px;"> 
+        <!-- 固定高度容器，避免 Connected 顯示時下方框框往下跳 -->
+        <div style="height: 30px;">
+            <p id="connected" style="color:#00D600; display:none; font-size: 20px; margin: 0;">
+                Connected
+            </p>
+        </div>
+        
+        <!-- 狀態顯示窗：緊跟在 Connected 下方 -->
+        <div class="strategy-box" style="margin-top: 10px;">
+            <span class="strategy-label">Strategy</span>
+            <span id="current-strategy-name">---</span>
+        </div>
+    </div>
 
     <form id="childform" name="childform">
+        
         <div id="container">
 			<div style="margin-left: 180px;"> 
 				<input type="text" id="filename" name="filename" value="Your_File_Name" style="width: 179px;">
@@ -393,7 +478,47 @@
             <div id="robotpic">
                 <div style="float: left; height: 470px ; width: 300px"> 
                     <button type="button" id="TorqueButton" onclick="TorqueSwitch();" class="neon-btn">扭力關閉</button>
-                    <img src="./picture/new_robot.jpg" style="margin-top: 15px;width:100%; height: 100%; border: solid black 2px;">
+                    <!-- <img src="./picture/new_robot.jpg" style="margin-top: 15px;width:100%; height: 100%; border: solid black 2px;"> -->
+                     <div id="robot-container" class="robot-overlay-container">
+    <!-- 原始機器人底圖[cite: 1] -->
+    <img src="./picture/new_robot.jpg" style="width: 300px; height: 470px; border: solid black 2px;">
+
+    <!-- 左手 -->
+    <div id="pos-btn-1" class="pos-motor-btn" style="top: 9%; left: 58%;" onclick="toggleTorqueAtPosition(1)">1</div>
+    <div id="pos-btn-2" class="pos-motor-btn" style="top: 18%; left: 79%;" onclick="toggleTorqueAtPosition(2)">2</div>
+    <div id="pos-btn-3" class="pos-motor-btn" style="top: 30%; left: 81%;" onclick="toggleTorqueAtPosition(3)">3</div>
+    <div id="pos-btn-4" class="pos-motor-btn" style="top: 44%; left: 82%;" onclick="toggleTorqueAtPosition(4)">4</div>
+
+    <!-- 右手 -->
+    <div id="pos-btn-5" class="pos-motor-btn" style="top: 9%; left: 32%;" onclick="toggleTorqueAtPosition(5)">5</div>
+    <div id="pos-btn-6" class="pos-motor-btn" style="top: 18%; left: 12%;" onclick="toggleTorqueAtPosition(6)">6</div>
+    <div id="pos-btn-7" class="pos-motor-btn" style="top: 30%; left: 11%;" onclick="toggleTorqueAtPosition(7)">7</div>
+    <div id="pos-btn-8" class="pos-motor-btn" style="top: 44%; left: 9%;" onclick="toggleTorqueAtPosition(8)">8</div>
+
+    <!-- 腰 -->
+    <div id="pos-btn-9" class="pos-motor-btn" style="top: 34%; left: 53%;" onclick="toggleTorqueAtPosition(9)">9</div>
+    
+    <!-- 左腿 -->
+    <div id="pos-btn-10" class="pos-motor-btn" style="top: 39%; left: 60%;" onclick="toggleTorqueAtPosition(10)">10</div>
+    <div id="pos-btn-11" class="pos-motor-btn" style="top: 53%; left: 90%;" onclick="toggleTorqueAtPosition(11)">11</div>
+    <div id="pos-btn-12" class="pos-motor-btn" style="top: 53%; left: 62%;" onclick="toggleTorqueAtPosition(12)">12</div>
+    <div id="pos-btn-13" class="pos-motor-btn" style="top: 69%; left: 69%;" onclick="toggleTorqueAtPosition(13)">13</div>
+    <div id="pos-btn-14" class="pos-motor-btn" style="top: 87%; left: 70%;" onclick="toggleTorqueAtPosition(14)">14</div>
+    <div id="pos-btn-15" class="pos-motor-btn" style="top: 90%; left: 88%;" onclick="toggleTorqueAtPosition(15)">15</div>
+        
+    <!-- 右腿 -->
+    <div id="pos-btn-16" class="pos-motor-btn" style="top: 39%; left: 28%;" onclick="toggleTorqueAtPosition(16)">16</div>
+    <div id="pos-btn-17" class="pos-motor-btn" style="top: 53%; left: 7%;" onclick="toggleTorqueAtPosition(17)">17</div>
+    <div id="pos-btn-18" class="pos-motor-btn" style="top: 53%; left: 31%;" onclick="toggleTorqueAtPosition(18)">18</div>
+    <div id="pos-btn-19" class="pos-motor-btn" style="top: 69%; left: 22%;" onclick="toggleTorqueAtPosition(19)">19</div>
+    <div id="pos-btn-20" class="pos-motor-btn" style="top: 87%; left: 20%;" onclick="toggleTorqueAtPosition(20)">20</div>
+    <div id="pos-btn-21" class="pos-motor-btn" style="top: 90%; left: 11%;" onclick="toggleTorqueAtPosition(21)">21</div>
+
+    <!-- 頭部 -->
+    <div id="pos-btn-22" class="pos-motor-btn" style="top: 14%; left: 46%;" onclick="toggleTorqueAtPosition(22)">22</div>
+    <div id="pos-btn-23" class="pos-motor-btn" style="top: 8%; left: 46%;" onclick="toggleTorqueAtPosition(23)">23</div>
+
+</div>
                 </div> 
             </div>
         </div>
@@ -518,6 +643,82 @@
                 btn.innerText = "扭力已開啟";
             } else {
                 btn.innerText = "扭力已關閉";
+            }
+        });
+
+                // --- 處理 Strategy Location 的 ROS Topic 通訊 ---
+
+        // 1. 宣告 Topic
+        var locationBack_Subscriber = new ROSLIB.Topic({
+            ros: ros,
+            name: '/locationBack',
+            messageType: 'tku_msgs/msg/Location' // 參考 WalkingInterface 的格式[cite: 1]
+        });
+
+        var location_strategy = new ROSLIB.Topic({
+            ros: ros,
+            name: '/location',
+            messageType: 'tku_msgs/location'
+        });
+
+        var location_msg = new ROSLIB.Message({
+            data: ""
+        });
+
+        /**
+         * 核心解析函數：專門解決顯示出 "Parameter" 的問題
+         * 它會把路徑切開，找到 "Parameter" 這個字，然後取它前面的那個名稱（例如 ar 或 lc）
+         */
+        function parseStrategyName(path) {
+            if (typeof path !== 'string' || path === "") return "---";
+            
+            // 把路徑按斜線切開，並過濾掉空值
+            const parts = path.split('/').filter(p => p.length > 0);
+            
+            // 尋找 "Parameter" 在陣列中的位置
+            const paramIndex = parts.indexOf("Parameter");
+            
+            // 如果找到 Parameter，就取它「前一個」元素；否則取最後一個元素作為保險
+            if (paramIndex > 0) {
+                return parts[paramIndex - 1];
+            }
+            return parts[parts.length - 1];
+        }
+
+        // 2. 接收後端傳回的目前策略
+        locationBack_Subscriber.subscribe(function (msg) {
+            console.log("收到完整路徑:", msg.data);
+            let strategyName = parseStrategyName(msg.data); // 使用解析工具抓出正確名稱
+
+            const displayElement = document.getElementById('current-strategy-name');
+            if (displayElement) {
+                displayElement.innerText = strategyName; // 顯示正確名稱（不轉大寫）
+            }
+        });
+
+        // 3. 手動發送讀取請求的函數
+        function strategylocation() {
+            // 優先讀取目前畫面上顯示的策略名稱
+            var current_display = document.getElementById('current-strategy-name').innerText;
+            
+            // 如果畫面上是 --- 或 WAITING，才使用預設值 ar
+            var target_strategy = (current_display === "---" || current_display === "WAITING...") ? "ar" : current_display;
+            
+            // 組合路徑
+            location_msg.data = "/home/iclab/ros2_kid/src/strategy/strategy/" + target_strategy + "/Parameter";
+            
+            console.log(`連線後保持策略: ${target_strategy}, 路徑: ${location_msg.data}`);
+            location_strategy.publish(location_msg);
+        }
+
+        // 4. 【開網頁就讀檔】讀取 strategy.js 中的全域變數[cite: 1]
+        window.addEventListener('DOMContentLoaded', function () {
+            // 讀取 strategy.js 產生的 window.currentStrategy
+            let initialPath = window.currentStrategy || ""; 
+            let strategyName = parseStrategyName(initialPath); // 同樣用解析工具處理
+            
+            if (strategyName !== "---") {
+                document.getElementById('current-strategy-name').innerText = strategyName;
             }
         });
     </script>

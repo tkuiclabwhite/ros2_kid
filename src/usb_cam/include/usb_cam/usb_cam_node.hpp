@@ -124,6 +124,7 @@ private:
   bool auto_focus_;
   bool auto_white_balance_;
   bool auto_exposure_;
+  float zoomin_;
   mutable std::mutex ctrl_mutex_;
   bool last_awb_ = true;      // 上一次是否自動白平衡
   int  cached_manual_wb_ = -1; // 最後一次成功寫入的手動色溫(K)
