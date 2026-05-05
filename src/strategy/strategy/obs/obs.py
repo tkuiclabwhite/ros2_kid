@@ -31,33 +31,33 @@ STAY_THETA                      = -1
 MAX_FORWARD_X                   = 2500                                                     
 # MAX_FORWARD_Y                   = 100                                                            
 MAX_FORWARD_Y                   = -200
-MAX_FORWARD_THETA               = -1
+MAX_FORWARD_THETA               = 0
 #=========================================== 
 SMALL_FORWARD_X                 = 1500                                                     
 SMALL_FORWARD_Y                 = -200
 SMALL_FORWARD_Y                 = 0
-SMALL_FORWARD_THETA             = -1             
+SMALL_FORWARD_THETA             = 0          
 #=========================================== 
 SMALL_BACK_X                    = -1500                                                  
 # SMALL_BACK_Y                    = -100                                                            
-SMALL_BACK_Y                    = -300
+SMALL_BACK_Y                    = -200
 SMALL_BACK_THETA                = -1         
 #=========================================== 
 IMU_RIGHT_X                     = -700
 IMU_RIGHT_Y                     = -200              
 #===========================================                 
-TURN_RIGHT_X                    = -500                                                   
-TURN_RIGHT_Y                    = 0                                                     
+TURN_RIGHT_X                    = -700                                                
+TURN_RIGHT_Y                    = -200                                                  
 TURN_RIGHT_THETA                = -4          #3 
 #=========================================== 
-IMU_LEFT_X                      = -600
+IMU_LEFT_X                      = -800
 IMU_LEFT_Y                      = -450
 #===========================================                                         
-TURN_LEFT_X                     = -600                                                
+TURN_LEFT_X                     = -800                                          
 TURN_LEFT_Y                     = -500                                                
 TURN_LEFT_THETA                 = 4            #3
 #===========================================
-SLOPE_RIGHT_TRANSLATE_X         = -500   
+SLOPE_RIGHT_TRANSLATE_X         = -600  
 SLOPE_RIGHT_TRANSLATE_Y         = -900
 SLOPE_RIGHT_TRANSLATE_THETA     = -1
 #===========================================
@@ -80,9 +80,9 @@ PRETURN_LEFT          = False
 # PRETURN_LEFT          = True #預轉身左
 PRETURN_LEFT_ANGLE    = 50
 
-PRETURN_RIGHT         = False
+PRETURN_RIGHT         = True
 # PRETURN_RIGHT         = True #預轉身右
-PRETURN_RIGHT_ANGLE   = 50
+PRETURN_RIGHT_ANGLE   = 30
 #===========================================
 YELLOW_WALKWAY              = False      #如果沒有黃黃通道就把它關了
 YELLOW_SMALL_TURNHEAD       = False #通道不夠大轉頭
@@ -196,11 +196,11 @@ class Walk(): #步態、轉彎、直走速度、IMU
                         (12, -4), 
                         (8,  -3), 
                         (6,  -3), 
-                        (4,  -2), 
-                        (2,  -2),  
+                        (4,  -3), 
+                        (2,  -3),  
                         (0,   0),
-                        (-2,  2),
-                        (-4,  2),
+                        (-2,  3),
+                        (-4,  3),
                         (-6,  3),
                         (-8,  3),
                         (-12, 4),
@@ -764,8 +764,8 @@ class Obs(Node): #各種避障動作
                                 status.reddoor_state = "修斜率2"
                                 self.image.calculate()
 
-                            self.walk.move('stay')    
-                            time.sleep(0.1)
+                            self.walk.move('stay')
+                            # time.sleep(0.1)
                             self.walk.face_imu = send.imu_rpy[2]
                             self.crawl()
                             break
@@ -1011,7 +1011,7 @@ class Obs(Node): #各種避障動作
                 send.sendHeadMotor(2,HEAD_HEIGHT,100)
 
             send.sendBodySector(83) # 把忍者跑拿掉，call站姿
-            send.sendBodySector(201)
+            # send.sendBodySector(201)
             time.sleep(20)     
 
             # else :            
@@ -1029,7 +1029,10 @@ class Obs(Node): #各種避障動作
                 self.walk.move('max_speed')
                 self.i += 5
                 time.sleep(0.05)
-                
+            send.sendbodyAuto(0)
+            time.sleep(3)
+            send.sendBodySector(201)
+            time.sleep(5)
             send.sendbodyAuto(1)
             
             # time.sleep(1)

@@ -18,10 +18,10 @@ HEAD_CHECK = 2080
 HAND_BACK = 222
 LEG_BACK = 1812
 VERTICAL_HEAD = 2048
-X_BENCHMARK = [201, 203, 205, 209, 211] # [最左,中左,中間,中右,最右]
-Y_BENCHMARK = 143
-SHOOT_DELAY = 0.84       # +0.1s -0.004s   7.3    5.18       4.5     3    2.8       2.36s     
-                         #shoot_delay:     0.58   0.75       0.7~  0.77   0.78 ~    0.80
+X_BENCHMARK = [221, 223, 224, 209, 210] # [最左,中左,中間,中右,最右]
+Y_BENCHMARK = 130
+SHOOT_DELAY = 1.02       # +0.1s -0.004s   7.3    5.18       4.5     3.3    2.3       2.36s     
+                         #shoot_delay:     0.58   0.84       0.7     0.98   1.02      0.80
 # motion sector
 PREPARE = 9999                              
 SHOOT = 456       
@@ -300,7 +300,7 @@ class Archery(Node):
                     if 0 < self.lowest_x <= 115: self.x_benchmark_type = 4
                     elif 115 < self.lowest_x <= 150: self.x_benchmark_type = 3
                     elif self.lowest_x >= 200: self.x_benchmark_type = 0
-                    elif 200 > self.lowest_x >= 180: self.x_benchmark_type = 1
+                    elif 200 > self.lowest_x >= 190: self.x_benchmark_type = 1
                     else: self.x_benchmark_type = 2 
                     
                     self.get_logger().info(f'Action Type: {self.x_benchmark_type}')
@@ -324,6 +324,9 @@ class Archery(Node):
                     if self.lowest_y - Y_BENCHMARK > 0:
                         self.leg_move_cnt = abs(int((Y_BENCHMARK - self.lowest_y) / 2))
                         self.leg_back_cnt = self.leg_move_cnt
+                        self.get_logger().info(f"diff:{Y_BENCHMARK - self.lowest_y}")
+                        self.get_logger().info(f"leg_cnt:{self.leg_move_cnt}")
+                        
                         while self.leg_move_cnt != 0:
                             self.send.sendBodySector(LEG_DOWN)
                             self.leg_move_cnt -= 1
@@ -363,6 +366,7 @@ class Archery(Node):
                     time.sleep(2.8)
                     self.stand = 1 
                     self.get_logger().info('預備動作 Done')
+                    #self.get_logger().info('222222one')
                 
                 if self.back_flag:
                     print("###### in BACK func #####")

@@ -13,11 +13,11 @@ from rclpy.node import Node
 from tku_msgs.msg import SensorPackage
 
 # --- 全域參數 (對齊原始邏輯) ---
-WIGHT = 80
+WIGHT = 60
 HEAD_MOTOR_START = 1500    
 HEAD_MOTOR_FINISH = 1350    
 FLAG1 = False  
-PRETURN = 2
+PRETURN = 1
 
 # 原始權重邏輯判斷 (修正重複判斷與賦值錯誤)
 if WIGHT == 86:
@@ -57,7 +57,7 @@ elif WIGHT == 70:
 
 elif WIGHT == 60:
     SPEED = 1300
-    THIRD_LINE = 205
+    THIRD_LINE = 210
     PICK_ONE = 601
     PICK_TWO = 602
     PICK_THREE = 603
@@ -203,15 +203,16 @@ class WeightLift(API):
         self.theta = self.imu_fix()
         if self.ctrl_status == 'fourth_line':
             #if self.speed < 1800: self.speed += 200
-            self.sendContinuousValue(1300, -300, self.theta-1)
+            self.sendContinuousValue(1300, -200, self.theta)
         elif self.ctrl_status == 'second_line':
-            self.sendContinuousValue(1300, -300, self.theta-1)
+            self.sendContinuousValue(1500, -200, self.theta)
         else:
             self.sendContinuousValue(0, 0, self.theta)
 
     def main_strategy(self):
         if self.is_start:
             self.get_logger().info(f'ctrl_status : {self.ctrl_status}')
+            self.get_logger().info(f'123')
             if self.ctrl_status == 'head_shake':
                 print("head_shake")
                 #self.sendBodySector(123)  #提右手拉左腳
@@ -285,7 +286,7 @@ class WeightLift(API):
             elif self.ctrl_status == 'turn_straight':
                 print("turn_straight")
                 self.theta = self.imu_fix()
-                self.sendContinuousValue(-300, -500, self.theta)
+                self.sendContinuousValue(-500, -300, self.theta-1)
                 if abs(self.theta) <= 1:
                     time.sleep(0.5)
                     self.ctrl_status = 'pick_up'
@@ -307,7 +308,7 @@ class WeightLift(API):
                 time.sleep(5)
                 self.sendBodySector(PICK_THREE)
                 print("PICK_THREE")
-                time.sleep(5.5)
+                time.sleep(8)
                 self.bar.update(1)
                 self.sendHeadMotor(2, HEAD_MOTOR_START, 100)
                 time.sleep(1)
@@ -321,15 +322,15 @@ class WeightLift(API):
                 print("second_line")
                 self.line.update(2)
                 self.walking(-1, 0)                                    #一舉
-                if self.line.edge_min.y < 95 and self.line.edge_min.y > 75:   #白線
+                if self.line.edge_min.y < 100 and self.line.edge_min.y > 75:   #白線
                     self.third_line = True 
                 print(self.third_line)
                 self.get_logger().info(f"white_Y_min = {self.line.edge_min.y}")
                 self.get_logger().info(f"white_Y_max = {self.line.edge_max.y}")
-                self.sendHeadMotor(2,1400, 100)
+                self.sendHeadMotor(2,1450, 100)
                 if self.line.edge_max.y >= THIRD_LINE and self.third_line :
                     self.ctrl_status = 'rise_up'
-                    time.sleep(5.8)
+                    time.sleep(6.5)
 
             elif self.ctrl_status == 'rise_up':
                 print("rise_up")

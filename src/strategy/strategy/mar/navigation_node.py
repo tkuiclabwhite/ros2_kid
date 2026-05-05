@@ -47,7 +47,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ── 投票參數 ─────────────────────────────────────────────────────────────────
 WINDOW_SECONDS     = 1.0
-VOTE_THRESHOLD     = 0.6
+VOTE_THRESHOLD     = 0.5
 MIN_VOTES          = 3
 REPUBLISH_INTERVAL = 0.3
 YOLO_CONF_THRESH   = 0.5
