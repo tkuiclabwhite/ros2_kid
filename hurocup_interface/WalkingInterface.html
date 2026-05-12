@@ -115,38 +115,6 @@
 
 			checkConnectionInterval = setInterval(checkConnection, 1000);
 
-			locationBack_Subscriber.subscribe(function (msg) {
-				console.log("locationBack:", msg.data);
-
-				let loc = msg.data;
-
-				// 如果是 "/ar/Parameter" 這種格式，拆出中間那段 "ar"
-				if (typeof loc === 'string') {
-					const parts = loc.split('/');
-					// parts 可能是 ["", "ar", "Parameter"]
-					if (parts.length > 1 && parts[1].length > 0) {
-						loc = parts[0].trim();
-					}
-				}
-				document.getElementById('current-strategy-name').innerText = loc;
-				console.log(loc)
-				let targetDisplay = (loc === 'lc') ? 'block' : 'none';
-
-				// 只有當這一次的狀態跟上一次不一樣時，才去更新 HTML
-				if (lastDisplayState !== targetDisplay) {
-					console.log("狀態改變，更新顯示為:", targetDisplay);
-					document.getElementById('extra-options').style.display = targetDisplay;
-					lastDisplayState = targetDisplay; // 更新紀錄
-					if (targetDisplay === 'none') {
-						const continuousRadio = document.querySelector('input[name="gender"][value="Continuous"]');
-						if (continuousRadio) {
-							continuousRadio.checked = true; // ★ 這行才是真正執行「選中」的動作
-							console.log("已自動切換回 Continuous"); // ★ 修正拼字為 console
-							ContinuousFun()
-						}
-					}
-				}
-			});
 			Load();
 		});
 		ros.on('error', function (error) {
@@ -168,6 +136,38 @@
 			ros: ros,
 			name: '/locationBack',
 			messageType: 'tku_msgs/msg/Location'
+		});
+		locationBack_Subscriber.subscribe(function (msg) {
+			console.log("locationBack:", msg.data);
+
+			let loc = msg.data;
+
+			// 如果是 "/ar/Parameter" 這種格式，拆出中間那段 "ar"
+			if (typeof loc === 'string') {
+				const parts = loc.split('/');
+				// parts 可能是 ["", "ar", "Parameter"]
+				if (parts.length > 1 && parts[1].length > 0) {
+					loc = parts[0].trim();
+				}
+			}
+			document.getElementById('current-strategy-name').innerText = loc;
+			console.log(loc)
+			let targetDisplay = (loc === 'lc') ? 'block' : 'none';
+
+			// 只有當這一次的狀態跟上一次不一樣時，才去更新 HTML
+			if (lastDisplayState !== targetDisplay) {
+				console.log("狀態改變，更新顯示為:", targetDisplay);
+				document.getElementById('extra-options').style.display = targetDisplay;
+				lastDisplayState = targetDisplay; // 更新紀錄
+				if (targetDisplay === 'none') {
+					const continuousRadio = document.querySelector('input[name="gender"][value="Continuous"]');
+					if (continuousRadio) {
+						continuousRadio.checked = true;
+						console.log("已自動切換回 Continuous");
+						ContinuousFun()
+					}
+				}
+			}
 		});
 
 		var SendBodyAuto_Topic = new ROSLIB.Topic({
@@ -313,7 +313,7 @@
 			{
 				SensorPackage_Subscriber.unsubscribe();
 			}
-			var SensorPackage_Subscriber = new ROSLIB.Topic({
+			SensorPackage_Subscriber = new ROSLIB.Topic({
 			ros: ros,
 			name: '/package/sensorpackage',
 			messageType: 'tku_msgs/SensorPackage'
@@ -376,13 +376,16 @@ function strategylocation() {
 }
 
 		function ResetFun(){
-			document.getElementById("Xvalue").value = 0;
-			document.getElementById("Yvalue").value = 0;
-			document.getElementById("Thetavalue").value = 0;
-			if (statetype == 0 ||statetype == 7 || statetype == 8) {
-				ChangeContinuousValueFun();
-			}
-		}
+           document.getElementById("Xvalue").value = 0;
+           document.getElementById("Yvalue").value = 0;
+           document.getElementById("Thetavalue").value = 0;
+           Xvaluetmp = 0;
+           Yvaluetmp = 0;
+           Thetavaluetmp = 0;
+           if (statetype == 0 ||statetype == 7 || statetype == 8) {
+               ChangeContinuousValueFun();
+           }
+       }
 		function LeftTurnFun() {
 			Thetavaluetmp = Number(Thetavaluetmp) + 1;
 			document.getElementById("Thetavalue").value = Thetavaluetmp;

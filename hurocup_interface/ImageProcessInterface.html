@@ -53,41 +53,6 @@
 			document.getElementById("orign_image").style.display = 'inline';
 			document.getElementById("color_image").style.display = 'inline';
 			// document.getElementById("filter_image").style.display = 'inline';
-			locationBack_Subscriber.subscribe(function (msg) {
-				console.log("locationBack:", msg.data);
-
-				let loc = msg.data;
-
-				// 如果是 "/ar/Parameter" 這種格式，拆出中間那段 "ar"
-				if (typeof loc === 'string' && loc.startsWith('/')) {
-					const parts = loc.split('/');
-					// parts 可能是 ["", "ar", "Parameter"]
-					if (parts.length > 1 && parts[1].length > 0) {
-						loc = parts[1].trim();
-					}
-				}
-
-				const select = document.getElementById('strategy_location');
-
-				// 確認這個值真的在選單裡才設定，避免設錯
-				const hasOption = Array.from(select.options).some(
-					opt => opt.value.trim() === loc
-				);
-
-				if (hasOption) {
-					select.value = loc;   // ex: "ar"
-					console.log("Set strategy_location to:", loc);
-				} else {
-					console.warn("locationBack value not in select options:", loc);
-				}
-
-				// 下面照原本邏輯
-				changecolorlabel(document.getElementById("colorlabel").value);
-				// changeYUVcolorlabel 有實作才叫，避免沒有定義直接噴錯
-				if (typeof changeYUVcolorlabel === 'function' && document.getElementById("yuv_colorlabel")) {
-					changeYUVcolorlabel(document.getElementById("yuv_colorlabel").value);
-				}
-			});
 
 			checkConnectionInterval = setInterval(checkConnection, 10);
 		});
@@ -113,6 +78,41 @@
 			ros: ros,
 			name: '/locationBack',
 			messageType: 'tku_msgs/msg/Location'
+		});
+		locationBack_Subscriber.subscribe(function (msg) {
+			console.log("locationBack:", msg.data);
+
+			let loc = msg.data;
+
+			// 如果是 "/ar/Parameter" 這種格式，拆出中間那段 "ar"
+			if (typeof loc === 'string' && loc.startsWith('/')) {
+				const parts = loc.split('/');
+				// parts 可能是 ["", "ar", "Parameter"]
+				if (parts.length > 1 && parts[1].length > 0) {
+					loc = parts[1].trim();
+				}
+			}
+
+			const select = document.getElementById('strategy_location');
+
+			// 確認這個值真的在選單裡才設定，避免設錯
+			const hasOption = Array.from(select.options).some(
+				opt => opt.value.trim() === loc
+			);
+
+			if (hasOption) {
+				select.value = loc;   // ex: "ar"
+				console.log("Set strategy_location to:", loc);
+			} else {
+				console.warn("locationBack value not in select options:", loc);
+			}
+
+			// 下面照原本邏輯
+			changecolorlabel(document.getElementById("colorlabel").value);
+			// changeYUVcolorlabel 有實作才叫，避免沒有定義直接噴錯
+			if (typeof changeYUVcolorlabel === 'function' && document.getElementById("yuv_colorlabel")) {
+				changeYUVcolorlabel(document.getElementById("yuv_colorlabel").value);
+			}
 		});
 
 		var ColorModelForm_Topic = new ROSLIB.Topic({
@@ -1207,6 +1207,7 @@
 							<option value="sp">sp</option>
 							<option value="bm">bm</option>
 							<option value="lc">lc</option>
+							<option value="us">us</option>
 						</select>
 					</td>
 					<td>
