@@ -54,6 +54,7 @@ class MotionNode(Node):
         # Services
         self.check_sector_srv = self.create_service(CheckSector, '/package/InterfaceCheckSector', self.cb_check_sector)
         self.sector_execute_sub = self.create_subscription(Int16, '/package/Sector', self.cb_sector_execute, qos)
+        self.stand_execute_sub = self.create_subscription(Bool, '/package/StandExecute', self.cb_stand_execute, 10)
         self.read_motion_srv = self.create_service(ReadMotion, '/package/InterfaceReadSaveMotion', self.cb_read_motion)
         
         self.motion_callback_pub = self.create_publisher(Bool, '/package/motioncallback', qos)
@@ -65,6 +66,7 @@ class MotionNode(Node):
         home_path = os.path.expanduser("~")
         self.stand_dir = os.path.join(home_path, "ros2_kid/src/strategy/strategy/Parameter")
         self.stand_file = os.path.join(self.stand_dir, "stand.ini")
+        self.ini29_file = os.path.join(self.stand_dir, "29.ini")
 
         # 啟動時先讀 strategy.ini，確保 location_folder 正確，再載入動作檔
         strategy_ini_path = os.path.join(home_path, "ros2_kid/src/strategy/strategy/strategy.ini")
@@ -263,14 +265,15 @@ class MotionNode(Node):
         # ---------------------------------------
 
         try:
-            home_path = os.path.expanduser("~")
-            sector_dir = os.path.join(home_path, "ros2_kid/src/strategy/strategy", self.location_folder, "Parameter", "sector")
-            
-            if not os.path.exists(sector_dir):
-                os.makedirs(sector_dir)
-                
-            # 檔名只用 ID (例如 3.ini)
-            file_path = os.path.join(sector_dir, f"{sector_id}.ini")
+            # sector 29 存到公用資料夾（與 stand.ini 同層），其餘存到策略專屬 sector/ 子資料夾
+            if sector_id == "29":
+                file_path = self.ini29_file
+            else:
+                home_path = os.path.expanduser("~")
+                sector_dir = os.path.join(home_path, "ros2_kid/src/strategy/strategy", self.location_folder, "Parameter", "sector")
+                if not os.path.exists(sector_dir):
+                    os.makedirs(sector_dir)
+                file_path = os.path.join(sector_dir, f"{sector_id}.ini")
             
             config = configparser.ConfigParser()
             config['Data'] = {}
@@ -307,6 +310,10 @@ class MotionNode(Node):
             return
         self.get_logger().info(f"[Init] 載入 Stand: {full_path}")
         self._internal_load_ini(full_path, is_common=True)
+        # 若 29.ini 存在則覆蓋 saved_sectors["29"]（working copy）
+        if os.path.exists(self.ini29_file):
+            self.get_logger().info(f"[Init] 載入 29.ini: {self.ini29_file}")
+            self._internal_load_ini(self.ini29_file, "29.ini", is_common=True)
 
     def load_all_strategy_motions(self):
         home_path = os.path.expanduser("~")
@@ -375,10 +382,14 @@ class MotionNode(Node):
                 pos_list = data_map[3]; spd_list = data_map[4]
                 merged = []; [merged.extend([s,p]) for p,s in zip(pos_list, spd_list)]
                 self.saved_sectors[sector_name] = {'opcode': 242, 'data': merged}
+            elif 4 in data_map:  # sector 檔的 merged absolute 格式 [spd,pos,...]
+                self.saved_sectors[sector_name] = {'opcode': 242, 'data': data_map[4]}
             elif 1 in data_map and 2 in data_map:
                 pos_list = data_map[1]; spd_list = data_map[2]
                 merged = []; [merged.extend([s,p]) for p,s in zip(pos_list, spd_list)]
                 self.saved_sectors[sector_name] = {'opcode': 243, 'data': merged}
+            elif 2 in data_map:  # sector 檔的 merged relative 格式
+                self.saved_sectors[sector_name] = {'opcode': 243, 'data': data_map[2]}
             elif 0 in data_map:
                 self.saved_sectors[sector_name] = {'opcode': 244, 'data': data_map[0]}
         
@@ -411,12 +422,17 @@ class MotionNode(Node):
                     self.get_logger().info(f"🔄 偵測到策略變更: {self.location_folder} -> {new_loc}")
                     
                     self.location_folder = new_loc
-                    
+
                     # 清空舊記憶體
                     with self.joints_lock:
                         self.saved_sectors.clear()
                         self.id_source_map.clear()
-                    
+
+                    # 清空歷史（策略切換後歷史無效）
+                    self._history_stack.clear()
+                    self._future_stack.clear()
+                    self._publish_history_state()
+
                     # 重載
                     self.load_startup_stand_motion()
                     self.load_all_strategy_motions()
@@ -582,17 +598,22 @@ class MotionNode(Node):
                     
                     # 1. 更新路徑變數
                     self.location_folder = new_location
-                    
+
                     # 2. 清空現有記憶體
-                    with self.joints_lock: # 加上鎖，避免讀取時剛好被清空
+                    with self.joints_lock:
                         self.saved_sectors.clear()
                         self.id_source_map.clear()
-                    
-                    # 3. 重新載入檔案
+
+                    # 3. 清空歷史（策略切換後歷史無效）
+                    self._history_stack.clear()
+                    self._future_stack.clear()
+                    self._publish_history_state()
+
+                    # 4. 重新載入檔案
                     self.get_logger().info("正在重新載入策略檔案...")
-                    self.load_startup_stand_motion() # 重新載入站姿
-                    self.load_all_strategy_motions() # 載入新策略資料夾
-                    
+                    self.load_startup_stand_motion()
+                    self.load_all_strategy_motions()
+
                     self.get_logger().info(f"✅ 策略已切換為: {self.location_folder}")
 
         return SetParametersResult(successful=True)
@@ -652,54 +673,77 @@ class MotionNode(Node):
             new_config[str(idx)] = database_to_save[key]
             
         try:
-            with open(full_path, 'w', encoding='utf-8') as f: 
+            with open(full_path, 'w', encoding='utf-8') as f:
                 new_config.write(f)
             self.get_logger().info(f"Saved (Overwrite Mode): {full_path} | 筆數: {len(database_to_save)}")
-        except Exception as e: 
+        except Exception as e:
             self.get_logger().error(f"Save Failed: {e}")
+
+        # SaveStand 同時寫入 29.ini（working copy 與 stand.ini 同步）
+        if savestate == 1:
+            try:
+                with open(self.ini29_file, 'w', encoding='utf-8') as f:
+                    new_config.write(f)
+                self.get_logger().info(f"Saved 29.ini: {self.ini29_file}")
+                self._internal_load_ini(self.ini29_file, "29.ini", is_common=True)
+            except Exception as e:
+                self.get_logger().error(f"29.ini Save Failed: {e}")
 
     # 記憶體存在檢查
     def cb_check_sector(self, request, response):
         response.checkflag = str(request.data) in self.saved_sectors
         return response
-    
+
+    # Stand 按鈕專用：直接從 stand.ini 讀取並執行，不修改 saved_sectors
+    def cb_stand_execute(self, msg):
+        self.get_logger().info("[Stand] Executing from stand.ini")
+        self._executing_sector_id = "Stand"
+        self._execute_pose_from_file(self.stand_file)
+
+    def _execute_pose_from_file(self, file_path):
+        config = configparser.ConfigParser()
+        try:
+            config.read(file_path)
+            temp = {}
+            for section in config.sections():
+                try:
+                    m_state = int(config[section]['motionstate'])
+                    m_id = int(config[section]['id'])
+                    def parse_list(key, sec=section):
+                        if key in config[sec] and config[sec][key]:
+                            return [int(x) for x in config[sec][key].split(',')]
+                        return []
+                    if m_id not in temp: temp[m_id] = {}
+                    if m_state in [1, 2, 3, 4]: temp[m_id][m_state] = parse_list('motordata')
+                    elif m_state == 0: temp[m_id][m_state] = parse_list('motionlist')
+                except: pass
+
+            for m_id, data_map in temp.items():
+                if 3 in data_map and 4 in data_map:
+                    pos_list = data_map[3]; spd_list = data_map[4]
+                    merged = []; [merged.extend([s, p]) for p, s in zip(pos_list, spd_list)]
+                    self.execute_pose(merged, "ABSOLUTE")
+                    return
+                elif 4 in data_map:
+                    self.execute_pose(data_map[4], "ABSOLUTE")
+                    return
+            self.get_logger().error(f"[Stand] No valid pose in {file_path}")
+        except Exception as e:
+            self.get_logger().error(f"[Stand] Read error {file_path}: {e}")
+
     # 動作執行以及站姿
     def cb_sector_execute(self, msg):
         sector_id = str(msg.data)
 
+        # Execute 29 → 從 29.ini 重新載入（working copy）
         if sector_id == "29":
-            home_path = os.path.expanduser("~")
-            full_path = os.path.join(home_path, "ros2_kid/src/strategy/strategy/Parameter/stand.ini")
-            self.get_logger().info(f"[Stand] Execute -> Force reload: {full_path}")
+            if os.path.exists(self.ini29_file):
+                self.get_logger().info(f"[Execute29] Reloading 29.ini: {self.ini29_file}")
+                self._internal_load_ini(self.ini29_file, "29.ini", is_common=True)
+            else:
+                self.get_logger().info("[Execute29] 29.ini not found, using stand.ini fallback in RAM")
 
-            # 先清掉 RAM 裡舊的 0，避免默默用舊資料
-            with self.joints_lock:
-                self.saved_sectors.pop("0", None)
-                self.id_source_map.pop("0", None)
-
-            # 讀 stand.ini
-            self._internal_load_ini(full_path, "stand.ini", is_common=True)
-
-            # 不管 stand.ini 的 id 是多少，都把它當作 sector 0
-            # 找出 stand.ini 這次載入後新增/更新的內容，選一個最像站姿的（通常是 242/243）
-            # 你如果確定 stand.ini 裡只有一筆站姿，這樣做最穩。
-            stand_candidate = None
-            for sid, rec in self.saved_sectors.items():
-                if self.id_source_map.get(sid) == "stand.ini" and rec.get("opcode") in (242, 243):
-                    stand_candidate = rec
-                    break
-
-            if stand_candidate is None:
-                self.get_logger().error("[Stand] Reload OK but cannot find stand data from stand.ini")
-                return
-
-            with self.joints_lock:
-                self.saved_sectors["0"] = stand_candidate
-                self.id_source_map["0"] = "stand.ini"
-
-            self.get_logger().info("[Stand] sector 0 overwritten from stand.ini")
-
-        # 下面保持原本執行流程
+        # 執行流程
         if sector_id in self.saved_sectors:
             record = self.saved_sectors[sector_id]
             if record['opcode'] == 242:

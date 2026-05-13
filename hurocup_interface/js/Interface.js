@@ -78,6 +78,12 @@ var SendSectorPackage = new ROSLIB.Message({
   data : 0
 });
 
+var StandExecuteTopic = new ROSLIB.Topic({
+  ros: ros,
+  name: '/package/StandExecute',
+  messageType: 'std_msgs/Bool'
+});
+
 var InterfaceSaveMotionData = new ROSLIB.Topic({
   ros: ros,
   name: '/package/InterfaceSaveMotion',
@@ -774,6 +780,10 @@ function Read()
 }
 
 function SaveStand() {
+  if (document.getElementById('Lockedstand').checked) {
+    alert("Locked Stand is enabled. Uncheck Locked Stand to save.");
+    return;
+  }
   // [修改] 強制檔名為 "stand"，無視輸入框的內容
   const fileName = "stand";
 
@@ -877,6 +887,10 @@ function SaveStand() {
 
 function ReadStand()
 {
+  if (document.getElementById('Lockedstand').checked) {
+    alert("Locked Stand is ON. Uncheck to read stand.");
+    return;
+  }
   console.log("ReadStand (Force 'stand')");
   var LoadParameterClient = new ROSLIB.Service({
     ros : ros,
@@ -1028,9 +1042,7 @@ function Send() {
             if (idBox && Number(idBox.value) === targetID) {
                 console.log("Found in Absolute Table: ", targetID);
                 
-                var subList = [83, 84];
-                var subOpcode = document.getElementById('Lockedstand').checked ? 242 : 241;
-                subList.push(subOpcode);
+                var subList = [83, 84, 242];
 
                 // 抓取 21 顆馬達數據
                 for (let j = 0; j < 21; j++) {
@@ -1081,6 +1093,7 @@ function Send() {
     // =======================================================================
     // 主發送邏輯
     // =======================================================================
+    var foundID = false;
 
     // --- 情況 1: Absolute Mode ---
     if (document.getElementById("AbsolutePosition").style.display == "initial" ||
@@ -1097,10 +1110,7 @@ function Send() {
 
             if (ID === rowId) {
                 // 建構 Header
-                MotionList.push(83, 84);
-                
-                const opcode = document.getElementById('Lockedstand').checked ? 242 : 241;
-                MotionList.push(opcode);
+                MotionList.push(83, 84, 242);
 
                 // 抓取數據
                 for (let j = 0; j < 21; j++) {
@@ -1116,7 +1126,7 @@ function Send() {
                 SendPackage.sectorname = document.getElementById('Sector').value;
                 SendPackage.package = MotionList;
                 interface.publish(SendPackage);
-                
+                foundID = true;
                 break;
             }
         }
@@ -1150,7 +1160,7 @@ function Send() {
                 SendPackage.sectorname = document.getElementById('Sector').value;
                 SendPackage.package = MotionList;
                 interface.publish(SendPackage);
-                
+                foundID = true;
                 break;
             }
         }
@@ -1169,14 +1179,12 @@ function Send() {
 
             const boxes = rows[i + 1].getElementsByClassName('textbox');
 
-            // 1. [依賴檢查] 先把用到的子動作都送一遍
+            // 1. [依賴檢查] 先把用到的子動作都送一遍 (sector 29 跳過，由 Python 端自動從 stand.ini 載入)
             for (let m = 0; m < 40; m++) {
                 // 表格結構：奇數索引是 ID (A1, A2...)
                 const sub_id = Number(boxes[2 * m + 1]?.value) || 0;
-                if (sub_id !== 0) {
+                if (sub_id !== 0 && sub_id !== 29) {
                     SendSubSector(sub_id);
-                    // 為了確保 Python 端有時間處理子動作載入，這裡可以用極短的等待(非必要，視情況而定)
-                    // 但因為是一次性封包，處理速度應該很快，通常不需要 sleep
                 }
             }
 
@@ -1203,8 +1211,14 @@ function Send() {
                     SendPackage.cnt = m;
                 }
             }
+            foundID = true;
             break;
         }
+    }
+
+    if (!foundID) {
+        document.getElementById('label').innerHTML = "ID " + ID + " not found in table !!";
+        resetfunction();
     }
 
     // 清理
@@ -1309,14 +1323,10 @@ function execute()
 
 function stand()
 {
-  console.log("aaaaaaaaaaaaaaaaaaaaaaaaa")
-  doStandFlag = true;
   document.getElementById('label').innerHTML = "";
   document.getElementById('standButton').disabled = true;
-  
-  console.log(doStandFlag)
-
-  CheckSector(29);
+  standSubscribeFlag = true;
+  StandExecuteTopic.publish(new ROSLIB.Message({ data: true }));
 }
 
 

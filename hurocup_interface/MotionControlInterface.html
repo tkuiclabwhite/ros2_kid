@@ -176,6 +176,7 @@
 
         #history-panel {
             width: 160px;
+            height: 110px;
             flex-shrink: 0;
             background: rgba(20, 30, 33, 0.95);
             border: 1px solid #444;
@@ -220,6 +221,7 @@
         <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
         <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
 		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
+        <li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
     </ul>
 <!-- <br> -->
     <!-- 1. 狀態容器：固定在左側，不加 margin-left 確保位置不變 -->
@@ -302,7 +304,7 @@
             </div>
 
 			<div id="label" style="width: 900px; margin-left:180px; margin-top:10px;"></div>
-			<div id="stand_label" style="width: 900px; margin-left:180px; margin-top:10px;"></div>
+			<div id="stand_label" style="width: 900px; margin-left:405px; margin-top:10px;"></div>
             
             <div style="float: left; width: 1010px;">
 				<div id="leftbox" style="margin-left: 30px; margin-top:50px;">
@@ -570,7 +572,7 @@
                 </div> 
             </div>
         </div>
-        <div id="motor_area" style="width: 450px;">
+        <div id="motor_area" style="width: 460px;">
             
             <div>
                 <input type="button" id="btn_left_hand" class="button_choose" onclick="Torque_Choose('left_hand', 'btn_left_hand');" value="left_hand" style="width: 80px;">
@@ -742,6 +744,9 @@
             if (displayElement) {
                 displayElement.innerText = strategyName; // 顯示正確名稱（不轉大寫）
             }
+
+            // 策略切換時立即清空歷史
+            clearHistoryAction();
         });
 
         // 3. 手動發送讀取請求的函數
