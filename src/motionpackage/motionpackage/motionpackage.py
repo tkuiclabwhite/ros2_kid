@@ -66,6 +66,22 @@ class MotionNode(Node):
         self.stand_dir = os.path.join(home_path, "ros2_kid/src/strategy/strategy/Parameter")
         self.stand_file = os.path.join(self.stand_dir, "stand.ini")
 
+        # 啟動時先讀 strategy.ini，確保 location_folder 正確，再載入動作檔
+        strategy_ini_path = os.path.join(home_path, "ros2_kid/src/strategy/strategy/strategy.ini")
+        try:
+            if os.path.exists(strategy_ini_path):
+                with open(strategy_ini_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                if "Parameter" in content:
+                    new_loc = content.split('Parameter')[0].replace("/", "").strip()
+                else:
+                    new_loc = content.replace("/", "").strip()
+                if new_loc and new_loc != self.location_folder:
+                    self.get_logger().info(f"[Init] strategy.ini 指定策略: {self.location_folder} -> {new_loc}")
+                    self.location_folder = new_loc
+        except Exception as e:
+            self.get_logger().warn(f"[Init] 讀取 strategy.ini 失敗，使用預設: {e}")
+
         self.load_startup_stand_motion()
         self.load_all_strategy_motions()
 
@@ -107,7 +123,7 @@ class MotionNode(Node):
                 # MotionList 執行中：記錄每個子 sector 執行前的狀態與資料
                 if self._ml_step_captures is not None:
                     self._ml_step_captures.append({
-                        'opcode': 242 if mode == 'ABSOLUTE' else 243,
+                        '': 242 if mode == 'ABSOLUTE' else 243,
                         'data':      list(data),
                         'pre_state': dict(self.last_goals),
                     })
@@ -300,11 +316,18 @@ class MotionNode(Node):
         if os.path.exists(path_common):
             self.get_logger().info(f"[Init] 載入 Common: {path_common}")
             self._load_folder(path_common, is_common=True)
-        
+            path_common_sector = os.path.join(path_common, "sector")
+            if os.path.exists(path_common_sector):
+                self._load_folder(path_common_sector, is_common=True)
+
         path_specific = os.path.join(base_strategy_path, self.location_folder, "Parameter")
         if os.path.exists(path_specific):
             self.get_logger().info(f"[Init] 載入 Specific ({self.location_folder}): {path_specific}")
             self._load_folder(path_specific, is_common=False)
+            path_specific_sector = os.path.join(path_specific, "sector")
+            if os.path.exists(path_specific_sector):
+                self.get_logger().info(f"[Init] 載入 Sector 資料夾: {path_specific_sector}")
+                self._load_folder(path_specific_sector, is_common=False)
 
     def _load_folder(self, folder_path, is_common):
         try:
