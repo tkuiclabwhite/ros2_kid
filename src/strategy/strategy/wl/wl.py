@@ -13,7 +13,7 @@ from rclpy.node import Node
 from tku_msgs.msg import SensorPackage
 
 # --- 全域參數 (對齊原始邏輯) ---
-WIGHT = 60
+WIGHT = 40
 HEAD_MOTOR_START = 1500    
 HEAD_MOTOR_FINISH = 1350    
 FLAG1 = False  
@@ -212,6 +212,7 @@ class WeightLift(API):
     def main_strategy(self):
         if self.is_start:
             self.get_logger().info(f'ctrl_status : {self.ctrl_status}')
+            self.get_logger().info(f'WIGHT : {WIGHT}')
             self.get_logger().info(f'123')
             if self.ctrl_status == 'head_shake':
                 print("head_shake")
@@ -229,6 +230,8 @@ class WeightLift(API):
 
             if self.ctrl_status == 'preturn':
                 print(PRETURN)
+                self.get_logger().info(f'preturn')
+
                 if not self.body_auto:
                     self.walk_parameter(0, 0)
                     self.walk_switch()
