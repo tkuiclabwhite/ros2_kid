@@ -17,9 +17,9 @@ from rclpy.node import Node
 # 2025.8.7
 #======================================================================================
 
-CORRECT       = [-600, -200, -1]        # 原地踏步修正
-LEFT_CORRECT  = [-650, -150, 4]        # 左旋修正
-RIGHT_CORRECT = [-700, -250, -4]       # 右旋修正
+CORRECT       = [-800, -300, -1]        # 原地踏步修正
+LEFT_CORRECT  = [-850, -150, 4]        # 左旋修正
+RIGHT_CORRECT = [-850, -300, -4]       # 右旋修正
 #                 x , y , theta
 
 #====================================================================================
@@ -39,10 +39,10 @@ FIVE_POINT_LINE  = [105, 96, 93, 88]           # srward_slow_distance > forward_
 #THREE_POINT_LINE = [75, 66, 64, 62] 
 # 計算焦距判斷距離
 BASTET_LENGTH =  10  #增加以下全域變數
-FOCAL_LENGTH  = 336 # 333 
+FOCAL_LENGTH  = 318 # 333 
 TEST_DISTANCE = 60
 
-VALUEE = 33
+VALUEE = 55
 #VALUEE = 2  #框測試.  比賽時輸入的狀態決定投的策略  取代Diovalue
 #VALUEE = 22 #2分球
 #VALUEE = 33 #3分球
@@ -1053,28 +1053,28 @@ class BasketBall(API):
             else:
     
                 if self.target.basket_x != 0 :
-                    if abs(self.target.basket_x- 160) > 1  or abs(self.target.basket_y - 120) > 1:  #讓匡在畫面中心
+                    if abs(self.target.basket_x- 160) > 4  or abs(self.target.basket_y - 120) > 4:  #讓匡在畫面中心
                         self.get_logger().info(f'匡在視野中夠大 -> 鎖定匡')
                         self.motor.trace_revise(self.target.basket_x, self.target.basket_y, 45) 
                         self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
                         time.sleep(0.05)
                     else:
-                        if abs(self.motor.head_horizon-2010) > 4: 
+                        if abs(self.motor.head_horizon-2010) > 20: 
                             self.get_logger().info(f'匡不在視野中間->貓頭鷹修腰')
                             self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
                             self.motor.Owl_Rotate(2010)
     
                         else:
                             time.sleep(0.5)
-                            self.get_logger().info(f'手臂旋轉調整')
-                            self.api.sendBodySector(5) 
-                            time.sleep(0.05) 
+                            # self.get_logger().info(f'手臂旋轉調整')
+                            # self.sendBodySector(5) 
+                            # time.sleep(0.05) 
                             self.get_logger().info(f'開爪')
                             self.sendBodySector(5502)
-                            time.sleep(3)
+                            time.sleep(8)
                             self.get_logger().info(f'投籃')
                             self.sendBodySector(503)
-                            self.api.sendBodySector(5503)
+                            #self.sendBodySector(5503)
                             time.sleep(1)
                             self.get_logger().info(f'motor.throw_strength  = {self.motor.throw_strength}')
                             self.step = "finish"
