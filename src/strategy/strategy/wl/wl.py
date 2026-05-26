@@ -13,7 +13,7 @@ from rclpy.node import Node
 from tku_msgs.msg import SensorPackage
 
 # --- 全域參數 (對齊原始邏輯) ---
-WIGHT = 40
+WIGHT = 60
 HEAD_MOTOR_START = 1500    
 HEAD_MOTOR_FINISH = 1350    
 FLAG1 = False  
@@ -39,6 +39,7 @@ elif WIGHT == 90:
 
 elif WIGHT == 80:
     THIRD_LINE = 224
+    FOURTH_LINE = 224
     SPEED = 1300
     PICK_ONE = 801
     PICK_TWO = 802
@@ -48,6 +49,7 @@ elif WIGHT == 80:
 
 elif WIGHT == 70:
     THIRD_LINE = 225
+    FOURTH_LINE = 225
     SPEED = 1300
     PICK_ONE = 701
     PICK_TWO = 702
@@ -57,7 +59,8 @@ elif WIGHT == 70:
 
 elif WIGHT == 60:
     SPEED = 1300
-    THIRD_LINE = 210
+    THIRD_LINE = 200
+    FOURTH_LINE = 210
     PICK_ONE = 601
     PICK_TWO = 602
     PICK_THREE = 603
@@ -325,7 +328,7 @@ class WeightLift(API):
                 print("second_line")
                 self.line.update(2)
                 self.walking(-1, 0)                                    #一舉
-                if self.line.edge_min.y < 100 and self.line.edge_min.y > 75:   #白線
+                if self.line.edge_min.y < 150 and self.line.edge_min.y > 75:   #白線
                     self.third_line = True 
                 print(self.third_line)
                 self.get_logger().info(f"white_Y_min = {self.line.edge_min.y}")
@@ -370,7 +373,7 @@ class WeightLift(API):
                 self.get_logger().info(f"white_Y_min = {self.line.edge_min.y}")
                 self.get_logger().info(f"white_Y_max = {self.line.edge_max.y}")
                 self.sendHeadMotor(2,1400, 100)
-                if self.line.edge_max.y >= THIRD_LINE and self.fourth_line :
+                if self.line.edge_max.y >= FOURTH_LINE and self.fourth_line :
                     self.ctrl_status = 'final'
                     time.sleep(5.3)
             elif self.ctrl_status == 'final':
