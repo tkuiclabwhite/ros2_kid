@@ -30,34 +30,34 @@ STAY_THETA                      = -1
 #=========================================== 
 MAX_FORWARD_X                   = 2500                                                     
 # MAX_FORWARD_Y                   = 100                                                            
-MAX_FORWARD_Y                   = -200
-MAX_FORWARD_THETA               = 0
+MAX_FORWARD_Y                   = -400
+MAX_FORWARD_THETA               = -2
 #=========================================== 
 SMALL_FORWARD_X                 = 1500                                                     
-SMALL_FORWARD_Y                 = -200
+SMALL_FORWARD_Y                 = -400
 SMALL_FORWARD_Y                 = 0
-SMALL_FORWARD_THETA             = 0          
+SMALL_FORWARD_THETA             = -2     
 #=========================================== 
 SMALL_BACK_X                    = -1500                                                  
 # SMALL_BACK_Y                    = -100                                                            
 SMALL_BACK_Y                    = -200
-SMALL_BACK_THETA                = -1         
+SMALL_BACK_THETA                = -2.5     
 #=========================================== 
-IMU_RIGHT_X                     = -700
+IMU_RIGHT_X                     = -900
 IMU_RIGHT_Y                     = -200              
 #===========================================                 
-TURN_RIGHT_X                    = -700                                                
+TURN_RIGHT_X                    = -900                                              
 TURN_RIGHT_Y                    = -200                                                  
 TURN_RIGHT_THETA                = -4          #3 
 #=========================================== 
 IMU_LEFT_X                      = -800
-IMU_LEFT_Y                      = -450
+IMU_LEFT_Y                      = -400
 #===========================================                                         
 TURN_LEFT_X                     = -800                                          
-TURN_LEFT_Y                     = -500                                                
+TURN_LEFT_Y                     = -400                                                
 TURN_LEFT_THETA                 = 4            #3
 #===========================================
-SLOPE_RIGHT_TRANSLATE_X         = -600  
+SLOPE_RIGHT_TRANSLATE_X         = -800  
 SLOPE_RIGHT_TRANSLATE_Y         = -900
 SLOPE_RIGHT_TRANSLATE_THETA     = -1
 #===========================================
@@ -68,8 +68,8 @@ SLOPE_LEFT_TRANSLATE_THETA      = 0
 YY_WALKWAY            =     100 #黃黃通道大小
 YY_ERRO               =     15 #黃黃通道中心與畫面中心誤差值
 #===========================================     
-CRMAX           = 110 # red door 前後修正3 值越大離門越近 #68
-CRMIN           = 60  # red door 前後修正3 值越大離門越近 #68  
+CRMAX           = 120 # red door 前後修正3 值越大離門越近 #68
+CRMIN           = 70  # red door 前後修正3 值越大離門越近 #68  
 
 REDDOOR_FIX     = "imu" #"slpoe" 平移修正方法選擇
 REDDOOR_IMU     = False
@@ -78,9 +78,9 @@ REDDOOR_AFTER     = 'None' #紅門爬起後修正 'None' 'simp_turn_head' 'turn_
 #===========================================
 PRETURN_LEFT          = False
 # PRETURN_LEFT          = True #預轉身左
-PRETURN_LEFT_ANGLE    = 50
+PRETURN_LEFT_ANGLE    = 60
 
-PRETURN_RIGHT         = True
+PRETURN_RIGHT         = False
 # PRETURN_RIGHT         = True #預轉身右
 PRETURN_RIGHT_ANGLE   = 30
 #===========================================
@@ -937,20 +937,24 @@ class Obs(Node): #各種避障動作
                 else:
                     self.translate = True
                     status.reddoor_state = "位置修正完畢"
+        time.sleep(1)
+        status.reddoor_state = "fb_fix"
 
         if((self.image.red_y_max) < CRMIN):            #離紅門太遠
             # status.reddoor_state = "離紅門太遠"
             status.reddoor_state = "789"
             while(self.image.red_y_max < CRMIN) and status.running:                          
-                self.walk.slope()
-                self.walk.move('small_forward')
-                                
+                # self.walk.slope()
+                self.walk.move('small_forward')                      
         elif(self.image.red_y_max > CRMAX):          #離紅門太近
             status.reddoor_state = "crawl_789"
-            while(self.image.red_y_max > CRMAX) and status.running:                         
-                self.walk.slope()
+            self.walk.move('small_back')
+            time.sleep(0.3)
+            while(self.image.red_y_max > CRMAX) and status.running:           
+                status.reddoor_state = "crawl_789_while"
+                # self.walk.slope()
                 self.walk.move('small_back')
-                
+        status.reddoor_state = "crawl_789_out"
         # while abs(deep.slope) > 0.03 and status.running: #紅門太斜
         #     self.walk.slope()
         #     self.walk.move('slope_fix')
@@ -959,11 +963,12 @@ class Obs(Node): #各種避障動作
         #     self.walk.move('imu_fix')
         #     status.reddoor_state = "修斜率4"
 
-        send.sendContinuousValue(0, 0, 0) 
+       
         time.sleep(1)
         
         send.sendbodyAuto(0) #mode = 1為continue步態 #停下來
         send.sendBodySector(81)
+        send.sendContinuousValue(0, 0, 0) 
         time.sleep(10)
         
         # '''
