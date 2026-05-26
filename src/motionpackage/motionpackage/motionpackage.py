@@ -791,16 +791,19 @@ class MotionNode(Node):
             
             if raw_val > 32767: raw_val -= 65536
             mid = i + 1
-            
-            base_pos = 2048 
+
+            if mode == "ABSOLUTE" and raw_val == -1:
+                continue
+
+            base_pos = 2048
             if mid in self.last_goals:
                 base_pos = self.last_goals[mid]
             elif mid in self.current_joints:
                 base_pos = self.current_joints[mid]
-            
+
             if mode == "RELATIVE":
                 final_target = base_pos + raw_val
-            else: 
+            else:
                 final_target = raw_val
             
             # 同時儲存位置與速度

@@ -523,7 +523,11 @@
                     </div>
                 </div>
             </div>
-        </div> 
+            <div style="margin-left: 180px; margin-top: 405px; margin-bottom: 4px;">
+                <input type="button" id="MoveUpButton" value="Move Up" onclick="MoveRow(-1);" style="width:80px" disabled="disabled">
+                <input type="button" id="MoveDownButton" value="Move Down" onclick="MoveRow(1);" style="width:90px" disabled="disabled"> : <input type="text" id="chose_move" value="-1" style="width:50px;">
+            </div>
+        </div>
         <div id="rightarea">
             <div id="robotpic">
                 <div style="float: left; height: 470px ; width: 300px"> 
@@ -659,8 +663,58 @@
                         </table>
                     </div>
                 </div>
-                <div style="display: flex; justify-content: center; width: 100%; margin-top: 15px; margin-bottom: 10px;">
+                <div style="display: flex; justify-content: center; gap: 10px; width: 100%; margin-top: 15px; margin-bottom: 5px;">
                     <input type="button" id="btn_copy_to_abs" value="Copy To Absolute" onclick="CopyToAbsolute();" style="width: 140px; font-weight:bold; background-color:#03e9f4; color:#050505; border-radius:5px; cursor:pointer; padding: 5px;">
+                    <input type="button" id="btn_copy_selected" value="Copy Selected →" onclick="ShowCopySelectedPanel();" style="width: 140px; font-weight:bold; background-color:#f4a003; color:#050505; border-radius:5px; cursor:pointer; padding: 5px;">
+                </div>
+
+                <!-- Copy Selected Panel (hidden by default) -->
+                <div id="copy_selected_panel" style="display:none; background-color:rgba(30,40,42,0.95); border:1px solid #f4a003; border-radius:8px; padding:10px; margin:5px 0 10px 0; color:white; width:440px; box-sizing:border-box;">
+                    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">
+                        <span style="font-weight:bold; color:#f4a003;">Target Row ID:</span>
+                        <input type="text" id="copy_target_id" value="" style="width:50px; text-align:center; font-weight:bold;">
+                        <input type="button" value="全選" onclick="toggleAllCopyCheckboxes(true);" style="padding:2px 8px; cursor:pointer; border-radius:4px;">
+                        <input type="button" value="全不選" onclick="toggleAllCopyCheckboxes(false);" style="padding:2px 8px; cursor:pointer; border-radius:4px;">
+                        <input type="button" value="Execute" onclick="CopySelectedToRow();" style="padding:2px 12px; cursor:pointer; font-weight:bold; background-color:#03e9f4; border-radius:4px;">
+                    </div>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <div>
+                            <div style="color:#03e9f4; font-size:11px; margin-bottom:3px; cursor:pointer; user-select:none;" onclick="toggleGroupCopy('left_hand');">LEFT HAND ▾</div>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="1"> M1</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="2"> M2</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="3"> M3</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_hand" value="4"> M4</label>
+                        </div>
+                        <div>
+                            <div style="color:#03e9f4; font-size:11px; margin-bottom:3px; cursor:pointer; user-select:none;" onclick="toggleGroupCopy('right_hand');">RIGHT HAND ▾</div>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="5"> M5</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="6"> M6</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="7"> M7</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_hand" value="8"> M8</label>
+                        </div>
+                        <div>
+                            <div style="color:#03e9f4; font-size:11px; margin-bottom:3px; cursor:pointer; user-select:none;" onclick="toggleGroupCopy('waist');">WAIST ▾</div>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="waist" value="9"> M9</label>
+                        </div>
+                        <div>
+                            <div style="color:#03e9f4; font-size:11px; margin-bottom:3px; cursor:pointer; user-select:none;" onclick="toggleGroupCopy('left_leg');">LEFT LEG ▾</div>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="10"> M10</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="11"> M11</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="12"> M12</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="13"> M13</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="14"> M14</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="left_leg" value="15"> M15</label>
+                        </div>
+                        <div>
+                            <div style="color:#03e9f4; font-size:11px; margin-bottom:3px; cursor:pointer; user-select:none;" onclick="toggleGroupCopy('right_leg');">RIGHT LEG ▾</div>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="16"> M16</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="17"> M17</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="18"> M18</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="19"> M19</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="20"> M20</label>
+                            <label style="display:block;"><input type="checkbox" class="copy_motor_cb" data-group="right_leg" value="21"> M21</label>
+                        </div>
+                    </div>
                 </div>
             </div>
 

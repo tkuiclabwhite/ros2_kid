@@ -29,6 +29,8 @@ ros.on('error', function (error) {
   document.getElementById('ReverseButton').disabled = true;
   document.getElementById('CopyButton').disabled = true;
   document.getElementById('CheckSumButton').disabled = true;
+  document.getElementById('MoveUpButton').disabled = true;
+  document.getElementById('MoveDownButton').disabled = true;
   document.getElementById('resetButton').disabled = true;
   document.getElementById('connected').style.display = 'none';
   document.getElementById('TorqueButton').disabled = true;
@@ -42,7 +44,7 @@ ros.on('close', function () {
   document.getElementById('SendButton').disabled = true;
   document.getElementById('executeButton').disabled = true;
   document.getElementById('standButton').disabled = true;
-  
+
   document.getElementById('MultipleButton').disabled = true;
   document.getElementById('MergeButton').disabled = true;
   document.getElementById('AddButton').disabled = true;
@@ -50,6 +52,8 @@ ros.on('close', function () {
   document.getElementById('ReverseButton').disabled = true;
   document.getElementById('CopyButton').disabled = true;
   document.getElementById('CheckSumButton').disabled = true;
+  document.getElementById('MoveUpButton').disabled = true;
+  document.getElementById('MoveDownButton').disabled = true;
   document.getElementById('resetButton').disabled = true;
   document.getElementById('connected').style.display = 'none';
   document.getElementById('TorqueButton').disabled = true;
@@ -210,6 +214,8 @@ function createTopics()
         document.getElementById('ReverseButton').disabled = false;
         document.getElementById('CopyButton').disabled = false;
         document.getElementById('CheckSumButton').disabled = false;
+        document.getElementById('MoveUpButton').disabled = false;
+        document.getElementById('MoveDownButton').disabled = false;
         executeSubscribeFlag = false;
       }
       else if(standSubscribeFlag == true)
@@ -552,6 +558,8 @@ function CheckSector(sectordata)
         document.getElementById('ReverseButton').disabled = false;
         document.getElementById('CopyButton').disabled = false;
         document.getElementById('CheckSumButton').disabled = false;
+        document.getElementById('MoveUpButton').disabled = false;
+        document.getElementById('MoveDownButton').disabled = false;
         doSendFlag = false;
       }
       else if(doExecuteFlag == true)
@@ -598,6 +606,8 @@ function CheckSector(sectordata)
         document.getElementById('ReverseButton').disabled = false;
         document.getElementById('CopyButton').disabled = false;
         document.getElementById('CheckSumButton').disabled = false;
+        document.getElementById('MoveUpButton').disabled = false;
+        document.getElementById('MoveDownButton').disabled = false;
         doExecuteFlag = false;
       }
       else if(doStandFlag == true)
@@ -1401,6 +1411,8 @@ function resetfunction()
   document.getElementById('ReverseButton').disabled = false;
   document.getElementById('CopyButton').disabled = false;
   document.getElementById('CheckSumButton').disabled = false;
+  document.getElementById('MoveUpButton').disabled = false;
+  document.getElementById('MoveDownButton').disabled = false;
 }
 
 function addreduce(value)
