@@ -1,12 +1,23 @@
 import os
 import sys
+import subprocess
+
 # 讓 Sphinx 找到上一層目錄的 API.py
-sys.path.insert(0, os.path.abspath('../../')) 
+sys.path.insert(0, os.path.abspath('../../'))
 
 
 # -- Project information -----------------------------------------------------
 
 project = 'TKU ICLAB ROS2 API'
+
+# 自動從 git log 取得最後一次 commit 日期作為版本號
+try:
+    release = subprocess.check_output(
+        ['git', '-C', os.path.abspath('../../'), 'log', '-1', '--format=%cd', '--date=format:%Y.%m.%d'],
+        stderr=subprocess.DEVNULL
+    ).decode().strip()
+except Exception:
+    release = '未知'
 copyright = '2026, Yang,Shu-kai'
 author = 'Yang,Shu-kai'
 html_short_title = 'ICLAB API'

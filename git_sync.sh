@@ -18,6 +18,7 @@ NICKNAMES=(
     ["sp"]="src/strategy/strategy/sp"
     ["sr"]="src/strategy/strategy/sr"
     ["wl"]="src/strategy/strategy/wl"
+    ["us"]="src/strategy/strategy/us"
     ["strategy"]="src/strategy"
     ["image"]="src/imageprocess"
     ["motion"]="src/motionpackage"

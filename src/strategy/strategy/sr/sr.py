@@ -10,9 +10,9 @@ import time
 
 #--校正量--#
 #前進量校正
-FORWARD_CORRECTION         = -700
+FORWARD_CORRECTION         = -500
 #平移校正
-TRANSLATION_CORRECTION     = -200
+TRANSLATION_CORRECTION     = -300
 #旋轉校正
 THETA_CORRECTION           = -1
 #基礎變化量(前進&平移)
@@ -30,11 +30,11 @@ W_ALIGN = 70  # 水平對齊的權重
 W_HEIGHT = -50  #高度權重
 
 
+W_FAR = 920
+RATIO_FAR = -0.90 #2251-2363)/100
 
-
-
-#------------------#
-HEAD_HORIZONTAL            = 2048  
+W_NEAR = 1120     
+RATIO_NEAR = -1.35 #(2251-2363)/100
 
 
 #------------------#
@@ -45,7 +45,7 @@ HEAD_LEFT_HAND_H = 2550
 HEAD_LEFT_HAND_V = 2100  #2100
 
 HEAD_RIGHT_HAND_H = 1550
-HEAD_RIGHT_HAND_V = 2050
+HEAD_RIGHT_HAND_V = 2100
  
 HEAD_LEFT_LEG_H = 1750
 HEAD_LEFT_LEG_V = 1750
@@ -73,17 +73,11 @@ MOTOR_RIGHT_HEAP = 0
 # FOOTLADDER_LINE            = 215                   #上梯基準線
 MY_LINE_Y= 120 #攀岩基準線
 MY_LINE_X =160 #攀岩基準線
-MY_SIZE = 760
+MY_SIZE = 1020
 ROI_RADIUS = 120
 
-W_FAR = MY_SIZE + 150
-RATIO_FAR = -0.90 #2251-2363)/100
-
-W_NEAR  = MY_SIZE + 150
-RATIO_NEAR = -1.35 #(2251-2363)/100
-
 #前後值
-BACK_MIN                   = -800                #小退後
+BACK_MIN                   = -600                #小退後
 FORWARD_MIN               = 100
 FORWARD_LOW               = 200             #小前進 300
 FORWARD_NORMAL             = 300                 #前進
@@ -500,7 +494,7 @@ class WallClimbing(API):
             if not self.forward_ok:
                 self.sendContinuousValue(f, TRANSLATION_CORRECTION ,THETA_CORRECTION)
             else:
-                self.sendContinuousValue(-800,t,-1)
+                self.sendContinuousValue(FORWARD_CORRECTION,t,THETA_CORRECTION)
 
 
     def ramp_speed(self, current, target, step):
@@ -644,29 +638,28 @@ class WallClimbing(API):
                     self.get_logger().info(f"動作中")
 
 
-                # current_w = current_target['size']
+                current_w = current_target['size']
 
-                # if current_w <= W_FAR:
-                #     alpha = 0.0
-                # elif current_w >= W_NEAR:
-                #     alpha = 1.0
-                # else:
-                #     alpha = (current_w - W_FAR) / (W_NEAR - W_FAR)
+                if current_w <= W_FAR:
+                    alpha = 0.0
+                elif current_w >= W_NEAR:
+                    alpha = 1.0
+                else:
+                    alpha = (current_w - W_FAR) / (W_NEAR - W_FAR)
 
-                # # === 3. 算出當下最完美的動態 left_value ===
-                # dynamic_left_value = RATIO_FAR + alpha * (RATIO_NEAR - RATIO_FAR)
+                # === 3. 算出當下最完美的動態 left_value ===
+                dynamic_left_value = RATIO_FAR + alpha * (RATIO_NEAR - RATIO_FAR)
                 
-                # # 假設左右手視差對稱，共用同一個動態比例
-                # dynamic_right_value = dynamic_left_value
+                # 假設左右手視差對稱，共用同一個動態比例
+                dynamic_right_value = dynamic_left_value
 
-                left_value = (2251-2363)/100
-                right_value = left_value
+                # left_value = (2251-2363)/100
+                # right_value = left_value
            
                 if action == 'left_hand':
                     
                     #motor_value_x = ((self.now_head_Horizontal-2394) * self.p_x1 * DS) - cfg['ready_climb'][0]
-                    #motor_value_x = (self.now_head_Horizontal-2550) * dynamic_left_value
-                    motor_value_x = (self.now_head_Horizontal-2550) * left_value
+                    motor_value_x = (self.now_head_Horizontal-2550) * dynamic_left_value
                     motor_value_y = ((self.now_head_Vertical * self.p_y1) - cfg['ready_climb'][1]) + 325 #175
                     
 
@@ -678,8 +671,7 @@ class WallClimbing(API):
                 elif action == 'right_hand':
                     
                     #motor_value_x = abs((self.now_head_Horizontal * self.p_x2 * DS) - cfg['ready_climb'][0] )
-                    #motor_value_x = (self.now_head_Horizontal - 1546) * dynamic_right_value  + 100 
-                    motor_value_x = (self.now_head_Horizontal - 1546) * right_value  + 100 
+                    motor_value_x = (self.now_head_Horizontal - 1546) * dynamic_right_value  + 100 
                     motor_value_y = ((self.now_head_Vertical * self.p_y1) - cfg['ready_climb'][1]) + 125 #275
 
                     self.get_logger().info(f"{action} 最終輸出: M1(Y)={int(motor_value_y) }, M2(X)={int(motor_value_x) }")
