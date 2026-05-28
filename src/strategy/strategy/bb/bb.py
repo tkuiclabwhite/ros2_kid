@@ -39,10 +39,10 @@ FIVE_POINT_LINE  = [105, 96, 93, 88]           # srward_slow_distance > forward_
 #THREE_POINT_LINE = [75, 66, 64, 62] 
 # 計算焦距判斷距離
 BASTET_LENGTH =  10  #增加以下全域變數
-FOCAL_LENGTH  = 318 # 333 
+FOCAL_LENGTH  = 330 # 333 
 TEST_DISTANCE = 60
 
-VALUEE = 55
+VALUEE = 33
 #VALUEE = 2  #框測試.  比賽時輸入的狀態決定投的策略  取代Diovalue
 #VALUEE = 22 #2分球
 #VALUEE = 33 #3分球
@@ -842,7 +842,7 @@ class BasketBall(API):
                         self.motor.move_head(1, FIVEPOINT_HEAD_Y_DEGREE[0], 880, 880, 50)
                         time.sleep(1)
                         self.get_logger().debug(f'頭部垂直旋轉調整')
-                        self.motor.move_head(2, 2048, 880, 880, 50)
+                        self.motor.move_head(2, 1900, 880, 880, 50)
 
                     else:
                         self.get_logger().info(f'5分球')
@@ -1032,7 +1032,7 @@ class BasketBall(API):
                         self.motor.move_head(1, FIVEPOINT_HEAD_Y_DEGREE[0], 880, 880, 50)
                         time.sleep(1)
                         self.get_logger().debug(f'頭部垂直旋轉調整')
-                        self.motor.move_head(2, 2048, 880, 880, 50)
+                        self.motor.move_head(2, 1900, 800, 880, 50)
                         time.sleep(1)
     
                 else:
@@ -1071,7 +1071,7 @@ class BasketBall(API):
                             # time.sleep(0.05) 
                             self.get_logger().info(f'開爪')
                             self.sendBodySector(5502)
-                            time.sleep(8)
+                            time.sleep(11)
                             self.get_logger().info(f'投籃')
                             self.sendBodySector(503)
                             #self.sendBodySector(5503)
