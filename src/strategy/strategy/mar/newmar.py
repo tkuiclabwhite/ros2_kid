@@ -26,9 +26,9 @@ WALK_SPEED_SLOW    = 1200   # 接近標記 / 搜尋時的慢速
 
 # 轉彎參數（左右分開，邊走邊轉）
 LEFT_FORWARD_SPEED  = 1600   # 左轉時的前進速度
-LEFT_TURN_SPEED     = 8     # 左轉時的旋轉速度（正值）
-RIGHT_FORWARD_SPEED = 1600   # 右轉時的前進速度
-RIGHT_TURN_SPEED    = -8    # 右轉時的旋轉速度（負值）
+LEFT_TURN_SPEED     = 14     # 左轉時的旋轉速度（正值）
+RIGHT_FORWARD_SPEED = 1700   # 右轉時的前進速度
+RIGHT_TURN_SPEED    = -16    # 右轉時的旋轉速度（負值）
 
 # 畫面參數
 FRAME_W       = 320
@@ -52,7 +52,7 @@ INIT_COOLDOWN     = 2.0        # 初始化後冷卻時間（秒），避免殘�
 
 # IMU 補正參數
 IMU_CORRECT_DEADBAND = 3       # yaw 在此範圍內不補正（度）
-IMU_CORRECT_SPEED    = 8       # IMU 補正角速度
+IMU_CORRECT_SPEED    = 16       # IMU 補正角速度
 
 # ═══════════════════════════════════════════════
 #  子狀態定義
