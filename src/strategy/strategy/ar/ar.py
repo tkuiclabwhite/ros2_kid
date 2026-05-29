@@ -18,9 +18,9 @@ HEAD_CHECK = 2080
 HAND_BACK = 222
 LEG_BACK = 1812
 VERTICAL_HEAD = 2048
-X_BENCHMARK = [234, 236, 241, 237, 237] # [最左,中左,中間,中右,最右]
-Y_BENCHMARK = 130
-SHOOT_DELAY = 0.90       # +0.1s -0.004s   7.3    5.18       4.5     3.32    2.57       
+X_BENCHMARK = [234, 236, 236, 237, 237] # [最左,中左,中間,中右,最右]
+Y_BENCHMARK = 160
+SHOOT_DELAY = 0.86      # +0.1s -0.004s   7.3    5.18       4.5     3.32    2.57       
                          #shoot_delay:     0.58   0.84       0.7     0.90   0.91     
 # motion sector
 PREPARE = 9999                              
