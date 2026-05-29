@@ -24,9 +24,9 @@ HEAD_HORIZONTAL = 2048 #頭水平，位置為馬達目標刻度，2048為正朝�
 HEAD_HEIGHT     = 1450 #頭高，位置為馬達目標刻度，2048為正朝前方
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
-STAY_X                          = -600
-STAY_Y                          = -300
-STAY_THETA                      = -1
+STAY_X                          = -800
+STAY_Y                          = -200
+STAY_THETA                      = -3
 #=========================================== 
 MAX_FORWARD_X                   = 2500                                                     
 # MAX_FORWARD_Y                   = 100                                                            
@@ -41,14 +41,14 @@ SMALL_FORWARD_THETA             = -2
 SMALL_BACK_X                    = -1500                                                  
 # SMALL_BACK_Y                    = -100                                                            
 SMALL_BACK_Y                    = -200
-SMALL_BACK_THETA                = -2.5     
+SMALL_BACK_THETA                = -2    
 #=========================================== 
 IMU_RIGHT_X                     = -900
 IMU_RIGHT_Y                     = -200              
 #===========================================                 
 TURN_RIGHT_X                    = -900                                              
 TURN_RIGHT_Y                    = -200                                                  
-TURN_RIGHT_THETA                = -4          #3 
+TURN_RIGHT_THETA                = -7         #3 
 #=========================================== 
 IMU_LEFT_X                      = -800
 IMU_LEFT_Y                      = -400
@@ -57,9 +57,9 @@ TURN_LEFT_X                     = -800
 TURN_LEFT_Y                     = -400                                                
 TURN_LEFT_THETA                 = 4            #3
 #===========================================
-SLOPE_RIGHT_TRANSLATE_X         = -800  
+SLOPE_RIGHT_TRANSLATE_X         = -600  
 SLOPE_RIGHT_TRANSLATE_Y         = -900
-SLOPE_RIGHT_TRANSLATE_THETA     = -1
+SLOPE_RIGHT_TRANSLATE_THETA     = -2.35
 #===========================================
 SLOPE_LEFT_TRANSLATE_X          = -500
 SLOPE_LEFT_TRANSLATE_Y          = 900
@@ -84,7 +84,7 @@ PRETURN_RIGHT         = False
 # PRETURN_RIGHT         = True #預轉身右
 PRETURN_RIGHT_ANGLE   = 30
 #===========================================
-YELLOW_WALKWAY              = False      #如果沒有黃黃通道就把它關了
+YELLOW_WALKWAY              = False #如果沒有黃黃通道就把它關了
 YELLOW_SMALL_TURNHEAD       = False #通道不夠大轉頭
 YELLOW_BLUE                 = True#黃線接藍牆
 YELLOW_IMU_LEFT        = False #黃色與藍牆夠近時 或 兩個藍色中有洞使用深度判斷 走完轉頭先imu_fix
@@ -192,12 +192,12 @@ class Walk(): #步態、轉彎、直走速度、IMU
     #     return self.imu_yaw 
 
     def turn_angle(self):   #一般 旋轉角度        
-        turn_ranges = [ (17, -4), 
-                        (12, -4), 
-                        (8,  -3), 
-                        (6,  -3), 
-                        (4,  -3), 
-                        (2,  -3),  
+        turn_ranges = [ (17, -7), 
+                        (12, -7), 
+                        (8,  -6), 
+                        (6,  -6), 
+                        (4,  -6), 
+                        (2,  -6),  
                         (0,   0),
                         (-2,  3),
                         (-4,  3),
@@ -211,14 +211,14 @@ class Walk(): #步態、轉彎、直走速度、IMU
         return 0                                 
     
     def imu_angle(self):      #一般 imu修正角度
-        imu_ranges = [  (180,  -4),
-                        (90,  -4), 
-                        (60,  -4), 
-                        (45,  -4), 
-                        (20,  -3), 
-                        (10,  -3), 
-                        (5,   -3), 
-                        (2,   -4), 
+        imu_ranges = [  (180,  -7),
+                        (90,  -7), 
+                        (60,  -7), 
+                        (45,  -7), 
+                        (20,  -6), 
+                        (10,  -6), 
+                        (5,   -6), 
+                        (2,   -7), 
                         (0,    0),
                         (-2,   3),
                         (-5,   3),
@@ -759,15 +759,18 @@ class Obs(Node): #各種避障動作
                 if  self.translate:
                     if REDDOOR_FIX=="imu":
                         if abs(send.imu_rpy[2]) > 2 :     # red door 修斜率
+                            #status.reddoor_state = "用imu判斷準備進修斜率2"
                             while ( abs(send.imu_rpy[2]) > 2) and status.running:
+                                #status.reddoor_state = "while修斜率2"
                                 self.walk.move('imu_fix')
                                 status.reddoor_state = "修斜率2"
                                 self.image.calculate()
-
                             self.walk.move('stay')
+                            #status.reddoor_state = "修斜率2-stay"
                             # time.sleep(0.1)
                             self.walk.face_imu = send.imu_rpy[2]
                             self.crawl()
+                            #status.reddoor_state = "修斜率2完進craw"
                             break
                     elif REDDOOR_FIX == "slope":
                         if abs(deep.slope) > 0.1 :
