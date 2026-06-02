@@ -52,7 +52,47 @@ INIT_COOLDOWN     = 2.0        # 初始化後冷卻時間（秒），避免殘�
 
 # IMU 補正參數
 IMU_CORRECT_DEADBAND = 3       # yaw 在此範圍內不補正（度）
-IMU_CORRECT_SPEED    = 16       # IMU 補正角速度
+IMU_CORRECT_SPEED    = 8      # IMU 補正角速度
+
+# ═══════════════════════════════════════════════
+#  坡道模式旗標（手動切換）
+# ═══════════════════════════════════════════════
+SLOPE_MODE = 'up'       # 'none' / 'up' / 'down'
+SECTOR_UPHILL   = 111      # 上坡站姿微調 sector 編號（實際編號依動作設計填入）
+SECTOR_DOWNHILL = 29      # 下坡站姿微調 sector 編號（實際編號依動作設計填入）
+
+# 平地步態參數
+WALK_PARAM_NORMAL = dict(
+    com_y_swing  = 0.0,
+    width_size   = 4.5,
+    period_t     = 300,
+    t_dsp        = 0.1,
+    lift_height  = 1.5,
+    stand_height = 23.5,
+    com_height   = 29.5,
+)
+
+# 上坡步態參數
+WALK_PARAM_UPHILL = dict(
+    com_y_swing  = 0.0,
+    width_size   = 4.5,
+    period_t     = 300,
+    t_dsp        = 0.1,
+    lift_height  = 1.5,
+    stand_height = 23.5,
+    com_height   = 29.5,
+)
+
+# 下坡步態參數
+WALK_PARAM_DOWNHILL = dict(
+    com_y_swing  = 0.0,
+    width_size   = 4.5,
+    period_t     = 300,
+    t_dsp        = 0.1,
+    lift_height  = 1.5,
+    stand_height = 23.5,
+    com_height   = 29.5,
+)
 
 # ═══════════════════════════════════════════════
 #  子狀態定義
@@ -143,6 +183,40 @@ class Mar(API):
         self.sendHeadMotor(2, HEAD_DOWN_Y, 50)
 
     # ───────────────────────────────────────────
+    #  步態參數發送
+    # ───────────────────────────────────────────
+    def _send_walk_param(self):
+        """根據 SLOPE_MODE 發送對應步態參數"""
+        if SLOPE_MODE == 'up':
+            p = WALK_PARAM_UPHILL
+            self.get_logger().info("[WalkParam] 上坡模式", throttle_duration_sec=5.0)
+        elif SLOPE_MODE == 'down':
+            p = WALK_PARAM_DOWNHILL
+            self.get_logger().info("[WalkParam] 下坡模式", throttle_duration_sec=5.0)
+        else:
+            p = WALK_PARAM_NORMAL
+
+        self.sendWalkParameter(
+            mode         = 0,
+            com_y_swing  = p['com_y_swing'],
+            width_size   = p['width_size'],
+            period_t     = p['period_t'],
+            t_dsp        = p['t_dsp'],
+            lift_height  = p['lift_height'],
+            stand_height = p['stand_height'],
+            com_height   = p['com_height'],
+        )
+
+    def _send_slope_sector(self):
+        """坡道模式才呼叫站姿微調 sector，平地不動作"""
+        if SLOPE_MODE == 'up':
+            self.sendBodySector(SECTOR_UPHILL)
+            self.get_logger().info(f"[Slope] 上坡站姿微調 sector={SECTOR_UPHILL}")
+        elif SLOPE_MODE == 'down':
+            self.sendBodySector(SECTOR_DOWNHILL)
+            self.get_logger().info(f"[Slope] 下坡站姿微調 sector={SECTOR_DOWNHILL}")
+
+    # ───────────────────────────────────────────
     #  IMU 補正計算
     # ───────────────────────────────────────────
     def _imu_correction(self):
@@ -160,6 +234,8 @@ class Mar(API):
     def _initialize(self):
         self.sendSensorReset(True)
         self._look_down()
+        self._send_walk_param()
+        self._send_slope_sector()
         self.sub_state       = 'WALK'
         self.target_label    = 'none'
         self.last_sign_time  = time.time() - 999
