@@ -22,48 +22,47 @@ from strategy.API import API
 
 HEAD_HORIZONTAL = 2048 #頭水平，位置為馬達目標刻度，2048為正朝前方
 HEAD_HEIGHT     = 1450 #頭高，位置為馬達目標刻度，2048為正朝前方
+HEAD_HEIGHT_    = 2200
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
-STAY_X                          = -800
+STAY_X                          = -600
 STAY_Y                          = -200
-STAY_THETA                      = -3
+STAY_THETA                      = -2
 #=========================================== 
 MAX_FORWARD_X                   = 2500                                                     
-# MAX_FORWARD_Y                   = 100                                                            
-MAX_FORWARD_Y                   = -400
+MAX_FORWARD_Y                   = -300
 MAX_FORWARD_THETA               = -2
 #=========================================== 
 SMALL_FORWARD_X                 = 1500                                                     
-SMALL_FORWARD_Y                 = -400
+SMALL_FORWARD_Y                 = -300
 SMALL_FORWARD_Y                 = 0
 SMALL_FORWARD_THETA             = -2     
 #=========================================== 
 SMALL_BACK_X                    = -1500                                                  
-# SMALL_BACK_Y                    = -100                                                            
 SMALL_BACK_Y                    = -200
 SMALL_BACK_THETA                = -2    
 #=========================================== 
 IMU_RIGHT_X                     = -900
-IMU_RIGHT_Y                     = -200              
+IMU_RIGHT_Y                     = 0          
 #===========================================                 
 TURN_RIGHT_X                    = -900                                              
-TURN_RIGHT_Y                    = -200                                                  
+TURN_RIGHT_Y                    = 0                                                 
 TURN_RIGHT_THETA                = -7         #3 
 #=========================================== 
 IMU_LEFT_X                      = -800
 IMU_LEFT_Y                      = -400
 #===========================================                                         
 TURN_LEFT_X                     = -800                                          
-TURN_LEFT_Y                     = -400                                                
+TURN_LEFT_Y                     = -500                                                
 TURN_LEFT_THETA                 = 4            #3
 #===========================================
 SLOPE_RIGHT_TRANSLATE_X         = -600  
 SLOPE_RIGHT_TRANSLATE_Y         = -900
-SLOPE_RIGHT_TRANSLATE_THETA     = -2.35
+SLOPE_RIGHT_TRANSLATE_THETA     = -2
 #===========================================
-SLOPE_LEFT_TRANSLATE_X          = -500
+SLOPE_LEFT_TRANSLATE_X          = -400
 SLOPE_LEFT_TRANSLATE_Y          = 900
-SLOPE_LEFT_TRANSLATE_THETA      = 0
+SLOPE_LEFT_TRANSLATE_THETA      = 1
 #===========================================
 YY_WALKWAY            =     100 #黃黃通道大小
 YY_ERRO               =     15 #黃黃通道中心與畫面中心誤差值
@@ -82,7 +81,7 @@ PRETURN_LEFT_ANGLE    = 60
 
 PRETURN_RIGHT         = False
 # PRETURN_RIGHT         = True #預轉身右
-PRETURN_RIGHT_ANGLE   = 30
+PRETURN_RIGHT_ANGLE   = 40
 #===========================================
 YELLOW_WALKWAY              = False #如果沒有黃黃通道就把它關了
 YELLOW_SMALL_TURNHEAD       = False #通道不夠大轉頭
@@ -1006,30 +1005,32 @@ class Obs(Node): #各種避障動作
             # send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
             # send.sendHeadMotor(2,2400,100) #頭往上抬
             # time.sleep(3)
-            while self.crawl_cnt < 7 and self.image.deep_y == 24:   #cnt3數到7(4次)            
+            send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
+            send.sendHeadMotor(2,HEAD_HEIGHT_,100)  #抬頭看有沒有障礙物
+            
+            while self.crawl_cnt < 8 and self.image.deep_y == 24:   #cnt3數到7(4次)            
                 send.sendBodySector(82)
                 time.sleep(4)
                 status.reddoor_state = "789888"
                 self.crawl_cnt += 1
                 self.status.crawl_cnt += 1
-            if self.crawl_cnt > 8 :
+                        
+            if self.image.deep_y < 24:
+                status.reddoor_state = "提早爬起"
+                time.sleep(1)
+
+            elif self.crawl_cnt > 9 :
                 send.sendBodySector(82)
                 time.sleep(4)
-                send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
-                send.sendHeadMotor(2,HEAD_HEIGHT,100)
 
-            send.sendBodySector(83) # 把忍者跑拿掉，call站姿
-            # send.sendBodySector(201)
-            time.sleep(20)     
-
-            # else :            
+            send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
+            send.sendHeadMotor(2,HEAD_HEIGHT,100)
+            # else:
             #     status.reddoor_state = "提早爬起"
             #     time.sleep(1)
-            #     send.sendBodySector(3333)
-            #     time.sleep(11)
-            #     send.sendBodySector(29)
-            #     time.sleep(1)
-            #     send.sendbodyAuto(1)
+            
+            send.sendBodySector(83) # 把忍者跑拿掉，call站姿
+            time.sleep(20)     
             send.sendbodyAuto(1)
 
             while self.i < 300:
@@ -1043,16 +1044,6 @@ class Obs(Node): #各種避障動作
             time.sleep(5)
             send.sendbodyAuto(1)
             
-            # time.sleep(1)
-            # send.sendBodySector(81)
-            # time.sleep(10)
-            # send.sendBodySector(82)
-            # time.sleep(10)
-            # send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
-            # send.sendHeadMotor(2,HEAD_HEIGHT,100)
-            # send.sendBodySector(83)
-            # time.sleep(20)
-            # send.sendbodyAuto(1)
             self.walk.face_imu = 0
             if REDDOOR_IMU:
                 while ( abs(send.imu_rpy[2]) > 2) and status.running:
@@ -1231,7 +1222,7 @@ class Obs(Node): #各種避障動作
                 self.turn_head_dx = True
                 status.turnHead_state = "頭面向牆"
                 self.walk.move('face_left_forward')
-                time.sleep(5)
+                time.sleep(2)
                 if len(send.object_x_max[5]) > 0 and len(send.object_sizes[5]) > 0:
                     if (send.object_x_max[5][0] > 240) and (send.color_counts[5] >= 1) and (send.object_sizes[5][0] > 9000) and (self.image.deep_y >= 5):
                         break
