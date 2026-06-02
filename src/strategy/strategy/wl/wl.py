@@ -13,7 +13,7 @@ from rclpy.node import Node
 from tku_msgs.msg import SensorPackage
 
 # --- 全域參數 (對齊原始邏輯) ---
-WIGHT = 60
+WIGHT = 70
 HEAD_MOTOR_START = 1500    
 HEAD_MOTOR_FINISH = 1350    
 FLAG1 = False  
@@ -302,7 +302,7 @@ class WeightLift(API):
                 if self.body_auto: 
                     self.walk_switch()
                 time.sleep(2.5)
-                self.sendBodySector(123)  #提右手拉左腳
+                self.sendBodySector(123)  #拉左腳
                 time.sleep(1)
                 self.sendHeadMotor(2, 1320, 100)
                 self.sendBodySector(PICK_ONE)
@@ -311,7 +311,7 @@ class WeightLift(API):
                 time.sleep(6.5)
                 self.sendBodySector(PICK_TWO)
                 print("PICK_TWO")
-                time.sleep(5)
+                time.sleep(5.5)
                 self.sendBodySector(PICK_THREE)
                 print("PICK_THREE")
                 time.sleep(8)
