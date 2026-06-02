@@ -17,9 +17,9 @@ from rclpy.node import Node
 # 2025.8.7
 #======================================================================================
 
-CORRECT       = [-800, -300, -1]        # 原地踏步修正
+CORRECT       = [-750, -400, -1]        # 原地踏步修正
 LEFT_CORRECT  = [-850, -150, 4]        # 左旋修正
-RIGHT_CORRECT = [-850, -300, -4]       # 右旋修正
+RIGHT_CORRECT = [-850, -300, -5]       # 右旋修正
 #                 x , y , theta
 
 #====================================================================================
@@ -42,7 +42,7 @@ BASTET_LENGTH =  10  #增加以下全域變數
 FOCAL_LENGTH  = 330 # 333 
 TEST_DISTANCE = 60
 
-VALUEE = 33
+VALUEE = 22
 #VALUEE = 2  #框測試.  比賽時輸入的狀態決定投的策略  取代Diovalue
 #VALUEE = 22 #2分球
 #VALUEE = 33 #3分球
@@ -333,13 +333,23 @@ class MotorMove():
     
             self.api.get_logger().info(f"head_horizon = {self.head_horizon}")
             self.MoveW = self.head_horizon - turn_degree
-            if abs(self.MoveW) > 2:
-                pass
+            if abs(self.MoveW) > 15:
+                self.MoveW = 15 if self.MoveW > 0 else -15
+
+            elif abs(self.MoveW) > 5:
+                self.MoveW = 5 if self.MoveW > 0 else -5
+
             else:
-                self.MoveW = -2 if self.MoveW < 0 else 2 
-                # elif self.MoveW < -3:
-                    #  self.MoveW = -3
-            self.waist_rotate((self.waist_position + self.MoveW), 15)
+                self.MoveW = 2 if self.MoveW > 0 else -2
+
+            self.waist_rotate(self.waist_position + self.MoveW, 15)
+            # if abs(self.MoveW) > 2:
+            #     pass
+            # else:
+            #     self.MoveW = -2 if self.MoveW < 0 else 2 
+            #     # elif self.MoveW < -3:
+            #         #  self.MoveW = -3
+            # self.waist_rotate((self.waist_position + self.MoveW), 15)
             self.api.get_logger().info(f"貓頭鷹修腰 head_horizon = {self.head_horizon}")
             self.api.get_logger().info(f'self.MoveW = {self.MoveW}')
             time.sleep(0.5)
@@ -842,7 +852,7 @@ class BasketBall(API):
                         self.motor.move_head(1, FIVEPOINT_HEAD_Y_DEGREE[0], 880, 880, 50)
                         time.sleep(1)
                         self.get_logger().debug(f'頭部垂直旋轉調整')
-                        self.motor.move_head(2, 1900, 880, 880, 50)
+                        self.motor.move_head(2, 2048, 880, 880, 50)
 
                     else:
                         self.get_logger().info(f'5分球')
@@ -1032,7 +1042,7 @@ class BasketBall(API):
                         self.motor.move_head(1, FIVEPOINT_HEAD_Y_DEGREE[0], 880, 880, 50)
                         time.sleep(1)
                         self.get_logger().debug(f'頭部垂直旋轉調整')
-                        self.motor.move_head(2, 1900, 800, 880, 50)
+                        self.motor.move_head(2, 2048, 880, 880, 50)
                         time.sleep(1)
     
                 else:
@@ -1069,9 +1079,9 @@ class BasketBall(API):
                             # self.get_logger().info(f'手臂旋轉調整')
                             # self.sendBodySector(5) 
                             # time.sleep(0.05) 
-                            self.get_logger().info(f'開爪')
+                            self.get_logger().info(f'開爪') #5301 7 
                             self.sendBodySector(5502)
-                            time.sleep(11)
+                            time.sleep(10)
                             self.get_logger().info(f'投籃')
                             self.sendBodySector(503)
                             #self.sendBodySector(5503)
