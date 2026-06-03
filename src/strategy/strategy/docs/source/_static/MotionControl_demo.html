@@ -3,18 +3,20 @@
 
 <head>
     <meta http-equiv="Content_Type" content="text/html" charset="UTF-8">
-    <link rel="SHORTCUT ICON" href="./picture/icon.png">
+    <link rel="SHORTCUT ICON" href="../hurocup_interface/picture/icon.png">
     <title>MotionControl</title>
 
-    <script src="./js/jquery.min.js"></script>
-    <script src="./js/jquery-ui.min.js"></script>
-    <script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
-    <script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
-    <script type="text/javascript" src="./js/Interface.js"></script>
-    <script type="text/javascript" src="./js/InterfaceTable.js"></script>
+    <script src="../hurocup_interface/js/jquery.min.js"></script>
+    <script src="../hurocup_interface/js/jquery-ui.min.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/roslib/eventemitter2.min.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/roslib/roslib.min.js"></script>
+    <script>window._DEMO_MODE_FORCED = true;</script>
+    <script type="text/javascript" src="../hurocup_interface/js/roslib-demo.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/Interface.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/InterfaceTable.js"></script>
     
-    <link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
-    <link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/InterfaceTable.css">
+    <link rel="stylesheet" type="text/css" rel="stylesheet" href="../hurocup_interface/css/style.css">
+    <link rel="stylesheet" type="text/css" rel="stylesheet" href="../hurocup_interface/css/InterfaceTable.css">
 
     <style>
         .button{
@@ -208,22 +210,20 @@
         #history-list .hp-item-future { color: #554400; padding: 1px 4px; }
         #history-list .hp-empty       { color: #444;    text-align: center; padding: 4px; }
     </style>
-    <script src="../src/strategy/strategy/strategy.js"></script>
+    <script src="../hurocup_interface/js/strategy.js"></script>
 </head>
 
 <body>
     <ul>
         <li class="logo" style="width: 226px;">
-            <a target="_blank" href="index.html" class="logo"><img id="logoimg"
-                    src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+            <a target="_blank" href="../hurocup_interface/index.html" class="logo"><img id="logoimg"
+                    src="../hurocup_interface/resources/TKU_ICLab/iclablogo-02.png"></a>
         </li>
-		<li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
-        <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
-        <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
-		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
-		<li><a target="_blank" class="navbarright" href="MotorMonitor.html">MotorMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="miniDRC.html">miniDRC</a></li>
+		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="Walking_demo.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControl_demo.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="ImageProcess_demo.html">ImageProcess</a></li>
+		<li><a target="_blank" class="navbarright" href="NodeMonitor_demo.html">NodeMonitor</a></li>
+        <li><a target="_blank" class="navbarright" href="../hurocup_interface/API.html">ROS2API</a></li>
     </ul>
 <!-- <br> -->
     <!-- 1. 狀態容器：固定在左側，不加 margin-left 確保位置不變 -->
@@ -534,10 +534,10 @@
             <div id="robotpic">
                 <div style="float: left; height: 470px ; width: 300px"> 
                     <button type="button" id="TorqueButton" onclick="TorqueSwitch();" class="neon-btn">扭力關閉</button>
-                    <!-- <img src="./picture/new_robot.jpg" style="margin-top: 15px;width:100%; height: 100%; border: solid black 2px;"> -->
+                    <!-- <img src="../hurocup_interface/picture/new_robot.jpg" style="margin-top: 15px;width:100%; height: 100%; border: solid black 2px;"> -->
                      <div id="robot-container" class="robot-overlay-container">
     <!-- 原始機器人底圖[cite: 1] -->
-    <img src="./picture/new_robot.jpg" style="width: 300px; height: 470px; border: solid black 2px;">
+    <img src="../hurocup_interface/picture/new_robot.jpg" style="width: 300px; height: 470px; border: solid black 2px;">
 
     <!-- 左手 -->
     <div id="pos-btn-1" class="pos-motor-btn" style="top: 9%; left: 58%;" onclick="toggleTorqueAtPosition(1)">1</div>
@@ -735,7 +735,7 @@
         <input type="button" id="nosavedata2" value="no" style="width:80px;">
     </dialog>
     
-    <script type="text/javascript" src="./js/Interface2.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/Interface2.js"></script>
 
     <script>
         const btn = document.getElementById('TorqueButton');

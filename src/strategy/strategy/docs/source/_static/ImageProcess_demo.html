@@ -3,14 +3,16 @@
 
 <head>
 	<meta charset="utf-8" />
-	<link rel="SHORTCUT ICON" href="./picture/icon.png">
+	<link rel="SHORTCUT ICON" href="../hurocup_interface/picture/icon.png">
 
 	<!-- CSS References -->
-	<link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
+	<link rel="stylesheet" type="text/css" rel="stylesheet" href="../hurocup_interface/css/style.css">
 
 	<!-- JavaScript References -->
-	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
-	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+	<script type="text/javascript" src="../hurocup_interface/js/roslib/eventemitter2.min.js"></script>
+	<script type="text/javascript" src="../hurocup_interface/js/roslib/roslib.min.js"></script>
+	<script>window._DEMO_MODE_FORCED = true;</script>
+	<script type="text/javascript" src="../hurocup_interface/js/roslib-demo.js"></script>
 	<script type="text/javascript" type="text/javascript">
 
 		var wasOnline = true;
@@ -21,7 +23,7 @@
 
 		function checkConnection() {
 			if (ros && window.navigator.onLine) {
-				document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+				document.body.style.backgroundImage = 'url(../hurocup_interface/picture/Background.jpg)';
 				// console.log('Setting background to online image');
 				if(!wasOnline){
 					console.log("Network status changed to online. Triggering enterAddress().");
@@ -30,7 +32,7 @@
 				}
 
 			}else{
-				document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+				document.body.style.backgroundImage = 'url(../hurocup_interface/picture/Background.jpg)';
 				console.log('Setting background to offline image');
 				if(wasOnline){
 					console.log("Network status changed to offline. Triggering enterAddress().");
@@ -60,7 +62,7 @@
 			console.log('Error connecting to websocket server: ', error);
 			document.getElementById('connected').style.display = 'none';
 			
-			document.body.style.backgroundImage = 'url(./picture/Gray_Background.jpg)';
+			document.body.style.backgroundImage = 'url(../hurocup_interface/picture/Gray_Background.jpg)';
 			clearInterval(checkConnectionInterval);
 		});
 		ros.on('close', function () {
@@ -70,7 +72,7 @@
 			document.getElementById("orign_image").style.display = 'none';
 			document.getElementById('connected').style.display = 'none';
 			
-			document.body.style.backgroundImage = 'url(./picture/Gray_Background.jpg)';
+			document.body.style.backgroundImage = 'url(../hurocup_interface/picture/Gray_Background.jpg)';
 			clearInterval(checkConnectionInterval);
 		});
 		
@@ -1048,7 +1050,7 @@
 			width: 1520px;
 			height: 1000px;
 			overflow: visible;
-			background-image: url(./picture/Gray_Background.jpg);
+			background-image: url(../hurocup_interface/picture/Gray_Background.jpg);
 			background-size: cover;
 			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 		}
@@ -1153,7 +1155,7 @@
 		}
 	</style>
 	<title>HumanoidInterface</title>
-	<script src="../src/strategy/strategy/strategy.js"></script>
+	<script src="../hurocup_interface/js/strategy.js"></script>
 
 <script>
 	window.addEventListener('DOMContentLoaded', function () {
@@ -1188,16 +1190,14 @@
 <body>
 	<!-- NAV BAR -->
 	<ul>
-		<li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
-        <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
-        <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
-		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
-		<li><a target="_blank" class="navbarright" href="MotorMonitor.html">MotorMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="miniDRC.html">miniDRC</a></li>
-        <!-- <li><a target="_blank" class="navbarright" href="PIDcontroll.html">PIDcontroll</a></li> -->
+		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="Walking_demo.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControl_demo.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="ImageProcess_demo.html">ImageProcess</a></li>
+		<li><a target="_blank" class="navbarright" href="NodeMonitor_demo.html">NodeMonitor</a></li>
+		<li><a target="_blank" class="navbarright" href="../hurocup_interface/API.html">ROS2API</a></li>
+        <li><a target="_blank" class="navbarright" href="../hurocup_interface/PIDcontroll.html">PIDcontroll</a></li>
 		<li class="logo">
-			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+			<a target="_blank" href="../hurocup_interface/index.html" class="logo"><img id="logoimg" src="../hurocup_interface/resources/TKU_ICLab/iclablogo-02.png"></a>
 		</li>
 	</ul>
 	<br />
@@ -1332,7 +1332,7 @@
 						<td>
 							<p class="text">Hue:</p>
 						</td>
-						<td><img src="./picture/HSVS255.jpg" width="230" height="20">
+						<td><img src="../hurocup_interface/picture/HSVS255.jpg" width="230" height="20">
 						</td>
 					</tr>
 					<tr>

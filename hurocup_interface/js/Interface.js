@@ -8,12 +8,14 @@ ros.on('connection', function () {
   resetfunction();
   document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
 
-  document.getElementById('resetButton').disabled = false;
-  document.getElementById('connected').style.display = 'inline';
-  document.getElementById('TorqueButton').disabled = false;
+  var el;
+  el = document.getElementById('resetButton'); if (el) el.disabled = false;
+  el = document.getElementById('connected'); if (el) el.style.display = 'inline';
+  el = document.getElementById('TorqueButton'); if (el) el.disabled = false;
 });
 ros.on('error', function (error) {
   console.log('Error connecting to websocket server: ', error);
+  if (!document.getElementById('SaveButton')) return;
   document.getElementById('SaveButton').disabled = true;
   document.getElementById('ReadButton').disabled = true;
   document.getElementById('SaveStandButton').disabled = true;
@@ -37,6 +39,7 @@ ros.on('error', function (error) {
 });
 ros.on('close', function () {
   console.log('Connection to websocket server closed.');
+  if (!document.getElementById('SaveButton')) return;
   document.getElementById('SaveButton').disabled = true;
   document.getElementById('ReadButton').disabled = true;
   document.getElementById('SaveStandButton').disabled = true;
@@ -304,10 +307,10 @@ function createTopicsDRC() {
   messageType: 'tku_msgs/SensorPackage'
   });
   SensorPackage_Subscriber.subscribe(function (msg)
-  {		
-    document.getElementById("Roll").value = msg.x;
-    document.getElementById("Pitch").value = msg.y;
-    document.getElementById("Yaw").value = msg.z;
+  {
+    document.getElementById("Roll").value = msg.roll !== undefined ? Number(msg.roll).toFixed(2) : '';
+    document.getElementById("Pitch").value = msg.pitch !== undefined ? Number(msg.pitch).toFixed(2) : '';
+    document.getElementById("Yaw").value = msg.yaw !== undefined ? Number(msg.yaw).toFixed(2) : '';
   });
   if(SendPackageCallBack != null)
   {
@@ -1395,6 +1398,7 @@ function stand()
 
 function resetfunction()
 {
+  if (!document.getElementById('label')) return;
   document.getElementById('label').innerHTML = "";
   document.getElementById('SaveButton').disabled = false;
   document.getElementById('ReadButton').disabled = false;

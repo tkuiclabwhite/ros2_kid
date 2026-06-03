@@ -4,22 +4,48 @@ Terminal 指令
 開啟主系統
 ----------
 
-.. code-block:: bash
+.. tabs::
 
-   cd ~/ros2_kid
-   source install/setup.bash
-   ros2 launch usb_cam camera.launch.py
+   .. tab:: 小人型 (KID)
+
+      .. code-block:: bash
+
+         cd ~/ros2_kid
+         source install/setup.bash
+         ros2 launch usb_cam camera.launch.py
+
+   .. tab:: 大人型 (ADULT)
+
+      .. code-block:: bash
+
+         cd ~/ros2_adult
+         source install/setup.bash
+         ros2 launch usb_cam camera.launch.py
 
 開啟策略
 --------
 
-.. code-block:: bash
+.. tabs::
 
-   cd ~/ros2_kid
-   source install/setup.bash
-   ros2 run strategy <策略名稱>
+   .. tab:: 小人型 (KID)
 
-**可用策略：** ``us``\ （足球）、``ar``\ （射箭）、``bb``\ （籃球）、``sp``\ （競走）、``obs``\ （避障）、``sr``\ （斯巴達）、``wl``\ （舉重）、``mar``\ （馬拉松）、``bm``\ （平衡木）、``lc``\ （上下板）
+      .. code-block:: bash
+
+         cd ~/ros2_kid
+         source install/setup.bash
+         ros2 run strategy <策略名稱>
+
+      **可用策略：** ``us``\ （足球）、``ar``\ （射箭）、``bb``\ （籃球）、``sp``\ （競走）、``obs``\ （避障）、``sr``\ （斯巴達）、``wl``\ （舉重）、``mar``\ （馬拉松）、``bm``\ （平衡木）、``lc``\ （上下板）
+
+   .. tab:: 大人型 (ADULT)
+
+      .. code-block:: bash
+
+         cd ~/ros2_adult
+         source install/setup.bash
+         ros2 run strategy <策略名稱>
+
+      **可用策略：** ``ar``\ （射箭）、``bb``\ （籃球）、``sp``\ （競走）、``obs``\ （避障）、``sr``\ （斯巴達）、``wl``\ （舉重）、``mar``\ （馬拉松）、``pk``\ （罰踢）、``rc``\ （攀岩）
 
 編譯
 ----

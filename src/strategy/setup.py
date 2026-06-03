@@ -45,6 +45,8 @@ setup(
             'hahafinal = strategy.mar.hahafinal:main',
             'newmar = strategy.mar.newmar:main',
             'mp = strategy.lc.mp:main',
+            'wl_tui  = strategy.wl.wl_new:main',
+            'us_new = strategy.us.us_new:main',
             ],
     },
 )

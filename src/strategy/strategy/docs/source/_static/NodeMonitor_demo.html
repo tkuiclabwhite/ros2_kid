@@ -3,11 +3,13 @@
 <head>
     <meta charset="utf-8" />
     <title>ROS2 Hybrid Log Monitor</title>
-    <link rel="SHORTCUT ICON" href="./picture/icon.png">
-    <link rel="stylesheet" type="text/css" href="./css/style.css">
+    <link rel="SHORTCUT ICON" href="../hurocup_interface/picture/icon.png">
+    <link rel="stylesheet" type="text/css" href="../hurocup_interface/css/style.css">
 
-    <script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
-    <script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/roslib/eventemitter2.min.js"></script>
+    <script type="text/javascript" src="../hurocup_interface/js/roslib/roslib.min.js"></script>
+    <script>window._DEMO_MODE_FORCED = true;</script>
+    <script type="text/javascript" src="../hurocup_interface/js/roslib-demo.js"></script>
 
     <style type="text/css">
         /* 基礎設定：防止水平捲軸出現 */
@@ -21,7 +23,7 @@
             margin: 0;
             padding: 0;
             overflow-x: hidden; /* 核心修正：禁止水平溢出 */
-            background-image: url(./picture/Gray_Background.jpg);
+            background-image: url(../hurocup_interface/picture/Gray_Background.jpg);
             background-size: cover;
             background-attachment: fixed;
             font-family: 'Consolas', 'Monaco', monospace;
@@ -169,14 +171,14 @@
         ];
 
         ros.on('connection', function () {
-            document.body.style.backgroundImage = 'url(./picture/Background.jpg)';
+            document.body.style.backgroundImage = 'url(../hurocup_interface/picture/Background.jpg)';
             document.getElementById('status-bar').innerText = "CONNECTED";
             document.getElementById('status-bar').style.color = "#00D600";
             initLogSubscription();
         });
 
         ros.on('close', () => {
-            document.body.style.backgroundImage = 'url(./picture/Gray_Background.jpg)';
+            document.body.style.backgroundImage = 'url(../hurocup_interface/picture/Gray_Background.jpg)';
             document.getElementById('status-bar').innerText = "DISCONNECTED";
         });
 
@@ -296,15 +298,12 @@
 
 <body>
     <ul>
-		<li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
-        <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
-        <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
-		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
-		<li><a target="_blank" class="navbarright" href="MotorMonitor.html">MotorMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="miniDRC.html">miniDRC</a></li>
+		<li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="Walking_demo.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" href="MotionControl_demo.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="ImageProcess_demo.html">ImageProcess</a></li>
+		<li><a target="_blank" class="navbarright" href="NodeMonitor_demo.html">NodeMonitor</a></li>
         <li class="logo">
-            <a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+            <a target="_blank" href="../hurocup_interface/index.html" class="logo"><img id="logoimg" src="../hurocup_interface/resources/TKU_ICLab/iclablogo-02.png"></a>
         </li>
     </ul>
 
