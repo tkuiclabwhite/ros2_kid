@@ -193,7 +193,7 @@ f"#====================================#\n"
 class UnitedSoccer(API):
     def __init__(self):
         super().__init__('us')
-        self.ball      = ObjectInfo('Orange', 'Ball',      self)
+        self.ball      = ObjectInfo('Yellow', 'Ball',      self)
         self.obs_right = ObjectInfo('Blue',   'OBS_right', self)
         self.obs_left  = ObjectInfo('Blue',   'OBS_left',  self)
         self.obs       = ObjectInfo('Blue',   'OBS',       self)
@@ -462,37 +462,37 @@ class UnitedSoccer(API):
             self.walk_flag = True
             self.sendBodyAutoCmd(FORWARD[2] + CORRECT[0], TRANSLATION[3] + CORRECT[1], THETA[3] + CORRECT[2])
 
-    def get_up(self, imu):
-        if imu > 15:
-            self.action_status = "向前倒，起身中"
-            self.sendHeadMotor(1, 2048, 0)
-            self.sendHeadMotor(2, 2420, 0)
-            self.sendBodyAutoCmd(0, 0, 0)
-            time.sleep(1.5)
-            self.sendBodySector(29)
-            time.sleep(1)
-            self.sendBodySector(1212)
-            time.sleep(19)
-            self.sendBodySector(29)
-            time.sleep(0.01)
-            self.sendBodySector(1)
-            time.sleep(1)
-            self._reset()
-        elif imu < -15:
-            self.action_status = "向後倒，起身中"
-            self.sendHeadMotor(1, 2048, 0)
-            self.sendHeadMotor(2, 2420, 0)
-            self.sendBodyAutoCmd(0, 0, 0)
-            time.sleep(1.5)
-            self.sendBodySector(29)
-            time.sleep(1)
-            self.sendBodySector(1211)
-            time.sleep(10)
-            self.sendBodySector(29)
-            time.sleep(0.01)
-            self.sendBodySector(1)
-            time.sleep(1)
-            self._reset()
+    # def get_up(self, imu):
+    #     if imu > 15:
+    #         self.action_status = "向前倒，起身中"
+    #         self.sendHeadMotor(1, 2048, 0)
+    #         self.sendHeadMotor(2, 2420, 0)
+    #         self.sendBodyAutoCmd(0, 0, 0)
+    #         time.sleep(1.5)
+    #         self.sendBodySector(29)
+    #         time.sleep(1)
+    #         self.sendBodySector(1212)
+    #         time.sleep(19)
+    #         self.sendBodySector(29)
+    #         time.sleep(0.01)
+    #         self.sendBodySector(1)
+    #         time.sleep(1)
+    #         self._reset()
+    #     elif imu < -15:
+    #         self.action_status = "向後倒，起身中"
+    #         self.sendHeadMotor(1, 2048, 0)
+    #         self.sendHeadMotor(2, 2420, 0)
+    #         self.sendBodyAutoCmd(0, 0, 0)
+    #         time.sleep(1.5)
+    #         self.sendBodySector(29)
+    #         time.sleep(1)
+    #         self.sendBodySector(1211)
+    #         time.sleep(10)
+    #         self.sendBodySector(29)
+    #         time.sleep(0.01)
+    #         self.sendBodySector(1)
+    #         time.sleep(1)
+    #         self._reset()
 
     def motion(self, state):
         self.current_func = f"motion({state})"
