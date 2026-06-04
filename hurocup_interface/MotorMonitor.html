@@ -48,17 +48,13 @@
             text-transform:uppercase; text-align:center;
             padding-bottom:8px; margin-bottom:12px;
         }
-        .p-pos  { border-color:rgba(3,233,244,0.3); }
-        .p-vel  { border-color:rgba(120,180,255,0.3); }
-        .p-cur  { border-color:rgba(0,214,0,0.3); }
-        .p-volt { border-color:rgba(255,170,0,0.3); }
-        .p-temp { border-color:rgba(255,90,50,0.3); }
+        .p-pos { border-color:rgba(3,233,244,0.3); }
+        .p-vel { border-color:rgba(120,180,255,0.3); }
+        .p-cur { border-color:rgba(0,214,0,0.3); }
 
-        .p-pos  .panel-title { color:#03e9f4; text-shadow:0 0 6px #03e9f4; border-bottom:1px solid rgba(3,233,244,0.25); }
-        .p-vel  .panel-title { color:#7eb8ff; text-shadow:0 0 6px #7eb8ff; border-bottom:1px solid rgba(120,180,255,0.25); }
-        .p-cur  .panel-title { color:#00D600; text-shadow:0 0 6px #00D600; border-bottom:1px solid rgba(0,214,0,0.25); }
-        .p-volt .panel-title { color:#ffaa00; text-shadow:0 0 6px #ffaa00; border-bottom:1px solid rgba(255,170,0,0.25); }
-        .p-temp .panel-title { color:#ff6b35; text-shadow:0 0 6px #ff6b35; border-bottom:1px solid rgba(255,90,50,0.25); }
+        .p-pos .panel-title { color:#03e9f4; text-shadow:0 0 6px #03e9f4; border-bottom:1px solid rgba(3,233,244,0.25); }
+        .p-vel .panel-title { color:#7eb8ff; text-shadow:0 0 6px #7eb8ff; border-bottom:1px solid rgba(120,180,255,0.25); }
+        .p-cur .panel-title { color:#00D600; text-shadow:0 0 6px #00D600; border-bottom:1px solid rgba(0,214,0,0.25); }
 
         /* ── Groups ── */
         .groups-row { display:flex; gap:8px; margin-bottom:10px; }
@@ -113,10 +109,8 @@
     <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
     <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
     <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
-    <li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
     <li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>
-    <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="MotorMonitor.html">MotorMonitor</a></li>
-    <li><a target="_blank" class="navbarright" href="miniDRC.html">miniDRC</a></li>
+    <li><a target="_blank" class="navbarright" style="text-decoration:underline;color:#03e9f4;" href="MotorMonitor.html">Monitor</a></li>
 </ul>
 
 <!-- ── TOPBAR ── -->
@@ -146,36 +140,22 @@
     </div>
 </div>
 
-<!-- ── BOTTOM ROW : Voltage | Temperature ── -->
-<div class="row row-bottom">
-    <div class="panel p-volt">
-        <div class="panel-title">Voltage (V) &nbsp;·&nbsp; group avg shown in header</div>
-        <div id="grp-voltage"></div>
-    </div>
-    <div class="panel p-temp">
-        <div class="panel-title">Temperature (°C) &nbsp;·&nbsp; group avg shown in header</div>
-        <div id="grp-temperature"></div>
-    </div>
-</div>
 
 <script>
 // ─────────────────────────────────────────────────
 //  Layout definition  (IDs match MotionControlInterface)
 // ─────────────────────────────────────────────────
 const GROUPS = [
-    { name:'L.HAND', ids:[1,2,3,4],          voltNom:148, voltMin:124, voltMax:168, sys:'16V' },
-    { name:'R.HAND', ids:[5,6,7,8],           voltNom:148, voltMin:124, voltMax:168, sys:'16V' },
-    { name:'WAIST',  ids:[9],                  voltNom:148, voltMin:124, voltMax:168, sys:'16V' },
-    { name:'L.LEG',  ids:[10,11,12,13,14,15], voltNom:148, voltMin:124, voltMax:168, sys:'16V' },
-    { name:'R.LEG',  ids:[16,17,18,19,20,21], voltNom:148, voltMin:124, voltMax:168, sys:'16V' },
-    { name:'HEAD',   ids:[22,23],              voltNom:148, voltMin:124, voltMax:168, sys:'16V' },
+    { name:'L.HAND', ids:[1,2,3,4]          },
+    { name:'R.HAND', ids:[5,6,7,8]           },
+    { name:'WAIST',  ids:[9]                 },
+    { name:'L.LEG',  ids:[10,11,12,13,14,15] },
+    { name:'R.LEG',  ids:[16,17,18,19,20,21] },
+    { name:'HEAD',   ids:[22,23]             },
 ];
-const GROUPS_R1 = GROUPS.slice(0, 3);   // L.HAND, R.HAND, WAIST
-const GROUPS_R2 = GROUPS.slice(3, 6);   // L.LEG,  R.LEG,  HEAD
+const GROUPS_R1 = GROUPS.slice(0, 3);
+const GROUPS_R2 = GROUPS.slice(3, 6);
 const ALL_IDS   = GROUPS.flatMap(g => g.ids);
-
-const ID_GROUP  = {};
-GROUPS.forEach(g => g.ids.forEach(id => { ID_GROUP[id] = g; }));
 
 // ─────────────────────────────────────────────────
 //  Per-panel bar configuration
@@ -196,19 +176,6 @@ const BAR_CFG = {
         fmt: v => (v >= 0 ? '+' : '') + Math.round(v) + ' mA',
         col: v  => { const a = Math.abs(v); return a < 300 ? '#00D600' : a < 800 ? '#ffaa00' : '#ff4444'; },
     },
-    voltage: {
-        centre:false,
-        fmt: v => (v / 10).toFixed(1) + 'V',
-        col: (v, g) => {
-            const dev = Math.abs(v - g.voltNom) / g.voltNom;
-            return dev < 0.05 ? '#00D600' : dev < 0.12 ? '#ffaa00' : '#ff4444';
-        },
-    },
-    temperature: {
-        centre:false, min:0, max:80,
-        fmt: v => v.toFixed(1) + '°C',
-        col: v  => v < 45 ? '#00D600' : v < 60 ? '#ffaa00' : '#ff4444',
-    },
 };
 
 // ─────────────────────────────────────────────────
@@ -216,7 +183,7 @@ const BAR_CFG = {
 // ─────────────────────────────────────────────────
 const mData = {};
 ALL_IDS.forEach(id => {
-    mData[id] = { position:0, velocity:0, current:0, voltage:0, temperature:0 };
+    mData[id] = { position:0, velocity:0, current:0 };
 });
 
 // ─────────────────────────────────────────────────
@@ -261,7 +228,7 @@ function buildPanel(panelKey) {
     });
 }
 
-['position', 'velocity', 'current', 'voltage', 'temperature'].forEach(buildPanel);
+['position', 'velocity', 'current'].forEach(buildPanel);
 
 // ─────────────────────────────────────────────────
 //  Update helpers
@@ -300,57 +267,10 @@ function updateBarStd(panelKey, id, raw) {
     if (bv) { bv.textContent = cfg.fmt(v); bv.style.color = col; }
 }
 
-function updateVoltBar(id, raw) {
-    const cfg = BAR_CFG.voltage;
-    const g   = ID_GROUP[id];
-    if (!g) return;
-    const bf  = document.getElementById('bf-voltage-' + id);
-    const bv  = document.getElementById('bv-voltage-' + id);
-    if (!bf) return;
-
-    const v   = Number(raw);
-    const col = cfg.col(v, g);
-    const pct = Math.min(100, Math.max(0, (v - g.voltMin) / (g.voltMax - g.voltMin) * 100));
-
-    bf.style.width      = pct + '%';
-    bf.style.background = col;
-    bf.style.boxShadow  = '0 0 3px ' + col;
-    if (bv) { bv.textContent = cfg.fmt(v); bv.style.color = col; }
-
-    refreshGroupAvg('voltage', g);
-}
-
-function updateTempBar(id, raw) {
-    updateBarStd('temperature', id, raw);
-    refreshGroupAvg('temperature', ID_GROUP[id]);
-}
-
-function refreshGroupAvg(field, g) {
-    if (!g) return;
-    const el = document.getElementById('gavg-' + field + '-' + g.name);
-    if (!el) return;
-
-    const vals = g.ids.map(id => mData[id][field]);
-    const avg  = vals.reduce((a, b) => a + b, 0) / vals.length;
-    let col, label;
-
-    if (field === 'voltage') {
-        col   = BAR_CFG.voltage.col(avg, g);
-        label = 'avg ' + (avg / 10).toFixed(1) + 'V';
-    } else {
-        col   = BAR_CFG.temperature.col(avg);
-        label = 'avg ' + avg.toFixed(1) + '°C';
-    }
-    el.textContent = label;
-    el.style.color  = col;
-}
-
 function setField(field, id, val) {
     if (!mData[id]) return;
     mData[id][field] = Number(val);
-    if      (field === 'voltage')     updateVoltBar(id, val);
-    else if (field === 'temperature') updateTempBar(id, val);
-    else                              updateBarStd(field, id, val);
+    updateBarStd(field, id, val);
 }
 
 // ─────────────────────────────────────────────────
@@ -393,10 +313,6 @@ function subscribeAll() {
         msg.name.forEach((n, i) => setField('velocity',    parseInt(n), msg.velocity[i])));
     sub('/joint_currents',     'sensor_msgs/msg/JointState', msg =>
         msg.name.forEach((n, i) => setField('current',     parseInt(n), msg.effort[i])));
-    sub('/joint_voltages',     'sensor_msgs/msg/JointState', msg =>
-        msg.name.forEach((n, i) => setField('voltage',     parseInt(n), msg.position[i])));
-    sub('/joint_temperatures', 'sensor_msgs/msg/JointState', msg =>
-        msg.name.forEach((n, i) => setField('temperature', parseInt(n), msg.position[i])));
 }
 
 window.onload = function() { try { connectRos(); } catch(e){} };

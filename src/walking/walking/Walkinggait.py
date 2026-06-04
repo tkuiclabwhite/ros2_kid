@@ -196,6 +196,7 @@ class WalkingGaitByLIPM:
 
             print(f"--- Step: {self.now_step_} ---", flush = True)
             print(f"系統狀態: {current_state_name}", flush = True)
+            # print(f"DEBUG: [Check] lift_height 最終回傳值: {self.lift_height_}", flush=True)
             # print(f"當前擺動腳: {swing_leg}")
             # print(f"目標落腳點: X={self.footstep_x:.2f}, Y={self.footstep_y:.2f}")
             

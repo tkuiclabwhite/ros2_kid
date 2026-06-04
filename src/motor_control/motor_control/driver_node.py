@@ -33,15 +33,13 @@ ADDR_GOAL_POSITION          = 116
 ADDR_PRESENT_CURRENT        = 126
 ADDR_PRESENT_VELOCITY       = 128
 ADDR_PRESENT_POSITION       = 132
-ADDR_PRESENT_INPUT_VOLTAGE  = 144
-ADDR_PRESENT_TEMPERATURE    = 146
 
 LEN_GOAL_POSITION           = 4
 LEN_PRESENT_POSITION        = 4
 LEN_PROFILE_VELOCITY        = 4
 LEN_PROFILE_ACCELERATION    = 4
 LEN_SYNC_WRITE_ALL          = 12   # Acc(4) + Vel(4) + Pos(4)
-LEN_SYNC_READ               = 21   # addr 126 → 146 inclusive
+LEN_SYNC_READ               = 10   # addr 126-135: current(2) + velocity(4) + position(4)
 
 PROTOCOL_VERSION            = 2.0
 
@@ -63,7 +61,6 @@ class DynamixelDriver(Node):
         self.joint_data = defaultdict(lambda: {
             'present': None, 'goal': None, 'velocity': 0, 'accel': 0,
             'present_velocity': 0, 'present_current': 0,
-            'present_voltage': 0, 'present_temperature': 0,
         })
 
         self.head_map = {1: 22, 2: 23}
@@ -88,8 +85,6 @@ class DynamixelDriver(Node):
         self.joint_pub = self.create_publisher(JointState, '/joint_states',       10)
         self.vel_pub   = self.create_publisher(JointState, '/joint_velocities',   10)
         self.cur_pub   = self.create_publisher(JointState, '/joint_currents',     10)
-        self.volt_pub  = self.create_publisher(JointState, '/joint_voltages',     10)
-        self.temp_pub  = self.create_publisher(JointState, '/joint_temperatures', 10)
 
         self.joint_sub  = self.create_subscription(JointState,       '/joint_commands', self._command_cb, 10)
         self.torque_sub = self.create_subscription(Int16MultiArray,  '/set_torque',     self._torque_cb,  10)
@@ -364,9 +359,6 @@ class DynamixelDriver(Node):
                 raw = gr.getData(mid, ADDR_PRESENT_CURRENT, 2)
                 self.joint_data[mid]['present_current'] = raw - 65536 if raw > 0x7FFF else raw
 
-                self.joint_data[mid]['present_voltage']     = gr.getData(mid, ADDR_PRESENT_INPUT_VOLTAGE, 2)
-                self.joint_data[mid]['present_temperature'] = gr.getData(mid, ADDR_PRESENT_TEMPERATURE, 1)
-
         # ── Step 3: Publish ────────────────────────────────────────────────
         now   = self.get_clock().now().to_msg()
         ids   = sorted(self.joint_data.keys())
@@ -390,16 +382,6 @@ class DynamixelDriver(Node):
         cur_msg.header.stamp = now; cur_msg.name = names
         cur_msg.effort = _f('present_current')
         self.cur_pub.publish(cur_msg)
-
-        volt_msg = JointState()
-        volt_msg.header.stamp = now; volt_msg.name = names
-        volt_msg.position = _f('present_voltage')
-        self.volt_pub.publish(volt_msg)
-
-        temp_msg = JointState()
-        temp_msg.header.stamp = now; temp_msg.name = names
-        temp_msg.position = _f('present_temperature')
-        self.temp_pub.publish(temp_msg)
 
 
 def main(args=None):
