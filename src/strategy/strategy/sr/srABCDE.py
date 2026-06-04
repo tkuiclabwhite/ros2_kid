@@ -76,6 +76,26 @@ MY_LINE_X =160 #攀岩基準線
 MY_SIZE = 1020
 ROI_RADIUS = 120
 
+# ====== 新增：BB 距離抓點參數 ======
+# 距離公式：distance_cm = FOCAL_LENGTH * HOLD_REAL_HEIGHT_CM / pixel_height
+# HOLD_REAL_HEIGHT_CM 請填你攀岩點實際高度，例如 8cm、10cm。
+HOLD_REAL_HEIGHT_CM        = 15      # 距離計算的基準。
+FOCAL_LENGTH               = 330.0
+TARGET_DISTANCE_CM         = 10.0     # 手和攀岩點的距離
+DISTANCE_OK_RANGE_CM       = 3.0      # 抓點距離容許誤差
+
+# ====== 新增：IMU 走路參數，參考 SP 的 yaw 修正 ======
+IMU_YAW_DEAD_ZONE          = 2.0
+IMU_YAW_BIG_ZONE           = 5.0
+IMU_THETA_SMALL            = 1
+IMU_THETA_BIG              = 3
+
+# 對牆前進距離控制，不再只用 size
+WALL_TARGET_DISTANCE_CM    = 10     # 走路接近牆的停止距離。
+WALL_DISTANCE_OK_CM        = 3.0
+WALL_FOCAL_LENGTH          = 330.0
+WALL_REAL_HEIGHT_CM        = 10      # 用底部兩個攀岩點高度估距；若點實際高度不同請改
+
 #前後值
 BACK_MIN                   = -600                #小退後
 FORWARD_MIN               = 100
@@ -87,11 +107,9 @@ FORWARD_HIGH                = 500               #大前進
 TRANSLATION_BIG            = 500                  #大平移
 TRANSLATION_NORMAL         = 300
 #旋轉值
-IMU_YAW_DEAD_ZONE          = 2.0
-IMU_YAW_BIG_ZONE           = 5.0
-IMU_THETA_SMALL            = 1
-IMU_THETA_BIG              = 3
-
+# THETA_MIN                  = 3                     #小旋轉
+# THETA_NORMAL               = 1                    #旋轉
+# THETA_BIG                  = 5                     #大旋轉
 #----------------------------------------手校正
 LHEAD_X_CA = 2576
 LHEAD_Y_CA = 2101
@@ -177,6 +195,7 @@ class WallClimbing(API):
                     #self.sendSensorReset()   #!!記得改 debug用
                     self.sendHeadMotor(1,HEAD_HORIZONTAL, 80)#水平
                     self.sendHeadMotor(2,HEAD_VERTICAL, 80)#垂直
+                    self.sendSensorReset(True)
                     time.sleep(1)
                     self.reset = False
 
@@ -400,71 +419,6 @@ class WallClimbing(API):
             self.get_logger().info("丟失目標...\033[K")
             
         
-    def new_edge_judge(self):
-        # 如果完全沒目標
-        if not hasattr(self, 'lost_target_count'): self.lost_target_count = 0
-
-        if self.size == 0 and self.object_x == 0:
-            self.lost_target_count += 1
-            self.forward = 0.0
-            self.translation = 0.0
-            if self.lost_target_count > 20: # 連續 1 秒沒看到
-                self.state = "目標丟失：搜尋中"
-                self.forward= 500 # 緩慢直走找尋
-            return 'walking'  
-        else:
-            self.lost_target_count = 0
-
-        # 偏差計算 ---
-
-        error_x = MY_LINE_X - self.object_x
-        error_size = MY_SIZE - self.size
-
-        self.get_logger().info(f"目前面積:{self.size}")
-        self.get_logger().info(f"垂直線:{MY_LINE_X},我的面積:{MY_SIZE}")
-        self.get_logger().info(f"誤差size:{error_size}, 誤差x:{error_x}")
-        
-        # 前後距離控制 ---
-        if not self.forward_ok :
-            if abs(error_size) <= 10:   #前進死區值
-                self.forward = 0.0 
-                time.sleep(2)
-                self.forward_ok = True 
-            else:
-                if error_size > 0:
-                    if error_size > 200 and error_size <400:
-                        self.forward = FORWARD_NORMAL
-                    elif error_size > 401:
-                        self.forward = FORWARD_HIGH
-                    else:
-                        self.forward = FORWARD_LOW
-                else:
-                    self.forward = BACK_MIN
-        else:
-                self.get_logger().info("前進對齊,準備平移")
-                if self.object_x > 0:            
-                    self.translation = max(min(error_x * 35, 1000), -1000) if abs(error_x) > 10.0 else 0.0
-                else:
-                    self.translation = 0.0
-
-                self.pos_x_ok = abs(error_x) <= 15 or self.object_x == 0      #平移死區值
-
-        if self.forward_ok  and self.pos_x_ok : 
-            if not hasattr(self, 'ready_count'): self.ready_count = 0
-            self.get_logger().info("穩定加一")
-            time.sleep(0.25)
-            self.ready_count += 1
-        else:
-            self.ready_count = 0
-
-        if  self.ready_count > 2: #  5 幀穩定
-            self.state = "對齊完成：切換攀爬模式"
-            return "ready_to_cw"
-        else:
-            self.state = f"對齊中...穩定度:{int(self.ready_count/2*100)}%"
-            return "walking"
-        
-
     def get_yaw_value(self):
         """安全讀取 IMU yaw：優先用 self.yaw，沒有就用 self.imu_rpy[2]。"""
         if hasattr(self, 'yaw'):
@@ -490,59 +444,141 @@ class WallClimbing(API):
         elif yaw < -IMU_YAW_DEAD_ZONE:
             return IMU_THETA_SMALL
         return 0
-         
 
+    def bbox_distance_cm(self, ymin, ymax, real_height_cm=HOLD_REAL_HEIGHT_CM, focal_length=FOCAL_LENGTH):
+        """
+        BB 距離法：distance = focal_length * real_height / pixel_height
+        pixel_height = 影像中攀岩點的高度。
+        """
+        pixel_h = max(1, int(ymax - ymin))
+        return (focal_length * real_height_cm) / pixel_h
 
-    def walkinggait(self,motion):
-    #步態函數
+    def estimate_wall_distance_cm(self):
+        """
+        用目前 find_ladder 找到的兩個下方點估算離牆距離。
+        這裡先用 size 反推近似 pixel_height，讓原本流程不用大改。
+        若你之後有 bbox，可以改成直接用 ymax-ymin 更準。
+        """
+        if self.target_1_size <= 0 and self.target_2_size <= 0:
+            return 999.0
+
+        # 兩個點的平均面積，開根號近似成高度 pixel
+        avg_size = max(1.0, (self.target_1_size + self.target_2_size) / 2.0)
+        pixel_h = math.sqrt(avg_size)
+        return (WALL_FOCAL_LENGTH * WALL_REAL_HEIGHT_CM) / max(1.0, pixel_h)
+
+    def new_edge_judge(self):
+        """
+        改版：
+        1. 前後距離用 BB 距離公式概念，不再只看 size。
+        2. 左右平移仍用畫面中心 object_x 對齊。
+        3. theta 不在這裡用影像修，改由 walkinggait() 裡的 IMU 修正。
+        """
+        if not hasattr(self, 'lost_target_count'):
+            self.lost_target_count = 0
+
+        if self.size == 0 and self.object_x == 0:
+            self.lost_target_count += 1
+            self.forward = 0.0
+            self.translation = 0.0
+            self.forward_ok = False
+            self.pos_x_ok = False
+
+            if self.lost_target_count > 20:
+                self.state = "目標丟失：IMU 保持方向慢慢找牆"
+                self.forward = FORWARD_NORMAL
+            return 'walking'
+        else:
+            self.lost_target_count = 0
+
+        error_x = MY_LINE_X - self.object_x
+        wall_distance = self.estimate_wall_distance_cm()
+        distance_error = wall_distance - WALL_TARGET_DISTANCE_CM
+
+        self.get_logger().info(f"wall_distance:{wall_distance:.1f}cm target:{WALL_TARGET_DISTANCE_CM}cm")
+        self.get_logger().info(f"error_distance:{distance_error:.1f}cm error_x:{error_x}")
+
+        # ---------- 先控制前後距離 ----------
+        if not self.forward_ok:
+            if abs(distance_error) <= WALL_DISTANCE_OK_CM:
+                self.forward = 0.0
+                self.forward_ok = True
+                self.get_logger().info("前後距離完成，準備左右對齊")
+            else:
+                # distance_error > 0：離牆太遠，要前進
+                if distance_error > 12:
+                    self.forward = FORWARD_HIGH
+                elif distance_error > WALL_DISTANCE_OK_CM:
+                    self.forward = FORWARD_NORMAL
+                else:
+                    # distance_error < 0：太近，要後退
+                    self.forward = BACK_MIN
+
+            self.translation = 0.0
+            self.pos_x_ok = False
+
+        # ---------- 前後完成後，再控制左右平移 ----------
+        else:
+            self.forward = 0.0
+            if self.object_x > 0:
+                self.translation = max(min(error_x * 35, 1000), -1000) if abs(error_x) > 10 else 0.0
+            else:
+                self.translation = 0.0
+
+            self.pos_x_ok = abs(error_x) <= 15 or self.object_x == 0
+
+        # ---------- 穩定判斷 ----------
+        if self.forward_ok and self.pos_x_ok:
+            if not hasattr(self, 'ready_count'):
+                self.ready_count = 0
+            self.ready_count += 1
+        else:
+            self.ready_count = 0
+
+        if self.ready_count > 2:
+            self.state = "距離與左右對齊完成：切換攀爬模式"
+            return "ready_to_cw"
+        else:
+            self.state = f"IMU走路對齊中...穩定度:{int(self.ready_count/2*100)}%"
+            return "walking"
+
+    def walkinggait(self, motion):
+        """步態函數：走路 theta 改用 IMU 修正，參考 SP。"""
         if motion == 'ready_to_cw':
             self.get_logger().info("正面對齊：準備攀爬\033[K")
             self.forward = 0.0
             self.translation = 0.0
+            self.now_forward = 0.0
+            self.now_translation = 0.0
+            self.now_theta = 0.0
 
-            self.sendbodyAuto(0)        #停止步態
+            self.sendContinuousValue(0, 0, 0)
+            self.sendbodyAuto(0)
             time.sleep(0.5)
-            self.sendSensorReset(True)  #IMU reset 避免機器人步態修正錯誤
+            self.sendSensorReset(True)
+            self.sendBodySector(29)
+            time.sleep(1.0)
             self.state = 'ready_finish'
-            self.readyclimb = True  
+            self.readyclimb = True
+            return
 
+        self.now_forward = self.ramp_speed(self.now_forward, self.forward, BASE_CHANGE)
+        self.now_translation = self.ramp_speed(self.now_translation, self.translation, BASE_CHANGE)
+        self.theta = self.imu_walk_theta()
+        self.now_theta = self.ramp_speed(self.now_theta, self.theta, 1)
 
+        f = max(min(int(self.now_forward), 501), -501)
+        t = max(min(int(self.now_translation), 1001), -1001)
+        r = max(min(int(self.now_theta), 5), -5)
+
+        self.get_logger().info(f"IMU yaw:{self.get_yaw_value():.2f}, theta:{r}")
+        self.get_logger().info(f"f:{f}, t:{t}")
+
+        # 前後距離還沒完成時，只前後走；完成後才平移修 x。
+        if not self.forward_ok:
+            self.sendContinuousValue(f, TRANSLATION_CORRECTION, r)
         else:
-            # self.now_forward = self.ramp_speed(self.now_forward, self.forward, BASE_CHANGE)
-            # self.now_translation = self.ramp_speed(self.now_translation, self.translation, BASE_CHANGE)
-               
-            # f = max(min(int(self.now_forward), 501), -501)
-            # t = max(min(int(self.now_translation), 1001), -1001)
-
-            # self.get_logger().info(f"now_forward   :{self.now_forward}")
-            # self.get_logger().info(f"now_translation  : {self.now_translation}")
-            
-            # self.get_logger().info(f"f   :{f}")
-            # self.get_logger().info(f"t   :{t}")
-            
-            # if not self.forward_ok:
-            #     self.sendContinuousValue(f, TRANSLATION_CORRECTION ,THETA_CORRECTION)
-            # else:
-            #     self.sendContinuousValue(FORWARD_CORRECTION,t,THETA_CORRECTION)
-
-
-            self.now_forward = self.ramp_speed(self.now_forward, self.forward, BASE_CHANGE)
-            self.now_translation = self.ramp_speed(self.now_translation, self.translation, BASE_CHANGE)
-            self.theta = self.imu_walk_theta()
-            self.now_theta = self.ramp_speed(self.now_theta, self.theta, 1)
-
-            f = max(min(int(self.now_forward), 1001), -1001)
-            t = max(min(int(self.now_translation), 1001), -1001)
-            r = max(min(int(self.now_theta), 5), -5)
-
-            self.get_logger().info(f"IMU yaw:{self.get_yaw_value():.2f}, theta:{r}")
-            self.get_logger().info(f"f:{f}, t:{t}")
-
-            # 前後距離還沒完成時，只前後走；完成後才平移修 x。
-            if not self.forward_ok:
-                self.sendContinuousValue(f, TRANSLATION_CORRECTION, r)
-            else:
-                self.sendContinuousValue(FORWARD_CORRECTION, t, r)
+            self.sendContinuousValue(FORWARD_CORRECTION, t, r)
 
 
     def ramp_speed(self, current, target, step):
@@ -819,29 +855,45 @@ class WallClimbing(API):
             self.drawImageFunction(3,1,xmin,xmax,ymin,ymax,0,255,255)
             self.drawImageFunction(4,1,self.ROI_cx,self.ROI_cx,self.ROI_cy,self.ROI_cy,0,255,255)
 
+    def build_hold_feature(self, center, size, bbox):
+        """把一個攀岩點轉成距離/形狀資訊，給評分和後面抓點使用。"""
+        xmin, ymin, xmax, ymax = bbox
+        w = max(1, xmax - xmin)
+        h = max(1, ymax - ymin)
+        distance_cm = self.bbox_distance_cm(ymin, ymax)
+        fill = float(size) / float(w * h)
+        aspect = float(w) / float(h)
+        grip = center
+        return {
+            'distance_cm': distance_cm,
+            'pixel_height': h,
+            'fill': fill,
+            'aspect': aspect,
+            'grip': grip,
+        }
+
     def get_best_climbing_target(self):
-        best_candidate =[]   # 每一次找攀爬點都重新開始
+        """
+        改版抓點：
+        原本只用 center/alignment/height 分數，現在加入 BB 距離法：
+        distance_score 越接近 TARGET_DISTANCE_CM 分數越高。
+        """
+        best_candidate = []
         color_1 = self.target.color1
         color_2 = self.target.color2
-        target_colors = [color_1,color_2]
-        
-        
-        point_r = 10 
+        target_colors = [color_1, color_2]
+        point_r = 10
 
-        
         for color in target_colors:
             cnts = self.color_counts[color]
 
-            for i in range(min(cnts, len(self.object_sizes[color])+1)):
-                # 取得基礎資訊
+            for i in range(min(cnts, len(self.object_sizes[color]))):
                 size = self.object_sizes[color][i]
-                if size < 300: continue # 過濾掉太小的雜訊
-                
-                # 取得邊界與中心
+                if size < 300:
+                    continue
 
-                cx =(self.object_x_max[color][i] + self.object_x_min[color][i])//2
-                cy =(self.object_y_max[color][i] + self.object_y_min[color][i])//2
-
+                cx = (self.object_x_max[color][i] + self.object_x_min[color][i]) // 2
+                cy = (self.object_y_max[color][i] + self.object_y_min[color][i]) // 2
                 if cx is None or cy is None:
                     continue
 
@@ -849,63 +901,73 @@ class WallClimbing(API):
                 xmin = self.object_x_min[color][i]
                 ymax = self.object_y_max[color][i]
                 ymin = self.object_y_min[color][i]
-                
-                # # --- 限制 1: 邊緣截斷過濾 (不可碰到畫面邊緣) ---
+                bbox = (xmin, ymin, xmax, ymax)
+
+                # 邊緣截斷過濾：碰邊的點不要抓
                 if xmin <= 0 or xmax >= 320 or ymin <= 0 or ymax >= 240:
                     continue
 
-                # --- 限制 2: 嚴格方形 ROI 判定 ---
-                dist = math.sqrt((cx - self.ROI_cx)**2 + (cy - self.ROI_cy)**2)
+                # ROI 過濾：只抓目前頭部視野中心附近的點
+                dist = math.sqrt((cx - self.ROI_cx) ** 2 + (cy - self.ROI_cy) ** 2)
                 if (dist + point_r) > ROI_RADIUS:
                     continue
 
+                feature = self.build_hold_feature((cx, cy), size, bbox)
+
                 center_ratio = 1.0 - (dist / ROI_RADIUS)
-                center_score = center_ratio * W_CENTER
+                center_score = int(center_ratio * W_CENTER)
 
-                align_ratio = 1.0 - (abs(cx - self.ROI_cx) / ROI_RADIUS)
-                alignment_score = align_ratio * W_ALIGN
-
-                height_ratio = (240.0 - cy) / 240.0
-                height_score = height_ratio * W_HEIGHT
-
+                alignment_score = int((1.0 - abs(cx - self.ROI_cx) / ROI_RADIUS) * 55)
                 height_score = int((240 - cy) * 5)
-                alignment_score = int((1 - abs(cx - self.ROI_cx) / ROI_RADIUS) * 55)  #評分參數測試改
-                
-                total_score = int(center_score + alignment_score + height_score)
-               
-                best_candidate.append ({
+
+                # BB 距離分數：越接近 TARGET_DISTANCE_CM 越高
+                distance_error = abs(feature['distance_cm'] - TARGET_DISTANCE_CM)
+                distance_ratio = 1.0 - min(distance_error / TARGET_DISTANCE_CM, 1.0)
+                distance_score = int(distance_ratio * 35)
+
+                # 填滿率分數：避免抓到很細、很破碎的雜訊
+                fill_score = int(max(0.0, min(feature['fill'], 1.0)) * 20)
+
+                total_score = int(center_score + alignment_score + height_score + distance_score + fill_score)
+
+                best_candidate.append({
                     'center': (cx, cy),
                     'score': total_score,
                     'size': size,
-                    'bbox': (xmin, ymin, xmax, ymax),
-                    'id': {i}
+                    'bbox': bbox,
+                    'feature': feature,
+                    'distance_cm': feature['distance_cm'],
+                    'id': i,
                 })
-                # 找出最高分
+
         if len(best_candidate) == 0:
             self.get_logger().info("畫面中沒有符合條件的攀爬點...")
             return 'no_object'
 
         best_candidate.sort(key=lambda x: x['score'], reverse=True)
-
         best = best_candidate[0]
 
-        best_score =best['score']
+        best_score = best['score']
         best_size = best['size']
         best_cx = best['center'][0]
         best_cy = best['center'][1]
         best_xmin = best['bbox'][0]
-        best_xmax = best['bbox'][2]
         best_ymin = best['bbox'][1]
-        best_ymax =  best['bbox'][3]
+        best_xmax = best['bbox'][2]
+        best_ymax = best['bbox'][3]
 
-        
-        self.get_logger().info(f"total_score,{best_score}")
-        self.get_logger().info(f"size:{best_size}") 
-        self.get_logger().info(f"cx:{best_cx},cy:{best_cy}")     
-        self.get_logger().info(f"xmin,{best_xmin},ymin,{best_ymin},xmax,{best_xmax},ymax,{best_ymax},")        
-        
+        self.get_logger().info(f"total_score:{best_score}")
+        self.get_logger().info(f"size:{best_size}")
+        self.get_logger().info(f"cx:{best_cx}, cy:{best_cy}")
+        self.get_logger().info(f"xmin:{best_xmin}, ymin:{best_ymin}, xmax:{best_xmax}, ymax:{best_ymax}")
+        self.get_logger().info(
+            f"dist:{best['feature']['distance_cm']:.1f}cm "
+            f"fill:{best['feature']['fill']:.2f} "
+            f"aspect:{best['feature']['aspect']:.2f}"
+        )
+
         return best
-        
+
 
     def lambs_select(self):
         # --- 1. 狀態初始化 (只會執行一次) ---
