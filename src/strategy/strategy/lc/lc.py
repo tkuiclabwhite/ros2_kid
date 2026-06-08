@@ -22,15 +22,15 @@ from strategy.lc.calculate_edge import deep_calculate
 
 #--校正量--#
 #前進量校正
-FORWARD_CORRECTION         = -600
+FORWARD_CORRECTION         = -400
 #平移校正
-TRANSLATION_CORRECTION     = -200
+TRANSLATION_CORRECTION     = -300
 #旋轉校正
 THETA_CORRECTION           = 0
 #基礎變化量(前進&平移)
 BASE_CHANGE                = 200                   
 #上下板前進量
-LCUP                       = 18000                 #上板 Y_swing = 7,Period_T = 840,OSC_LockRange = 0.4,BASE_Default_Z = 8,BASE_LIFT_Z = 3.2
+LCUP                       = 19000                 #上板 Y_swing = 7,Period_T = 840,OSC_LockRange = 0.4,BASE_Default_Z = 8,BASE_LIFT_Z = 3.2
 LCDOWN                     = 20000                 #下板 Y_swing = 7,Period_T = 840,OSC_LockRange = 0.4,BASE_Default_Z = 8,BASE_LIFT_Z = -1.5
 #每層LCDOWN微調開關
 LCDOWN_FLAG                = False
@@ -38,7 +38,7 @@ LCDOWN_FOUR                = 19000
 LCDOWN_FIVE                = 19500
 LCDOWN_SIX                 = 19500
 #上下板後路徑規劃
-ROUTE_PLAN_FLAG            = True
+ROUTE_PLAN_FLAG            = False
 
 '''
 平移最大量2000
@@ -75,40 +75,40 @@ DOWNBOARD_LAYER_FIVE       = True                  #sector(36) 下板微調站�
 BOARD_GND_LC               = True                 #板到地 磁區34
 
 GND_BOARD_LC_U               = True  #上U形板            
-UPBOARD_LAYER_TWO_U          = True                 
+UPBOARD_LAYER_TWO_U          = False                 
 UPBOARD_LAYER_THREE_U        = False                 
 
 DOWNBOARD_LAYER_FOUR_U       = False  #下U形板
-DOWNBOARD_LAYER_FIVE_U       = False
+DOWNBOARD_LAYER_FIVE_U       = True
 DOWNBOARD_LAYER_GND_U        = False
 
 DRAW_FUNCTION_FLAG         = True                 #影像繪圖開關
 START_LAYER                = 1
 BOARD_COLOR                = ["Green"  ,           #板子顏色(根據比賽現場調整)
-                              "Blue"   ,           #Blue Red Yellow Green
-                              "Red"    , 
-                              "Yellow" , 
-                              "Red"    , 
-                              "Blue"   , 
+                              "Red"   ,           #Blue Red Yellow Green
+                              "Yellow"    , 
+                              "Blue" , 
+                              "Yellow"    , 
+                              "Red"   , 
                               "Green"]              
 #----------#                       右腳           左腳
 #                              左 ,  中,  右|  左,  中,   右S
 FOOT                       = [93 , 116, 136, 165, 190, 220]
-HEAD_HORIZONTAL            = 2030                  #頭水平
+HEAD_HORIZONTAL            = 2040                  #頭水平
 HEAD_VERTICAL              = 1275                #頭垂直 #down 2750
 ##判斷值
 FOOTBOARD_LINE             = 215                  #基準線
 UP_WARNING_DISTANCE        = 3                    #上板危險距離
 DOWN_WARNING_DISTANCE      = 0                      #下板危險距離
-GO_UP_DISTANCE             = 13                    #上板距離
-GO_DOWN_DISTANCE           = 8                     #下板距離
+GO_UP_DISTANCE             = 45                  #上板距離
+GO_DOWN_DISTANCE           = 3                     #下板距離
 FIRST_FORWORD_CHANGE_LINE  = 50                    #小前進判斷線
 SECOND_FORWORD_CHANGE_LINE = 100                   #前進判斷線
 THIRD_FORWORD_CHANGE_LINE  = 150                   #大前進判斷線
 UP_BOARD_DISTANCE          = 60                    #最低上板需求距離
 
-BACK_MIN                   = -800                  #小後退
-BACK_NORMAL                = -1200                  #後退
+BACK_MIN                   = -600                  #小後退
+BACK_NORMAL                = -1000                  #後退
 FORWARD_MIN                = 600                  #小前進
 FORWARD_NORMAL             = 1000                  #前進
 FORWARD_BIG                = 1400                  #大前進
@@ -354,12 +354,12 @@ class LiftandCarry(API):
                     #                             com_height = 29.5,\
                     #                             back_flag = 0)
                     self.sendLCWalkParameter(                        
-                        com_y_swing  = float(-4),   #起步步態補償
+                        com_y_swing  = float(-3.5),   #起步步態補償
                         width_size   = float(4),  #雙腳距離
                         period_t     = int(280),  #步態頻率
-                        t_dsp        = float(0.35),  #雙支撐時間
+                        t_dsp        = float(0.15),  #雙支撐時間
                         clearance    = float(3),
-                        board_high   = float(1),
+                        board_high   = float(2),
                         stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
@@ -369,7 +369,7 @@ class LiftandCarry(API):
                     time.sleep(2)
                     # self.get_logger().info()
                     self.action_status ="準備上板"
-                    self.sendBodySector(210)          #上板前站姿調整
+                    self.sendBodySector(207)          #上板前站姿調整
                     # while not send.execute:
                     # self.get_logger().info()
                     self.action_status ="上板前姿勢"
@@ -389,12 +389,12 @@ class LiftandCarry(API):
                     #                             com_height = 29.5,\
                     #                             back_flag = 0)
                     self.sendLCWalkParameter(                        
-                        com_y_swing  = float(-4),   #起步步態補償
+                        com_y_swing  = float(-3.5),   #起步步態補償
                         width_size   = float(4),  #雙腳距離
                         period_t     = int(280),  #步態頻率
-                        t_dsp        = float(0.35),  #雙支撐時間
+                        t_dsp        = float(0.15),  #雙支撐時間
                         clearance    = float(3),
-                        board_high   = float(1),
+                        board_high   = float(2),
                         stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
@@ -404,7 +404,7 @@ class LiftandCarry(API):
                     time.sleep(2)
                     # self.get_logger().info()
                     self.action_status ="準備上板"
-                    self.sendBodySector(211)          #上板前站姿調整
+                    self.sendBodySector(207)          #上板前站姿調整
                     # while not send.execute:
                     # self.get_logger().info()
                     self.action_status ="上板前姿勢"
@@ -424,12 +424,12 @@ class LiftandCarry(API):
                     #                             com_height = 29.5,\
                     #                             back_flag = 0)
                     self.sendLCWalkParameter(                        
-                        com_y_swing  = float(-4),   #起步步態補償
+                        com_y_swing  = float(-3.5),   #起步步態補償
                         width_size   = float(4),  #雙腳距離
                         period_t     = int(280),  #步態頻率
-                        t_dsp        = float(0.35),  #雙支撐時間
+                        t_dsp        = float(0.15),  #雙支撐時間
                         clearance    = float(3),
-                        board_high   = float(1),
+                        board_high   = float(2),
                         stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
@@ -440,7 +440,7 @@ class LiftandCarry(API):
                     # rospy.sleep(1.5)
                     # self.get_logger().info()
                     self.action_status ="準備上板"
-                    self.sendBodySector(210)          #上板前站姿調整
+                    self.sendBodySector(207)          #上板前站姿調整
                     # while not send.execute:
                     # self.get_logger().info()
                     self.action_status ="上板前姿勢"
@@ -460,12 +460,12 @@ class LiftandCarry(API):
                     #                             com_height = 29.5,\
                     #                             back_flag = 0)
                     self.sendLCWalkParameter(                        
-                        com_y_swing  = float(-3),   #起步步態補償
+                        com_y_swing  = float(-3.5),   #起步步態補償
                         width_size   = float(4),  #雙腳距離
                         period_t     = int(280),  #步態頻率
-                        t_dsp        = float(0.35),  #雙支撐時間
+                        t_dsp        = float(0.15),  #雙支撐時間
                         clearance    = float(3),
-                        board_high   = float(1),
+                        board_high   = float(2),
                         stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
@@ -490,12 +490,12 @@ class LiftandCarry(API):
                     #                         com_height = 29.5,\
                     #                         back_flag = 0)
                     self.sendLCWalkParameter(                        
-                        com_y_swing  = float(-6),   #起步步態補償
+                        com_y_swing  = float(-3.5),   #起步步態補償
                         width_size   = float(4),  #雙腳距離
                         period_t     = int(280),  #步態頻率
                         t_dsp        = float(0.3),  #雙支撐時間
-                        clearance    = float(3),
-                        board_high   = float(1),
+                        clearance    = float(2.5),
+                        board_high   = float(1.5),
                         stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
@@ -504,7 +504,7 @@ class LiftandCarry(API):
                     time.sleep(2)
                     # self.get_logger().info()
                     self.action_status ="準備下板"
-                    self.sendBodySector(209)          #下板前站姿調整
+                    self.sendBodySector(210)          #下板前站姿調整
                     # while not send.execute:
                     # self.get_logger().info()
                     self.action_status ="下板前姿勢"
@@ -524,12 +524,12 @@ class LiftandCarry(API):
                     #                         com_height = 29.5,\
                     #                         back_flag = 0)
                     self.sendLCWalkParameter(                        
-                        com_y_swing  = float(-6),   #起步步態補償
+                        com_y_swing  = float(-3.5),   #起步步態補償
                         width_size   = float(4),  #雙腳距離
                         period_t     = int(280),  #步態頻率
                         t_dsp        = float(0.3),  #雙支撐時間
-                        clearance    = float(3),
-                        board_high   = float(1),
+                        clearance    = float(2.5),
+                        board_high   = float(1.5),
                         stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
@@ -538,7 +538,7 @@ class LiftandCarry(API):
                     time.sleep(2)
                     # self.get_logger().info()
                     self.action_status ="準備下板"
-                    self.sendBodySector(209)          #下板前站姿調整
+                    self.sendBodySector(210)          #下板前站姿調整
                     # while not send.execute:
                     # self.get_logger().info("下板前姿勢")
                     self.action_status ="下板前姿勢"
@@ -558,12 +558,12 @@ class LiftandCarry(API):
                     #                         com_height = 29.5,\
                     #                         back_flag = 0)
                     self.sendLCWalkParameter(                        
-                        com_y_swing  = float(-6),   #起步步態補償
+                        com_y_swing  = float(-3.5),   #起步步態補償
                         width_size   = float(4),  #雙腳距離
                         period_t     = int(280),  #步態頻率
                         t_dsp        = float(0.3),  #雙支撐時間
-                        clearance    = float(3),
-                        board_high   = float(1),
+                        clearance    = float(2.5),
+                        board_high   = float(1.5),
                         stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
@@ -572,7 +572,7 @@ class LiftandCarry(API):
                     time.sleep(2)
                     # self.get_logger().info()
                     self.action_status ="準備下板"
-                    self.sendBodySector(209)          #下板前站姿調整
+                    self.sendBodySector(210)          #下板前站姿調整
                     # while not send.execute:
                     # self.get_logger().info()
                     self.action_status ="下板前姿勢"
@@ -592,7 +592,7 @@ class LiftandCarry(API):
                     #                         com_height = 29.5,\
                     #                         back_flag = 0)
                     self.sendLCWalkParameter(                        
-                        com_y_swing  = float(-4),   #起步步態補償
+                        com_y_swing  = float(-3.5),   #起步步態補償
                         width_size   = float(4),  #雙腳距離
                         period_t     = int(280),  #步態頻率
                         t_dsp        = float(0.3),  #雙支撐時間
@@ -726,9 +726,9 @@ class LiftandCarry(API):
 
     def edge_judge(self):
     #邊緣判斷,回傳機器人走路速度與走路模式
-        if ((self.distance[0] < GO_UP_DISTANCE+8) and (self.distance[1] < GO_UP_DISTANCE+8) and\
-           (self.distance[2] < GO_UP_DISTANCE+9) and (self.distance[3] < GO_UP_DISTANCE+9) and\
-           (self.distance[4] < GO_UP_DISTANCE+8)and (self.distance[5] < GO_UP_DISTANCE+8)) and\
+        if ((self.distance[0] < GO_UP_DISTANCE+15) and (self.distance[1] < GO_UP_DISTANCE+15) and\
+           (self.distance[2] < GO_UP_DISTANCE+16) and (self.distance[3] < GO_UP_DISTANCE+16) and\
+           (self.distance[4] < GO_UP_DISTANCE+15)and (self.distance[5] < GO_UP_DISTANCE+15)) and\
             ((self.layer == 1 and GND_BOARD_LC_U) or (self.layer == 2 and UPBOARD_LAYER_TWO_U) or (self.layer == 3 and UPBOARD_LAYER_THREE_U)):
            #上板
            self.state = "上板U"
@@ -742,14 +742,14 @@ class LiftandCarry(API):
         #    return 'ready_to_lc'  
 
         elif (self.distance[0] < GO_UP_DISTANCE+2) and (self.distance[1] < GO_UP_DISTANCE+2) and\
-           (self.distance[2] < GO_UP_DISTANCE+2) and (self.distance[3] < GO_UP_DISTANCE+2) and\
+           (self.distance[2] < GO_UP_DISTANCE+4) and (self.distance[3] < GO_UP_DISTANCE+4) and\
            (self.distance[4] < GO_UP_DISTANCE+2)and (self.distance[5] < GO_UP_DISTANCE+2) and self.layer < 4:
            #上板
            self.state = "上板"
            return 'ready_to_lc'        
-        elif ((self.distance[0] < GO_DOWN_DISTANCE+15) and (self.distance[1] < GO_DOWN_DISTANCE+2) and\
+        elif ((self.distance[0] < GO_DOWN_DISTANCE+5) and (self.distance[1] < GO_DOWN_DISTANCE+2) and\
            (self.distance[2] < GO_DOWN_DISTANCE+2) and (self.distance[3] < GO_DOWN_DISTANCE+2) and\
-           (self.distance[4] < GO_DOWN_DISTANCE+2) and (self.distance[5] < GO_DOWN_DISTANCE+15)) and\
+           (self.distance[4] < GO_DOWN_DISTANCE+2) and (self.distance[5] < GO_DOWN_DISTANCE+5)) and\
            ((self.layer ==4 and DOWNBOARD_LAYER_FOUR_U) or (self.layer == 5  and DOWNBOARD_LAYER_FIVE_U) or (self.layer == 6 and DOWNBOARD_LAYER_GND_U)):
            #上板
            self.state = "下板U"
