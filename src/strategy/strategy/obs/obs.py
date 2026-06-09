@@ -25,22 +25,21 @@ HEAD_HEIGHT     = 1450 #頭高，位置為馬達目標刻度，2048為正朝前�
 HEAD_HEIGHT_    = 2200
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
-STAY_X                          = -600
-STAY_Y                          = -200
-STAY_THETA                      = -2
+STAY_X                          = -700
+STAY_Y                          = -400
+STAY_THETA                      = 0
 #=========================================== 
 MAX_FORWARD_X                   = 2500                                                     
-MAX_FORWARD_Y                   = -300
-MAX_FORWARD_THETA               = -2
+MAX_FORWARD_Y                   = -200
+MAX_FORWARD_THETA               = -1
 #=========================================== 
 SMALL_FORWARD_X                 = 1500                                                     
 SMALL_FORWARD_Y                 = -300
-SMALL_FORWARD_Y                 = 0
 SMALL_FORWARD_THETA             = -2     
 #=========================================== 
 SMALL_BACK_X                    = -1500                                                  
-SMALL_BACK_Y                    = -200
-SMALL_BACK_THETA                = -2    
+SMALL_BACK_Y                    = -300
+SMALL_BACK_THETA                = -1    
 #=========================================== 
 IMU_RIGHT_X                     = -900
 IMU_RIGHT_Y                     = 0          
@@ -1006,7 +1005,8 @@ class Obs(Node): #各種避障動作
             # send.sendHeadMotor(2,2400,100) #頭往上抬
             # time.sleep(3)
             send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
-            send.sendHeadMotor(2,HEAD_HEIGHT_,100)  #抬頭看有沒有障礙物
+            send.sendHeadMotor(2,HEAD_HEIGHT_,120)  #抬頭看有沒有障礙物
+            time.sleep(1)
             
             while self.crawl_cnt < 8 and self.image.deep_y == 24:   #cnt3數到7(4次)            
                 send.sendBodySector(82)
@@ -1014,7 +1014,7 @@ class Obs(Node): #各種避障動作
                 status.reddoor_state = "789888"
                 self.crawl_cnt += 1
                 self.status.crawl_cnt += 1
-                        
+                
             if self.image.deep_y < 24:
                 status.reddoor_state = "提早爬起"
                 time.sleep(1)
@@ -1040,7 +1040,7 @@ class Obs(Node): #各種避障動作
                 time.sleep(0.05)
             send.sendbodyAuto(0)
             time.sleep(3)
-            send.sendBodySector(201)
+            send.sendBodySector(84)
             time.sleep(5)
             send.sendbodyAuto(1)
             
