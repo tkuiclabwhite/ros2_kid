@@ -343,7 +343,7 @@ class WeightLift(API):
                 if self.body_auto: 
                     self.walk_switch()
                 time.sleep(2)
-                self.sendBodySector(234)  #縮左腳
+                #self.sendBodySector(234)  #縮左腳
                 time.sleep(1)
                 self.sendBodySector(int(LIFT))
                 # 根據重量決定舉起後的等待時間
