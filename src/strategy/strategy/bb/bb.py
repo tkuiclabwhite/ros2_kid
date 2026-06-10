@@ -17,9 +17,9 @@ from rclpy.node import Node
 # 2025.8.7
 #======================================================================================
 
-CORRECT       = [-750, -400, -1]        # 原地踏步修正
-LEFT_CORRECT  = [-850, -150, 4]        # 左旋修正
-RIGHT_CORRECT = [-850, -300, -5]       # 右旋修正
+CORRECT       = [-800, -225, -1]        # 原地踏步修正
+LEFT_CORRECT  = [-850, -350, 4]        # 左旋修正
+RIGHT_CORRECT = [-900, -250, -5]       # 右旋修正
 #                 x , y , theta
 
 #====================================================================================
@@ -31,7 +31,7 @@ FIVEPOINT_HEAD_Y_DEGREE = [2010]      #投出去偏向左邊＝>頭 往左轉（
 CATCH_BALL_CORRECT = 1230        #1500   900
 
 #CATCH_BALL_LINE  = [1680, 1, 1580]            # slow_degree, stop_degree, backward_degree
-CATCH_BALL_LINE  = [1540, 1500, 1490]         #1535, 1525]   1590, 1580
+CATCH_BALL_LINE  = [1540, 1500, 1493]         #1535, 1525]   1590, 1580
 TWO_POINT_LINE   = [1800, 1630, 1615]            # slow_degree, stop_degree, backward_degree 
 THREE_POINT_LINE = [77, 67, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 FIVE_POINT_LINE  = [105, 96, 93, 88]           # srward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
@@ -42,7 +42,7 @@ BASTET_LENGTH =  10  #增加以下全域變數
 FOCAL_LENGTH  = 330 # 333 
 TEST_DISTANCE = 60
 
-VALUEE = 22
+VALUEE = 55
 #VALUEE = 2  #框測試.  比賽時輸入的狀態決定投的策略  取代Diovalue
 #VALUEE = 22 #2分球
 #VALUEE = 33 #3分球
@@ -996,10 +996,10 @@ class BasketBall(API):
                     # self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
                     time.sleep(0.1)
                 else: 
-                    if abs(self.motor.head_horizon-1950) > 20: #10
+                    if abs(self.motor.head_horizon-1955) > 15: #10
                         self.get_logger().info(f'匡不在視野中間->貓頭鷹修腰')
                         # self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
-                        self.motor.Owl_Rotate(1950)
+                        self.motor.Owl_Rotate(1955)
                         
                     else:
                         time.sleep(0.5)
