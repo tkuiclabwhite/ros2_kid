@@ -47,6 +47,8 @@ setup(
             'mp = strategy.lc.mp:main',
             'wl_tui  = strategy.wl.wl_new:main',
             'us_new = strategy.us.us_new:main',
+            'trace = strategy.us.trace_ball_stop:main',
+
             ],
     },
 )

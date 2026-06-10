@@ -10,7 +10,7 @@ import time
 
 #--校正量--#
 #前進量校正
-FORWARD_CORRECTION         = -500
+FORWARD_CORRECTION         = 200
 #平移校正
 TRANSLATION_CORRECTION     = -300
 #旋轉校正

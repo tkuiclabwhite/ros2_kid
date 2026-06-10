@@ -217,6 +217,17 @@ class MotionNode(Node):
             msg.data = [motor_id, state]
             self.torque_pub.publish(msg)
 
+            # 恢復扭力時，將 last_goals 同步為當前實際關節位置
+            # 避免後續相對動作以關扭力前的舊刻度為基準計算
+            if state == 1:
+                with self.joints_lock:
+                    snapshot = dict(self.current_joints)
+                if motor_id == 0:
+                    self.last_goals.update(snapshot)
+                elif motor_id in snapshot:
+                    self.last_goals[motor_id] = snapshot[motor_id]
+                self.get_logger().info(f"[Torque] 恢復扭力，last_goals 已同步至當前位置 (ID: {'all' if motor_id == 0 else motor_id})")
+
         # 動作儲存
         elif opcode in [242, 243, 244]: # Save Sector Data (RAM) & Backup to Sector Folder
             data_content = list(packet[3:-2])
