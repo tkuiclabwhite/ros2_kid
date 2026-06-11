@@ -900,7 +900,7 @@ class API(Node):
         m.data = generate
         self.generate_pub.publish(m)
 
-    def sendContinuousValue(self, x: int, y: int, theta: int, walking_mode: int = 0) -> None:
+    def sendContinuousValue(self, x: float, y: float, theta: float, walking_mode: int = 0) -> None:
         """
         發送連續移動步長數值。
 
@@ -927,7 +927,7 @@ class API(Node):
             >>> api.sendContinuousValue(x=300, y=-100, theta=3)
         """
         m = Interface()
-        m.x, m.y, m.theta = x, y, theta
+        m.x, m.y, m.theta = float(x), float(y), float(theta)
         m.walking_mode = walking_mode # 寫入
         self.continous_pub.publish(m)
 
