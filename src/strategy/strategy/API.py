@@ -571,7 +571,7 @@ class API(Node):
 
         """
         m = Interface()
-        m.x, m.y, m.theta = int(x), int(y), int(theta)
+        m.x, m.y, m.theta = float(x), float(y), float(theta)
         m.walking_mode = walking_mode
         self.body_auto_pub.publish(m)
         n = Int16()

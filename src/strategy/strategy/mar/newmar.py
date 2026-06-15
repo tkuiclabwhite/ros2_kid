@@ -57,7 +57,7 @@ IMU_CORRECT_SPEED    = 8      # IMU 補正角速度
 # ═══════════════════════════════════════════════
 #  坡道模式旗標（手動切換）
 # ═══════════════════════════════════════════════
-SLOPE_MODE = 'up'       # 'none' / 'up' / 'down'
+SLOPE_MODE = 'none'       # 'none' / 'up' / 'down'
 SECTOR_UPHILL   = 111      # 上坡站姿微調 sector 編號（實際編號依動作設計填入）
 SECTOR_DOWNHILL = 29      # 下坡站姿微調 sector 編號（實際編號依動作設計填入）
 

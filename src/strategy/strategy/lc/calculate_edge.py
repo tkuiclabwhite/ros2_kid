@@ -164,10 +164,14 @@ class deep_calculate(Node):
 
             if closest_line is not None:
                 x1, y1, x2, y2 = closest_line
-                self.now_line_coordinate[0] = x1+115
-                self.now_line_coordinate[2] = x2+115
-                self.now_line_coordinate[1] = y1+120
-                self.now_line_coordinate[3] = y2+120
+                # 依 x 由左到右固定端點順序，避免 slope 正負號隨 HoughLinesP 端點順序亂跳
+                if x1 > x2:
+                    x1, y1, x2, y2 = x2, y2, x1, y1
+                # 裁切為 img[115:215, 120:220]：y(列)偏移 +115、x(行)偏移 +120
+                self.now_line_coordinate[0] = x1+120   # x1
+                self.now_line_coordinate[2] = x2+120   # x2
+                self.now_line_coordinate[1] = y1+115   # y1
+                self.now_line_coordinate[3] = y2+115   # y2
         else:
             self.now_line_coordinate = self.last_line_coordinate
 
