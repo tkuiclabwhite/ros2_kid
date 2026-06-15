@@ -22,7 +22,7 @@ from strategy.API import API
 
 HEAD_HORIZONTAL = 2048 #頭水平，位置為馬達目標刻度，2048為正朝前方
 HEAD_HEIGHT     = 1450 #頭高，位置為馬達目標刻度，2048為正朝前方
-HEAD_HEIGHT_    = 2200
+HEAD_HEIGHT_    = 2300
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
 STAY_X                          = -600
@@ -41,10 +41,10 @@ SMALL_BACK_X                    = -1700
 SMALL_BACK_Y                    = -300
 SMALL_BACK_THETA                = -2    
 #=========================================== 
-IMU_RIGHT_X                     = -500
+IMU_RIGHT_X                     = -550
 IMU_RIGHT_Y                     = -100         
 #===========================================                 
-TURN_RIGHT_X                    = -500                                              
+TURN_RIGHT_X                    = -550                                              
 TURN_RIGHT_Y                    = -100                                                 
 TURN_RIGHT_THETA                = -5         #3 
 #=========================================== 
@@ -56,11 +56,11 @@ TURN_LEFT_Y                     = -600
 TURN_LEFT_THETA                 = 5          #3
 #===========================================
 SLOPE_RIGHT_TRANSLATE_X         = -300  
-SLOPE_RIGHT_TRANSLATE_Y         = -1100
-SLOPE_RIGHT_TRANSLATE_THETA     = -2
+SLOPE_RIGHT_TRANSLATE_Y         = -900
+SLOPE_RIGHT_TRANSLATE_THETA     = -3
 #===========================================
 SLOPE_LEFT_TRANSLATE_X          = -100
-SLOPE_LEFT_TRANSLATE_Y          = 1100
+SLOPE_LEFT_TRANSLATE_Y          = 900
 SLOPE_LEFT_TRANSLATE_THETA      = -0.5
 #===========================================
 YY_WALKWAY            =     100 #黃黃通道大小
@@ -80,7 +80,7 @@ PRETURN_LEFT_ANGLE    = 40
 
 PRETURN_RIGHT         = False
 # PRETURN_RIGHT         = True #預轉身右
-PRETURN_RIGHT_ANGLE   = 40
+PRETURN_RIGHT_ANGLE   = 20
 #===========================================
 YELLOW_WALKWAY              = False #如果沒有黃黃通道就把它關了
 YELLOW_SMALL_TURNHEAD       = False #通道不夠大轉頭
@@ -1016,7 +1016,7 @@ class Obs(Node): #各種避障動作
             send.sendHeadMotor(2,HEAD_HEIGHT_,120)  #抬頭看有沒有障礙物
             time.sleep(1)
             
-            while self.crawl_cnt < 8 and self.image.deep_y == 24:   #cnt3數到7(4次)            
+            while self.crawl_cnt < 9 and self.image.deep_y == 24:   #cnt3數到10(7次)            
                 send.sendBodySector(82)
                 time.sleep(4)
                 status.reddoor_state = "789888"
@@ -1025,32 +1025,40 @@ class Obs(Node): #各種避障動作
                 
             if self.image.deep_y < 24:
                 status.reddoor_state = "提早爬起"
-                time.sleep(1)
+                time.sleep(4)
+                send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
+                send.sendHeadMotor(2,HEAD_HEIGHT,100)
+                send.sendBodySector(83) # 把忍者跑拿掉，call站姿
+                time.sleep(20)
+                
+                while self.i < 300:
+                    status.reddoor_state = "向前走遠離紅門"
+                    self.walk.move('max_speed')
+                    self.i += 5
+                    time.sleep(0.05)     
 
-            elif self.crawl_cnt > 9 :
+            elif self.crawl_cnt > 10 :
                 send.sendBodySector(82)
                 time.sleep(4)
-
-            send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
-            send.sendHeadMotor(2,HEAD_HEIGHT,100)
+                send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
+                send.sendHeadMotor(2,HEAD_HEIGHT,100)                
+                send.sendBodySector(83) # 把忍者跑拿掉，call站姿
+                time.sleep(20)     
             # else:
             #     status.reddoor_state = "提早爬起"
             #     time.sleep(1)
             
-            send.sendBodySector(83) # 把忍者跑拿掉，call站姿
-            time.sleep(20)     
-            send.sendbodyAuto(1)
+            # send.sendBodySector(29) 
+            # time.sleep(1)     
+            # # send.sendbodyAuto(1)
 
-            while self.i < 300:
-                status.reddoor_state = "向前走遠離紅門"
-                self.walk.move('max_speed')
-                self.i += 5
-                time.sleep(0.05)
             send.sendbodyAuto(0)
-            time.sleep(3)
-            send.sendBodySector(84)
+            time.sleep(2)
+            send.sendBodySector(201)
             time.sleep(5)
             send.sendbodyAuto(1)
+            self.walk.move('stay')
+            time.sleep(1)             
             
             self.walk.face_imu = 0
             if REDDOOR_IMU:
