@@ -206,7 +206,7 @@ class WeightLift(API):
         self.theta = self.imu_fix()
         if self.ctrl_status == 'fourth_line':
             #if self.speed < 1800: self.speed += 200
-            self.sendContinuousValue(1300, -200, self.theta)
+            self.sendContinuousValue(1300, -300, -1)
         elif self.ctrl_status == 'second_line':
             self.sendContinuousValue(1500, -200, self.theta)
         else:
@@ -302,7 +302,7 @@ class WeightLift(API):
                 if self.body_auto: 
                     self.walk_switch()
                 time.sleep(2.5)
-                self.sendBodySector(123)  #拉左腳
+                #self.sendBodySector(123)  #拉左腳
                 time.sleep(1)
                 self.sendHeadMotor(2, 1320, 100)
                 self.sendBodySector(PICK_ONE)
