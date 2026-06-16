@@ -18,10 +18,10 @@ HEAD_CHECK = 2080
 HAND_BACK = 222
 LEG_BACK = 1812
 VERTICAL_HEAD = 2048                                             #tight:[243, 245, 240, 243, 241]
-X_BENCHMARK = [243, 245, 240, 243, 241] # [最左,中左,中間,中右,最右] loose:[220, 228, 224, 226, 224]  tight = loose +15~20(17)
-Y_BENCHMARK = 155
-SHOOT_DELAY = 0.77      # +1s -0.151s    7.07  4.47    3.36        2.67       
-                         #shoot_delay:   0.68  0.71    0.76        0.77     
+X_BENCHMARK = [246, 250, 245, 245, 246] # [最左,中左,中間,中右,最右] loose:[220, 228, 224, 226, 224]  tight = loose +15~20(17)
+Y_BENCHMARK = 160                                                 #one step distance +20 (initial 160)
+SHOOT_DELAY = 0.76      # +1s -0.151s    7.07  5     4.47    3.36     2.67       
+                         #shoot_delay:   0.68  0.70  0.71    0.75     0.77     
 # motion sector
 PREPARE = 9999                              
 SHOOT = 456       
@@ -299,8 +299,8 @@ class Archery(Node):
                     # 決定要轉多少
                     if 0 < self.lowest_x <= 140: self.x_benchmark_type = 4
                     elif 140 < self.lowest_x <= 165: self.x_benchmark_type = 3
-                    elif self.lowest_x >= 220: self.x_benchmark_type = 0
-                    elif 220 > self.lowest_x >= 200: self.x_benchmark_type = 1
+                    elif self.lowest_x >= 225: self.x_benchmark_type = 0
+                    elif 225 > self.lowest_x >= 200: self.x_benchmark_type = 1
                     else: self.x_benchmark_type = 2 
                     
                     self.get_logger().info(f'Action Type: {self.x_benchmark_type}')
