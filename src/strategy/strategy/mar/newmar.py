@@ -30,9 +30,9 @@ WALK_SPEED_NORMAL  = 2000 + CORRECT_x  # 正常前進速度 #1500
 WALK_SPEED_SLOW    = 2000 +  CORRECT_x  # 接近標記 / 搜尋時的慢速 #1200
 
 # 轉彎參數（左右分開，邊走邊轉）
-LEFT_FORWARD_SPEED  = 1800 + CORRECT_x   # 左轉時的前進速度
+LEFT_FORWARD_SPEED  = 1750 + CORRECT_x   # 左轉時的前進速度
 LEFT_TURN_SPEED     = 7 + CORRECT_theta    # 左轉時的旋轉速度（正值）
-RIGHT_FORWARD_SPEED = 1800 + CORRECT_x  # 右轉時的前進速度
+RIGHT_FORWARD_SPEED = 1750 + CORRECT_x  # 右轉時的前進速度
 RIGHT_TURN_SPEED    = -6 + CORRECT_theta   # 右轉時的旋轉速度（負值）
 
 # 畫面參數
