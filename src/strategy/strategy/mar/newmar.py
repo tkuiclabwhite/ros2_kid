@@ -16,19 +16,24 @@ from tku_msgs.msg import SensorPackage
 #  參數設定區（實測後調整）
 # ═══════════════════════════════════════════════
 
+#步態校正
+CORRECT_x = -1000
+CORRECT_y = 0
+CORRECT_theta = -2
+
 # 頭部俯角（看地板標記）
 HEAD_DOWN_X = 2048   # 水平置中
 HEAD_DOWN_Y = 1500   # 俯角位置（看地板）
 
 # 行走速度
-WALK_SPEED_NORMAL  = 1500   # 正常前進速度
-WALK_SPEED_SLOW    = 1200   # 接近標記 / 搜尋時的慢速
+WALK_SPEED_NORMAL  = 2000 + CORRECT_x  # 正常前進速度 #1500
+WALK_SPEED_SLOW    = 2000 +  CORRECT_x  # 接近標記 / 搜尋時的慢速 #1200
 
 # 轉彎參數（左右分開，邊走邊轉）
-LEFT_FORWARD_SPEED  = 1600   # 左轉時的前進速度
-LEFT_TURN_SPEED     = 14     # 左轉時的旋轉速度（正值）
-RIGHT_FORWARD_SPEED = 1700   # 右轉時的前進速度
-RIGHT_TURN_SPEED    = -16    # 右轉時的旋轉速度（負值）
+LEFT_FORWARD_SPEED  = 1800 + CORRECT_x   # 左轉時的前進速度
+LEFT_TURN_SPEED     = 7 + CORRECT_theta    # 左轉時的旋轉速度（正值）
+RIGHT_FORWARD_SPEED = 1800 + CORRECT_x  # 右轉時的前進速度
+RIGHT_TURN_SPEED    = -6 + CORRECT_theta   # 右轉時的旋轉速度（負值）
 
 # 畫面參數
 FRAME_W       = 320
@@ -52,7 +57,7 @@ INIT_COOLDOWN     = 2.0        # 初始化後冷卻時間（秒），避免殘�
 
 # IMU 補正參數
 IMU_CORRECT_DEADBAND = 3       # yaw 在此範圍內不補正（度）
-IMU_CORRECT_SPEED    = 8      # IMU 補正角速度
+IMU_CORRECT_SPEED    = 3      # IMU 補正角速度
 
 # ═══════════════════════════════════════════════
 #  坡道模式旗標（手動切換）
@@ -60,6 +65,7 @@ IMU_CORRECT_SPEED    = 8      # IMU 補正角速度
 SLOPE_MODE = 'none'       # 'none' / 'up' / 'down'
 SECTOR_UPHILL   = 111      # 上坡站姿微調 sector 編號（實際編號依動作設計填入）
 SECTOR_DOWNHILL = 29      # 下坡站姿微調 sector 編號（實際編號依動作設計填入）
+SECTOR_STAND = 222
 
 # 平地步態參數
 WALK_PARAM_NORMAL = dict(
@@ -388,6 +394,7 @@ class Mar(API):
 
         if not self.initialized:
             self._initialize()
+            self.sendBodySector(SECTOR_STAND) #站姿微調
             self.sendbodyAuto(1)
             self.initialized = True
             self.get_logger().info("=== 比賽開始 ===")
