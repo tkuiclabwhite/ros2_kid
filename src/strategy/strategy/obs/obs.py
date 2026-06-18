@@ -26,15 +26,15 @@ HEAD_HEIGHT_    = 2300
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
 STAY_X                          = -600
-STAY_Y                          = -200
-STAY_THETA                      = -2
+STAY_Y                          = -400
+STAY_THETA                      = -1
 #=========================================== 
 MAX_FORWARD_X                   = 3000                                                     
-MAX_FORWARD_Y                   = -200
+MAX_FORWARD_Y                   = -400
 MAX_FORWARD_THETA               = -1
 #=========================================== 
 SMALL_FORWARD_X                 = 1500                                                     
-SMALL_FORWARD_Y                 = -200
+SMALL_FORWARD_Y                 = -400
 SMALL_FORWARD_THETA             = -1     
 #=========================================== 
 SMALL_BACK_X                    = -1700                                                  
@@ -42,24 +42,24 @@ SMALL_BACK_Y                    = -300
 SMALL_BACK_THETA                = -2    
 #=========================================== 
 IMU_RIGHT_X                     = -550
-IMU_RIGHT_Y                     = -100         
+IMU_RIGHT_Y                     = -200         
 #===========================================                 
 TURN_RIGHT_X                    = -550                                              
-TURN_RIGHT_Y                    = -100                                                 
+TURN_RIGHT_Y                    = -200                                                 
 TURN_RIGHT_THETA                = -5         #3 
 #=========================================== 
 IMU_LEFT_X                      = -500
-IMU_LEFT_Y                      = -600
+IMU_LEFT_Y                      = -500
 #===========================================                                         
 TURN_LEFT_X                     = -500                                          
-TURN_LEFT_Y                     = -600                                                
+TURN_LEFT_Y                     = -500                                                
 TURN_LEFT_THETA                 = 5          #3
 #===========================================
 SLOPE_RIGHT_TRANSLATE_X         = -300  
 SLOPE_RIGHT_TRANSLATE_Y         = -900
-SLOPE_RIGHT_TRANSLATE_THETA     = -3
+SLOPE_RIGHT_TRANSLATE_THETA     = -2.5
 #===========================================
-SLOPE_LEFT_TRANSLATE_X          = -100
+SLOPE_LEFT_TRANSLATE_X          = -300
 SLOPE_LEFT_TRANSLATE_Y          = 900
 SLOPE_LEFT_TRANSLATE_THETA      = -0.5
 #===========================================
@@ -78,9 +78,9 @@ PRETURN_LEFT          = False
 # PRETURN_LEFT          = True #預轉身左
 PRETURN_LEFT_ANGLE    = 40
 
-PRETURN_RIGHT         = False
+PRETURN_RIGHT         = True
 # PRETURN_RIGHT         = True #預轉身右
-PRETURN_RIGHT_ANGLE   = 20
+PRETURN_RIGHT_ANGLE   = 50
 #===========================================
 YELLOW_WALKWAY              = False #如果沒有黃黃通道就把它關了
 YELLOW_SMALL_TURNHEAD       = False #通道不夠大轉頭
@@ -1029,21 +1029,22 @@ class Obs(Node): #各種避障動作
                 send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
                 send.sendHeadMotor(2,HEAD_HEIGHT,100)
                 send.sendBodySector(83) # 把忍者跑拿掉，call站姿
-                time.sleep(20)
+                time.sleep(15)
                 
                 while self.i < 300:
                     status.reddoor_state = "向前走遠離紅門"
+                    send.sendbodyAuto(1)
                     self.walk.move('max_speed')
                     self.i += 5
-                    time.sleep(0.05)     
+                    time.sleep(0.05)
 
-            elif self.crawl_cnt > 10 :
+            elif self.crawl_cnt >= 9:
                 send.sendBodySector(82)
-                time.sleep(4)
+                time.sleep(5)
                 send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
-                send.sendHeadMotor(2,HEAD_HEIGHT,100)                
+                send.sendHeadMotor(2,HEAD_HEIGHT,100)
                 send.sendBodySector(83) # 把忍者跑拿掉，call站姿
-                time.sleep(20)     
+                time.sleep(20)
             # else:
             #     status.reddoor_state = "提早爬起"
             #     time.sleep(1)
