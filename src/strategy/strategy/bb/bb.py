@@ -17,9 +17,9 @@ from rclpy.node import Node
 # 2025.8.7
 #======================================================================================
 
-CORRECT       = [-750, -350, -1]        # 原地踏步修正
-LEFT_CORRECT  = [-750, -350, 4]        # 左旋修正
-RIGHT_CORRECT = [-750, -300, -5]       # 右旋修正
+CORRECT       = [-600, -400, -1]        # 原地踏步修正
+LEFT_CORRECT  = [-725, -350, 4]        # 左旋修正
+RIGHT_CORRECT = [-725, -300, -5]       # 右旋修正
 #                 x , y , theta
 
 #====================================================================================
@@ -33,7 +33,7 @@ CATCH_BALL_CORRECT = 1230        #1500   900
 #CATCH_BALL_LINE  = [1680, 1, 1580]            # slow_degree, stop_degree, backward_degree
 CATCH_BALL_LINE  = [1540, 1485, 1465]         #1535, 1525]   1590, 1580      1540, 1518, 1495    [1540, 1485, 1475]   
 TWO_POINT_LINE   = [1800, 1630, 1615]            # slow_degree, stop_degree, backward_degree 
-THREE_POINT_LINE = [77, 68, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
+THREE_POINT_LINE = [77, 67, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 FIVE_POINT_LINE  = [105, 96, 93, 88]           # srward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 #67 65 / 66 64
 #THREE_POINT_LINE = [75, 66, 64, 62] 
@@ -42,7 +42,7 @@ BASTET_LENGTH =  10  #增加以下全域變數
 FOCAL_LENGTH  = 330 # 333 
 TEST_DISTANCE = 60
 
-VALUEE = 55
+VALUEE = 33
 #VALUEE = 2  #框測試.  比賽時輸入的狀態決定投的策略  取代Diovalue
 #VALUEE = 22 #2分球
 #VALUEE = 33 #3分球
@@ -602,6 +602,22 @@ class BasketBall(API):
             self.step = 'begin'
             self.get_logger().debug(f'-------------------reset and stoping-------------------------')
             self.get_logger().info(f'主策略指撥關閉 -> 機器人回復初始狀態')
+
+        else:
+            self.target.ball_parameter()
+
+            if self.target.ball_size > 350:
+
+                if abs(self.target.ball_x - 160) > 10 or abs(self.target.ball_y - 120) > 10:
+                    self.motor.trace_revise(self.target.ball_x,self.target.ball_y,65)
+
+                else:
+                    self.motor.reg = 2048 - self.motor.head_horizon
+                    self.motor.search_num = 0
+                    self.get_logger().info('待機鎖球完成')
+
+            else:
+                self.motor.view_search(2500,1668,1800,1200,120,0.05)
 
 
     def begin(self):

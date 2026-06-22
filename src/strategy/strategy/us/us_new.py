@@ -12,28 +12,32 @@ from strategy.API import API
 # 調參區
 # ===========================================================================
 
-COLOR_BALL = 'yellow'    #球 orange
-COLOR_OBSTACLE = 'blue'  #障礙物
+COLOR_BALL = 'yellow'
+COLOR_OBSTACLE = 'blue'
 
-#影像處理節點輸出解析度 320x240。
-# cx / cy 拿來和物件質心比較，算物件偏離畫面中心多少。
 IMG_W  = 320
 IMG_H  = 240
 IMG_CX = IMG_W // 2
 IMG_CY = IMG_H // 2
 
-#步態
+# 步態
 STOP_MOVE = [0, 0, 0]
 LEFT_CORRECT = [0, 0, 4]
 RIGHT_CORRECT = [50, 0, -4]
 FORWARD_MOVE = [1500, -100, -1]
 
-# --- 射門動作 ---
-RIGHT_KICK_SECTOR = 100   # 右腳射門
-LEFT_KICK_SECTOR  = 200   # 左腳射門
-KICK_FOOT = 'right'       # 預設右 'right' 或 'left'
+# 新增：藍色障礙物身體微調
+OBSTACLE_LEFT_CORRECT  = [0, 0, 2]
+OBSTACLE_RIGHT_CORRECT = [0, 0, -2]
+OBSTACLE_BODY_TOL_X = 5
+OBSTACLE_ALIGN_FRAMES = 5
 
-# --- 頭部馬達範圍 --------------------
+# --- 射門動作 ---
+RIGHT_KICK_SECTOR = 100
+LEFT_KICK_SECTOR  = 200
+KICK_FOOT = 'right'
+
+# --- 頭部馬達範圍 ---
 HEAD_H_CENTER = 2048
 HEAD_V_CENTER = 1600
 HEAD_H_MAX = 3072
@@ -42,59 +46,43 @@ HEAD_V_MAX = 2048
 HEAD_V_MIN = 1200
 HEAD_SPEED = 30
 
-# KP 越大，追蹤反應越快，但太大可能抖動。
-# MAX_STEP 用來限制每次 timer 最多轉多少，避免瞬間大幅甩頭。
 HEAD_KP_H = 1.0
 HEAD_KP_V = 1.0
 HEAD_MAX_STEP_H = 80
 HEAD_MAX_STEP_V = 60
-# 當物件質心距離畫面中心小於容許誤差，就視為已置中。
 HEAD_TOL_X = 12
 HEAD_TOL_Y = 20
 
-# 找不到球或障礙物時，頭部會水平左右掃描。
-# 每次 main timer 進來會移動 HEAD_SEARCH_STEP 個刻度。
 HEAD_SEARCH_STEP = 60
-
-# 搜尋球時會用不同垂直角度掃描。
 SEARCH_LEVELS = [1450, 1650, 1850]
 
-# --- 球的視覺過濾條件 -------------------------------------------------------
+# --- 球 ---
 BALL_MIN_AREA = 80
 BALL_ASPECT_MIN = 0.5
 BALL_ASPECT_MAX = 2.0
 BALL_MIN_Y_CENTROID = 60
-BALL_FOUND_FRAMES = 5    # 連續看到球幾次，才真的相信「找到球」。
-BALL_LOST_FRAMES = 8     # 連續看不到球幾次，才真的相信「球不見了」。
+BALL_FOUND_FRAMES = 5
+BALL_LOST_FRAMES = 8
 
-# 走路時不是直接看球的 x 座標，而是看頭部水平馬達偏離中心多少。
-# 頭轉太左或太右，代表身體朝向還沒對準球，需要轉身修正。
 WALK_HEAD_H_TOL = 120
-WALK_FORWARD_TOL = 80 # 當頭部偏離中心小於這個值，就認為身體大致對準，可以前進。
+WALK_FORWARD_TOL = 80
 
-# --- 到達射門位置判斷 -------------------------------------------------------
-# 當球越靠近腳邊，頭通常需要越低才看得到球。
-# 因此這份策略用 head_v 落在指定範圍內來估計「球已經在射門距離」
-BALL_REACH_HEAD_V_MIN = 1200
-BALL_REACH_HEAD_V_MAX = 1240
+BALL_REACH_HEAD_V_MIN = 1230
+BALL_REACH_HEAD_V_MAX = 1350
 BALL_REACH_FRAMES = 5
-# --- 障礙物與射門前確認 -----------------------------------------------------
-# 到達球附近後，抬到這個垂直角度搜尋藍色障礙物。
+
+# --- 障礙物與射門前確認 ---
 HEAD_OBSTACLE_SEARCH_V = 1700
-OBSTACLE_CENTER_FRAMES = 5 # 藍色障礙物連續置中幾次，才切到下一個狀態。
+OBSTACLE_CENTER_FRAMES = 5
 
-HEAD_CONFIRM_BALL_V = 1300 #對準障礙物後，低頭到這個角度重新找球。
-CONFIRM_BALL_FRAMES = 5 # 球在射門位置連續確認幾次，才真正射門。
+HEAD_CONFIRM_BALL_V = 1300
+CONFIRM_BALL_FRAMES = 5
 
-
-# ===========================================================================
-# 視覺：黃色球
-# ===========================================================================
 
 class BallInfo:
-    def __init__(self, api: API): # 保存 API 節點，之後 update() 才能呼叫 get_objects()。
+    def __init__(self, api: API):
         self.api = api
-        self.visible = False # visible 表示目前畫面中是否有通過條件的黃色球候選物。
+        self.visible = False
         self.cx = 0
         self.cy = 0
         self.area = 0
@@ -127,10 +115,6 @@ class BallInfo:
         self.aspect = best['aspect_ratio']
 
 
-# ===========================================================================
-# 視覺：藍色障礙物
-# ===========================================================================
-
 class ObstacleInfo:
     def __init__(self, api: API):
         self.api = api
@@ -155,10 +139,6 @@ class ObstacleInfo:
         self.area = best['area']
         self.aspect = best['aspect_ratio']
 
-
-# ===========================================================================
-# Debug 印表
-# ===========================================================================
 
 class StatusPrinter(threading.Thread):
     def __init__(self, node):
@@ -187,6 +167,7 @@ class StatusPrinter(threading.Thread):
                     f"#================== 藍色障礙物 =======================#\n"
                     f" obstacle.visible: {n.obstacle.visible}\n"
                     f" obstacle.center : {n.obstacle_center_count}/{OBSTACLE_CENTER_FRAMES}\n"
+                    f" obstacle.align  : {n.obstacle_align_count}/{OBSTACLE_ALIGN_FRAMES}\n"
                     f" obstacle.cx/cy  : {n.obstacle.cx} / {n.obstacle.cy}\n"
                     f" obstacle.area   : {n.obstacle.area}\n"
                     f" obstacle.aspect : {n.obstacle.aspect:.2f}\n"
@@ -206,13 +187,9 @@ class StatusPrinter(threading.Thread):
             time.sleep(0.1)
 
 
-# ===========================================================================
-# 主策略節點
-# ===========================================================================
-
 class UnitedSoccer(API):
     def __init__(self):
-        super().__init__('us_full_strategy')
+        super().__init__('us_full_strategy_align')
 
         self.ball = BallInfo(self)
         self.obstacle = ObstacleInfo(self)
@@ -230,6 +207,7 @@ class UnitedSoccer(API):
         self.confirm_ball_count = 0
 
         self.obstacle_center_count = 0
+        self.obstacle_align_count = 0
 
         self.state = 'find_ball'
         self.action_detail = '初始化'
@@ -240,10 +218,6 @@ class UnitedSoccer(API):
         self._reset_head()
 
         self.create_timer(0.1, self.main)
-
-    # -----------------------------------------------------------------------
-    # 基本控制函式
-    # -----------------------------------------------------------------------
 
     def _clamp_head(self):
         self.head_h = max(HEAD_H_MIN, min(HEAD_H_MAX, self.head_h))
@@ -290,14 +264,13 @@ class UnitedSoccer(API):
 
         return centered_x and centered_y
 
-    def _search_head_for_ball(self):    #找不到球時，用多層高度左右掃描。
-        # 先切到目前搜尋高度。
+    def _search_head_for_ball(self):
         self.head_v = SEARCH_LEVELS[self.search_level]
         self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
 
         if self.search_dir == 'right':
             self.head_h -= HEAD_SEARCH_STEP
-            # 掃到水平最小值後，換方向並切下一個垂直搜尋高度。
+
             if self.head_h <= HEAD_H_MIN:
                 self.head_h = HEAD_H_MIN
                 self.search_dir = 'left'
@@ -335,13 +308,8 @@ class UnitedSoccer(API):
 
         self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
 
-    # -----------------------------------------------------------------------
-    # find_ball
-    # -----------------------------------------------------------------------
-
     def _state_find_ball(self):
         if self.ball.visible:
-            # 看到球時，失去球的計數歸零，找到球的計數加一。
             self.ball_lost_count = 0
             self.found_ball_count += 1
 
@@ -352,6 +320,7 @@ class UnitedSoccer(API):
                 self.reach_ball_count = 0
                 self.confirm_ball_count = 0
                 self.obstacle_center_count = 0
+                self.obstacle_align_count = 0
                 self.action_detail = '連續找到球 5 次，切換到 walk_to_ball'
                 return
 
@@ -375,10 +344,6 @@ class UnitedSoccer(API):
                     f'搜尋球中 dir={self.search_dir} level={self.search_level}'
                 )
 
-    # -----------------------------------------------------------------------
-    # walk_to_ball
-    # -----------------------------------------------------------------------
-
     def _state_walk_to_ball(self):
         if self.ball.visible:
             self.ball_lost_count = 0
@@ -400,6 +365,7 @@ class UnitedSoccer(API):
                     self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
 
                     self.obstacle_center_count = 0
+                    self.obstacle_align_count = 0
                     self.state = 'find_obstacle'
                     self.action_detail = '到達射門位置，抬頭找藍色障礙物'
                     return
@@ -445,10 +411,6 @@ class UnitedSoccer(API):
                 self.state = 'find_ball'
                 self.action_detail = '走向球時失去球，回到 find_ball'
 
-    # -----------------------------------------------------------------------
-    # find_obstacle
-    # -----------------------------------------------------------------------
-
     def _state_find_obstacle(self):
         self._stop_walk()
         self.obstacle.update()
@@ -461,22 +423,19 @@ class UnitedSoccer(API):
 
                 if self.obstacle_center_count >= OBSTACLE_CENTER_FRAMES:
                     print("\n########################################")
-                    print("######### 藍色障礙物已對準 #########")
+                    print("######### 藍色障礙物已看到 #########")
                     print("########################################")
                     print(f"obstacle_x = {self.obstacle.cx}")
                     print(f"obstacle_y = {self.obstacle.cy}")
                     print(f"area       = {self.obstacle.area}\n")
 
-                    self.head_v = HEAD_CONFIRM_BALL_V
-                    self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
-
-                    self.confirm_ball_count = 0
-                    self.state = 'confirm_ball'
-                    self.action_detail = '藍色障礙物對準完成，低頭再次確認球'
+                    self.obstacle_align_count = 0
+                    self.state = 'align_obstacle'
+                    self.action_detail = '藍色障礙物已看到，開始用步態微調身體'
                     return
 
                 self.action_detail = (
-                    f'藍色障礙物置中 '
+                    f'藍色障礙物頭部置中 '
                     f'{self.obstacle_center_count}/{OBSTACLE_CENTER_FRAMES}'
                 )
 
@@ -494,9 +453,59 @@ class UnitedSoccer(API):
                 f'抬頭搜尋藍色障礙物 head_h={self.head_h} head_v={self.head_v}'
             )
 
-    # -----------------------------------------------------------------------
-    # confirm_ball
-    # -----------------------------------------------------------------------
+    def _state_align_obstacle(self):
+        self.obstacle.update()
+
+        if not self.obstacle.visible:
+            self._stop_walk()
+            self.obstacle_align_count = 0
+            self.state = 'find_obstacle'
+            self.action_detail = '微調時看不到藍色障礙物，回到 find_obstacle'
+            return
+
+        error_x = self.obstacle.cx - IMG_CX
+
+        self._track_object(self.obstacle.cx, self.obstacle.cy)
+
+        if error_x > OBSTACLE_BODY_TOL_X:
+            self.sendbodyAuto(1)
+            self.sendContinuousValue(*OBSTACLE_RIGHT_CORRECT)
+            self.obstacle_align_count = 0
+            self.action_detail = f'障礙物在右，身體右轉微調 error_x={error_x}'
+
+        elif error_x < -OBSTACLE_BODY_TOL_X:
+            self.sendbodyAuto(1)
+            self.sendContinuousValue(*OBSTACLE_LEFT_CORRECT)
+            self.obstacle_align_count = 0
+            self.action_detail = f'障礙物在左，身體左轉微調 error_x={error_x}'
+
+        else:
+            self.sendContinuousValue(*STOP_MOVE)
+            self.sendbodyAuto(0)
+
+            self.obstacle_align_count += 1
+            self.action_detail = (
+                f'身體已對準藍色障礙物 '
+                f'{self.obstacle_align_count}/{OBSTACLE_ALIGN_FRAMES} '
+                f'error_x={error_x}'
+            )
+
+            if self.obstacle_align_count >= OBSTACLE_ALIGN_FRAMES:
+                print("\n########################################")
+                print("######### 身體已對準藍色障礙物 #########")
+                print("########################################")
+                print(f"obstacle_x = {self.obstacle.cx}")
+                print(f"error_x    = {error_x}")
+                print(f"area       = {self.obstacle.area}\n")
+
+                self._stop_walk()
+
+                self.head_v = HEAD_CONFIRM_BALL_V
+                self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
+
+                self.confirm_ball_count = 0
+                self.state = 'confirm_ball'
+                self.action_detail = '身體對準障礙物完成，低頭再次確認球'
 
     def _state_confirm_ball(self):
         self._stop_walk()
@@ -533,10 +542,6 @@ class UnitedSoccer(API):
             self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
             self.action_detail = '確認球時看不到球，低頭等待'
 
-    # -----------------------------------------------------------------------
-    # shoot
-    # -----------------------------------------------------------------------
-
     def _state_shoot(self):
         self._stop_walk()
 
@@ -547,24 +552,15 @@ class UnitedSoccer(API):
         if KICK_FOOT == 'right':
             self.sendBodySector(RIGHT_KICK_SECTOR)
             self.action_detail = '執行右腳射門 sector=100'
-
         else:
             self.sendBodySector(LEFT_KICK_SECTOR)
             self.action_detail = '執行左腳射門 sector=200'
 
         self.state = 'finish'
 
-    # -----------------------------------------------------------------------
-    # finish
-    # -----------------------------------------------------------------------
-
     def _state_finish(self):
         self._stop_walk()
         self.action_detail = '射門完成，策略結束'
-
-    # -----------------------------------------------------------------------
-    # 主迴圈
-    # -----------------------------------------------------------------------
 
     def main(self):
         if not self.is_start:
@@ -582,6 +578,9 @@ class UnitedSoccer(API):
         elif self.state == 'find_obstacle':
             self._state_find_obstacle()
 
+        elif self.state == 'align_obstacle':
+            self._state_align_obstacle()
+
         elif self.state == 'confirm_ball':
             self._state_confirm_ball()
 
@@ -591,10 +590,6 @@ class UnitedSoccer(API):
         elif self.state == 'finish':
             self._state_finish()
 
-
-# ===========================================================================
-# 進入點
-# ===========================================================================
 
 def main(args=None):
     rclpy.init(args=args)
