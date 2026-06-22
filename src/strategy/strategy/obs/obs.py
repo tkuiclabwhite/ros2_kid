@@ -25,35 +25,35 @@ HEAD_HEIGHT     = 1450 #頭高，位置為馬達目標刻度，2048為正朝前�
 HEAD_HEIGHT_    = 2300
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
-STAY_X                          = -600
-STAY_Y                          = -400
-STAY_THETA                      = -1
+STAY_X                          = -400
+STAY_Y                          = -200
+STAY_THETA                      = -1.5
 #=========================================== 
-MAX_FORWARD_X                   = 3000                                                     
-MAX_FORWARD_Y                   = -400
-MAX_FORWARD_THETA               = -1
+MAX_FORWARD_X                   = 2500                                                     
+MAX_FORWARD_Y                   = -100
+MAX_FORWARD_THETA               = -2
 #=========================================== 
 SMALL_FORWARD_X                 = 1500                                                     
-SMALL_FORWARD_Y                 = -400
-SMALL_FORWARD_THETA             = -1     
+SMALL_FORWARD_Y                 = -300
+SMALL_FORWARD_THETA             = -2   
 #=========================================== 
 SMALL_BACK_X                    = -1700                                                  
-SMALL_BACK_Y                    = -300
+SMALL_BACK_Y                    = -200
 SMALL_BACK_THETA                = -2    
 #=========================================== 
-IMU_RIGHT_X                     = -550
+IMU_RIGHT_X                     = -500
 IMU_RIGHT_Y                     = -200         
 #===========================================                 
-TURN_RIGHT_X                    = -550                                              
+TURN_RIGHT_X                    = -500                                              
 TURN_RIGHT_Y                    = -200                                                 
-TURN_RIGHT_THETA                = -5         #3 
+TURN_RIGHT_THETA                = -6        #3 
 #=========================================== 
-IMU_LEFT_X                      = -500
+IMU_LEFT_X                      = -550
 IMU_LEFT_Y                      = -500
 #===========================================                                         
-TURN_LEFT_X                     = -500                                          
+TURN_LEFT_X                     = -550                                          
 TURN_LEFT_Y                     = -500                                                
-TURN_LEFT_THETA                 = 5          #3
+TURN_LEFT_THETA                 = 6        #3
 #===========================================
 SLOPE_RIGHT_TRANSLATE_X         = -300  
 SLOPE_RIGHT_TRANSLATE_Y         = -900
@@ -76,7 +76,7 @@ REDDOOR_AFTER     = 'None' #紅門爬起後修正 'None' 'simp_turn_head' 'turn_
 #===========================================
 PRETURN_LEFT          = False
 # PRETURN_LEFT          = True #預轉身左
-PRETURN_LEFT_ANGLE    = 40
+PRETURN_LEFT_ANGLE    = 60
 
 PRETURN_RIGHT         = True
 # PRETURN_RIGHT         = True #預轉身右
@@ -190,42 +190,42 @@ class Walk(): #步態、轉彎、直走速度、IMU
     #     return self.imu_yaw 
 
     def turn_angle(self):   #一般 旋轉角度        
-        turn_ranges = [ (17, -5), 
-                        (12, -5), 
-                        (8,  -4), 
-                        (6,  -4), 
-                        (4,  -4), 
-                        (2,  -4),  
+        turn_ranges = [ (17, -6), 
+                        (12, -6), 
+                        (8,  -5), 
+                        (6,  -5), 
+                        (4,  -5), 
+                        (2,  -5),  
                         (0,   0),
-                        (-2,  3),
-                        (-4,  3),
-                        (-6,  3),
-                        (-8,  3),
-                        (-12, 4),
-                        (-17, 4)]
+                        (-2,  5),
+                        (-4,  5),
+                        (-6,  5),
+                        (-8,  5),
+                        (-12, 6),
+                        (-17, 6)]
         for turn_range in turn_ranges:           
             if  self.image.deep_x >= turn_range[0]:
                 return turn_range[1]
         return 0                                 
     
     def imu_angle(self):      #一般 imu修正角度
-        imu_ranges = [  (180,  -5),
-                        (90,  -5), 
-                        (60,  -5), 
-                        (45,  -5), 
-                        (20,  -4), 
-                        (10,  -4), 
-                        (5,   -4), 
-                        (2,   -3), 
+        imu_ranges = [  (180, -6),
+                        (90,  -6), 
+                        (60,  -6), 
+                        (45,  -6), 
+                        (20,  -5), 
+                        (10,  -5), 
+                        (5,   -5), 
+                        (2,   -4), 
                         (0,    0),
-                        (-2,   3),
-                        (-5,   3),
-                        (-10,   3),
-                        (-20,   3),
-                        (-45,   4),
-                        (-60,   4),
-                        (-90,   4),
-                        (-180,   4)]
+                        (-2,   5),
+                        (-5,   5),
+                        (-10,   5),
+                        (-20,   5),
+                        (-45,   6),
+                        (-60,   6),
+                        (-90,   6),
+                        (-180,  6)]
         for imu_range in imu_ranges:           
             if (send.imu_rpy[2]-self.face_imu) >= imu_range[0]:
                 return imu_range[1]
@@ -971,11 +971,11 @@ class Obs(Node): #各種避障動作
         # while ( abs(send.imu_rpy[2]) > 2) and status.running:
         #     self.walk.move('imu_fix')
         #     status.reddoor_state = "修斜率4"
-
         
         time.sleep(1)
         
         send.sendbodyAuto(0) #mode = 1為continue步態 #停下來
+        time.sleep(2)
         send.sendBodySector(81)
         send.sendContinuousValue(0, 0, 0) 
         time.sleep(10)
