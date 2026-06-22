@@ -42,7 +42,7 @@ BASTET_LENGTH =  10  #增加以下全域變數
 FOCAL_LENGTH  = 330 # 333 
 TEST_DISTANCE = 60
 
-VALUEE = 33
+VALUEE = 55
 #VALUEE = 2  #框測試.  比賽時輸入的狀態決定投的策略  取代Diovalue
 #VALUEE = 22 #2分球
 #VALUEE = 33 #3分球
@@ -603,6 +603,22 @@ class BasketBall(API):
             self.get_logger().debug(f'-------------------reset and stoping-------------------------')
             self.get_logger().info(f'主策略指撥關閉 -> 機器人回復初始狀態')
 
+        else:
+            self.target.ball_parameter()
+
+            if self.target.ball_size > 350:
+
+                if abs(self.target.ball_x - 160) > 10 or abs(self.target.ball_y - 120) > 10:
+                    self.motor.trace_revise(self.target.ball_x,self.target.ball_y,65)
+
+                else:
+                    self.motor.reg = 2048 - self.motor.head_horizon
+                    self.motor.search_num = 0
+                    self.get_logger().info('待機鎖球完成')
+
+            else:
+                self.motor.view_search(2500,1668,1800,1200,120,0.05)
+
 
     def begin(self):
         ####################################### switch #######################################
@@ -1123,4 +1139,4 @@ if __name__ == '__main__':
     main()
 
 
-   ###orange_count=0, ball_size=0
+   ###orange_count=0, ball_size=07
