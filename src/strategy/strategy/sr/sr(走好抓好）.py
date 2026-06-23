@@ -59,11 +59,11 @@ CW_DIST_GAIN_Z = 4.0
 #######################################################
 # ========= 手部抓點微調 =========
 # X：左右修正。左手抓太左/右手抓太左 -> 加大；抓太右 -> 減小
-LEFT_HAND_X_OFFSET = -20
+LEFT_HAND_X_OFFSET = -100
 RIGHT_HAND_X_OFFSET = -200
 
 # Y：高低修正。手抓太高 -> 減小；手抓太低 -> 加大
-LEFT_HAND_Y_OFFSET = 800
+LEFT_HAND_Y_OFFSET = 850
 RIGHT_HAND_Y_OFFSET = -750
 # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -111,7 +111,7 @@ MY_SIZE = 1020
 
 # ========= 走到定點微調 =========
 # 直接調這個控制停下來距離：走太近 -> 改更負；走太遠 -> 改大
-READY_DISTANCE_ADJUST = -50
+READY_DISTANCE_ADJUST = -250
 
 # 保留原本參數但不再用它控制距離，避免搞混
 WALK_SIZE_OFFSET = 0
