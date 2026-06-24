@@ -25,41 +25,41 @@ HEAD_HEIGHT     = 1450 #頭高，位置為馬達目標刻度，2048為正朝前�
 HEAD_HEIGHT_    = 2300
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
-STAY_X                          = -400
+STAY_X                          = -200
 STAY_Y                          = -200
 STAY_THETA                      = -1.5
 #=========================================== 
 MAX_FORWARD_X                   = 2500                                                     
 MAX_FORWARD_Y                   = -100
-MAX_FORWARD_THETA               = -2
+MAX_FORWARD_THETA               = -1
 #=========================================== 
 SMALL_FORWARD_X                 = 1500                                                     
-SMALL_FORWARD_Y                 = -300
-SMALL_FORWARD_THETA             = -2   
+SMALL_FORWARD_Y                 = -100
+SMALL_FORWARD_THETA             = -1   
 #=========================================== 
 SMALL_BACK_X                    = -1700                                                  
 SMALL_BACK_Y                    = -200
-SMALL_BACK_THETA                = -2    
+SMALL_BACK_THETA                = -0.5   
 #=========================================== 
-IMU_RIGHT_X                     = -500
-IMU_RIGHT_Y                     = -200         
+IMU_RIGHT_X                     = -300
+IMU_RIGHT_Y                     = 50        
 #===========================================                 
-TURN_RIGHT_X                    = -500                                              
-TURN_RIGHT_Y                    = -200                                                 
+TURN_RIGHT_X                    = -300                                              
+TURN_RIGHT_Y                    = 50                                                 
 TURN_RIGHT_THETA                = -6        #3 
 #=========================================== 
 IMU_LEFT_X                      = -550
-IMU_LEFT_Y                      = -500
+IMU_LEFT_Y                      = -600
 #===========================================                                         
 TURN_LEFT_X                     = -550                                          
-TURN_LEFT_Y                     = -500                                                
+TURN_LEFT_Y                     = -600                                                
 TURN_LEFT_THETA                 = 6        #3
 #===========================================
 SLOPE_RIGHT_TRANSLATE_X         = -300  
 SLOPE_RIGHT_TRANSLATE_Y         = -900
-SLOPE_RIGHT_TRANSLATE_THETA     = -2.5
+SLOPE_RIGHT_TRANSLATE_THETA     = -1.5
 #===========================================
-SLOPE_LEFT_TRANSLATE_X          = -300
+SLOPE_LEFT_TRANSLATE_X          = -150
 SLOPE_LEFT_TRANSLATE_Y          = 900
 SLOPE_LEFT_TRANSLATE_THETA      = -0.5
 #===========================================
@@ -74,11 +74,11 @@ REDDOOR_IMU     = False
 REDDOOR_AFTER     = 'None' #紅門爬起後修正 'None' 'simp_turn_head' 'turn_head'
 
 #===========================================
-PRETURN_LEFT          = False
+PRETURN_LEFT          = True
 # PRETURN_LEFT          = True #預轉身左
 PRETURN_LEFT_ANGLE    = 60
 
-PRETURN_RIGHT         = True
+PRETURN_RIGHT         = False
 # PRETURN_RIGHT         = True #預轉身右
 PRETURN_RIGHT_ANGLE   = 50
 #===========================================
@@ -978,22 +978,10 @@ class Obs(Node): #各種避障動作
         time.sleep(2)
         send.sendBodySector(81)
         send.sendContinuousValue(0, 0, 0) 
-        time.sleep(10)
+        time.sleep(15)
         
         # '''
         if status.running:
-            # send.sendbodyAuto(1)
-            # time.sleep(2)  
-            # send.sendBodySector(333) #手水平放下（屁股有障礙物）
-            # time.sleep(4.4)
-            # send.sendBodySector(29)   
-            # time.sleep(0.5)        
-            # send.sendHeadMotor(2,1080,180)
-            # send.sendHeadMotor(2,1080,180)
-            # send.sendHeadMotor(2,1080,180)
-            # time.sleep(0.3)
-            # send.sendBodySector(1111)
-            # time.sleep(8)
             while self.crawl_cnt < 5:    #count 6次
                 status.reddoor_state = "454454545"
                 # send.sendBodySector(2222)
@@ -1055,7 +1043,7 @@ class Obs(Node): #各種避障動作
 
             send.sendbodyAuto(0)
             time.sleep(2)
-            send.sendBodySector(201)
+            send.sendBodySector(84)
             time.sleep(5)
             send.sendbodyAuto(1)
             self.walk.move('stay')
