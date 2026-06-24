@@ -9,6 +9,7 @@
 	<link rel="stylesheet" type="text/css" rel="stylesheet" href="./css/style.css">
 
 	<!-- JavaScript References -->
+	<script src="./js/config.js"></script>
 	<script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
 	<script type="text/javascript" src="./js/roslib/roslib.min.js"></script>
 	<script type="text/javascript" type="text/javascript">
@@ -16,7 +17,7 @@
 		var wasOnline = true;
 		var checkConnectionInterval = null;
 		var ros = new ROSLIB.Ros({
-		url: "ws://192.168.1.58:9090"
+		url: "ws://" + window.ROBOT_CONFIG.ip + ":9090"
 		});
 
 		function checkConnection() {
@@ -280,8 +281,7 @@
 
 		//-----
 		var connectFlag = false;
-		var myAddress = "192.168.1.58";
-		// var myAddress = "0.0.0.0";
+		var myAddress = window.ROBOT_CONFIG.ip;
 
 		var B_SetupCamera_Flag = true;
 		var B_Start_Flag = true;
@@ -1157,6 +1157,9 @@
 
 <script>
 	window.addEventListener('DOMContentLoaded', function () {
+		document.getElementById('orign_image').src = 'http://' + window.ROBOT_CONFIG.ip + ':8080/stream?topic=/zoom_in';
+		document.getElementById('color_image').src  = 'http://' + window.ROBOT_CONFIG.ip + ':8080/stream?topic=/processed_image&image_transport=compressed';
+
 		let loc = window.currentStrategy || "";
 		console.log('Raw loaded strategy:', loc);
 		
@@ -1188,19 +1191,24 @@
 <body>
 	<!-- NAV BAR -->
 	<ul>
-		<li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
-        <li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
-        <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
-		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>		
-		<li><a target="_blank" class="navbarright" href="miniDRC.html">miniDRC</a></li>
-		<li><a target="_blank" class="navbarright" href="MotorMonitor.html">MotorMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="WaveformMonitor.html">WaveformMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="RobotViewer.html">RobotViewer</a></li>
-        <!-- <li><a target="_blank" class="navbarright" href="PIDcontroll.html">PIDcontroll</a></li> -->
-		<li class="logo">
+		<li class="logo" style="width: 226px;">
 			<a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
 		</li>
+		<li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+		<li><a target="_blank" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+		<li><a target="_blank" class="navbarright" style="text-decoration:underline;" href="ImageProcessInterface.html">ImageProcess</a></li>
+        <li class="dropdown">
+            <a class="navbarright" href="#">Tools ▾</a>
+            <ul class="dropdown-menu">
+                <li><a target="_blank" href="RecordInterface.html">RecordInterface</a></li>
+                <li><a target="_blank" href="NodeMonitor.html">NodeMonitor</a></li>
+                <li><a target="_blank" href="MotorMonitor.html">MotorMonitor</a></li>
+                <li><a target="_blank" href="API.html">ROS2API</a></li>                
+                <li><a target="_blank" href="miniDRC.html">miniDRC</a></li>
+                <li><a target="_blank" href="RobotViewer.html">RobotViewer</a></li>
+                <li><a target="_blank" href="WaveformMonitor.html">WaveformMonitor</a></li>
+            </ul>
+        </li>
 	</ul>
 	<br />
 	<p id="connected" style="color:#00D600; display:none; font-size: 20px;">
@@ -1215,7 +1223,6 @@
 					<td>
 						<select style="height:25px; margin-right: 5px;" id="addressSelect">
 							<!-- <option value="172.17.121.10">172.17.121.10</option> -->
-							<option value="192.168.1.58">192.168.1.58</option>
 							<option value="localhost">localhost</option>
 
 						</select>
@@ -1260,7 +1267,7 @@
 				<img
 					id="orign_image"
 					style="width:320px; height:240px; display:inline-block;"
-					src="http://192.168.1.58:8080/stream?topic=/zoom_in"					
+					src=""					
 				/>
 				<!-- src="http://0.0.0.0:8080/stream?topic=/zed/zed_node/right/image_rect_color&image_transport=compressed"					 -->
 
@@ -1275,7 +1282,7 @@
 				<img 
 					id="color_image" 
 					style="width:320px; height:240px; display:inline-block;" 
-					src="http://192.168.1.58:8080/stream?topic=/processed_image&image_transport=compressed"
+					src=""
 					alt="Processed Image Stream"
 				/>
 			</div>

@@ -6,6 +6,7 @@
     <link rel="SHORTCUT ICON" href="./picture/icon.png">
     <title>MotionControl</title>
 
+    <script src="./js/config.js"></script>
     <script src="./js/jquery.min.js"></script>
     <script src="./js/jquery-ui.min.js"></script>
     <script type="text/javascript" src="./js/roslib/eventemitter2.min.js"></script>
@@ -214,18 +215,23 @@
 <body>
     <ul>
         <li class="logo" style="width: 226px;">
-            <a target="_blank" href="index.html" class="logo"><img id="logoimg"
-                    src="./resources/TKU_ICLab/iclablogo-02.png"></a>
+            <a target="_blank" href="index.html" class="logo"><img id="logoimg" src="./resources/TKU_ICLab/iclablogo-02.png"></a>
         </li>
-		<li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
-        <li><a target="_blank" style="text-decoration: underline;" class="navbarright" href="MotionControlInterface.html">Motion</a></li>
+        <li><a target="_blank" class="navbarright" href="WalkingInterface.html">Walking</a></li>
+        <li><a target="_blank" class="navbarright" style="text-decoration:underline;" href="MotionControlInterface.html">Motion</a></li>
         <li><a target="_blank" class="navbarright" href="ImageProcessInterface.html">ImageProcess</a></li>
-		<li><a target="_blank" class="navbarright" href="NodeMonitor.html">NodeMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="API.html">ROS2API</a></li>		
-		<li><a target="_blank" class="navbarright" href="miniDRC.html">miniDRC</a></li>
-        <li><a target="_blank" class="navbarright" href="MotorMonitor.html">MotorMonitor</a></li>
-        <li><a target="_blank" class="navbarright" href="WaveformMonitor.html">WaveformMonitor</a></li>
-		<li><a target="_blank" class="navbarright" href="RobotViewer.html">RobotViewer</a></li>
+        <li class="dropdown">
+            <a class="navbarright" href="#">Tools ▾</a>
+            <ul class="dropdown-menu">
+                <li><a target="_blank" href="RecordInterface.html">RecordInterface</a></li>
+                <li><a target="_blank" href="NodeMonitor.html">NodeMonitor</a></li>
+                <li><a target="_blank" href="MotorMonitor.html">MotorMonitor</a></li>
+                <li><a target="_blank" href="API.html">ROS2API</a></li>                
+                <li><a target="_blank" href="miniDRC.html">miniDRC</a></li>
+                <li><a target="_blank" href="RobotViewer.html">RobotViewer</a></li>
+                <li><a target="_blank" href="WaveformMonitor.html">WaveformMonitor</a></li>
+            </ul>
+        </li>
     </ul>
 <!-- <br> -->
     <!-- 1. 狀態容器：固定在左側，不加 margin-left 確保位置不變 -->
@@ -295,7 +301,6 @@
                         <tr>
                             <td>
                                 <select style="height:25px; margin-right: 5px;" id="addressSelect">
-                                    <option value="192.168.1.58">192.168.1.58</option>
                                     <option value="localhost">localhost</option>
                                 </select>
                             </td>

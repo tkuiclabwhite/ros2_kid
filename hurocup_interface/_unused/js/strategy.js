@@ -1,0 +1,1 @@
+window.currentStrategy = "ar/Parameter";

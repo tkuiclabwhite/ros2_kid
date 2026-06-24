@@ -19,6 +19,7 @@ apt 套件
    sudo apt install python3-colcon-common-extensions
    sudo apt install python3-pydantic
    sudo apt install python3-tk
+   sudo apt install byobu
    sudo apt install -y \
      ros-humble-rosbridge-server \
      ros-humble-cv-bridge \
