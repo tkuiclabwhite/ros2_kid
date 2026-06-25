@@ -22,9 +22,10 @@ STOP_MOVE = [0, 0, 0]
 LEFT_CORRECT = [0, 0, 4]
 RIGHT_CORRECT = [50, 0, -4]
 FORWARD_MOVE = [1500, -100, -1]
+BACKWARD_MOVE = [-500, 0, 0] 
 
 CONFIRM_FORWARD_MOVE  = [500, 0, 0]    # 確認球時慢慢前進
-CONFIRM_BACKWARD_MOVE = [-500, 0, 0]   # 確認球時慢慢後退
+CONFIRM_BACKWARD_MOVE = [-700, 0, 0]   # 確認球時慢慢後退
 
 # 藍色障礙物身體微調：
 # 目標是讓機器人繞著球調整角度，讓身體朝向藍色障礙物
@@ -33,9 +34,10 @@ CONFIRM_BACKWARD_MOVE = [-500, 0, 0]   # 確認球時慢慢後退
 ORBIT_LEFT_MOVE  = [0, -250, 4]
 ORBIT_RIGHT_MOVE = [0, 250, -4]
 ORBIT_ALIGN_FRAMES = 5
-ORBIT_OBSTACLE_LOST_FRAMES = 5  # orbit 時藍色短暫消失幾次才回 find_obstacle
+ORBIT_OBSTACLE_LOST_FRAMES = 25 # orbit 時藍色短暫消失幾次才回 find_obstacle
 
 OBSTACLE_BODY_TOL_X = 10  # 藍色障礙物中心 x 距離畫面中心的容許誤差
+OBSTACLE_HEAD_H_TOL = 80  # 繞球時，頭部水平刻度接近中心才代表身體朝向障礙物
 OBSTACLE_MIN_AREA = 300
 
 # 射門
@@ -56,11 +58,25 @@ HEAD_KP_H = 1.0  # 太大容易抖動，太小會追太慢
 HEAD_KP_V = 1.0
 HEAD_MAX_STEP_H = 80  # 頭部水平單次最大修正量
 HEAD_MAX_STEP_V = 60  # 頭部垂直單次最大修正量
-HEAD_TOL_X = 12  # 水平方向死區
-HEAD_TOL_Y = 20  # 垂直方向死區
+HEAD_TOL_X = 18  # 水平方向死區
+HEAD_TOL_Y = 30  # 垂直方向死區
 
 HEAD_SEARCH_STEP = 50  # 數值越大掃描越快，但可能略過目標，數值越小掃描越慢，但比較穩
 SEARCH_LEVELS = [1450, 1650, 1850] # 搜尋球時使用的三層垂直角度
+
+# 尋找藍色障礙物專用分層搜尋參數，不共用 find_ball 的參數
+# 改成比較大範圍、比較慢，並且每一層掃完整個左右範圍才換下一層
+OBSTACLE_SEARCH_STEP = 30
+OBSTACLE_SEARCH_LEVELS = [1450, 1600, 1750, 1900, 2020]
+OBSTACLE_EDGES_PER_LEVEL = 2       # 2 = 左右兩側都掃完，才換下一層
+
+# confirm_ball 找不到球時專用分層搜尋參數，不共用 find_ball 的參數
+# confirm 主要找近距離球，所以比 obstacle 更偏低頭，但也給足範圍
+CONFIRM_SEARCH_STEP = 30
+CONFIRM_SEARCH_LEVELS = [1250, 1400, 1550, 1700, 1850]
+CONFIRM_EDGES_PER_LEVEL = 2        # 2 = 左右兩側都掃完，才換下一層
+CONFIRM_BACKUP_FRAMES = 8          # confirm_ball 看不到球時，先後退幾次再開始搜尋
+CONFIRM_BALL_LOST_FRAMES = 60      # confirm_ball 連續看不到球幾次才回 find_ball，拉長避免太快跳走
 
 # 球
 BALL_MIN_AREA = 80
@@ -68,21 +84,26 @@ BALL_ASPECT_MIN = 0.5 # 球長寬比下限
 BALL_ASPECT_MAX = 2.0 #上限
 BALL_MIN_Y_CENTROID = 60 # 球中心 y 座標下限
 BALL_FOUND_FRAMES = 5 #連續看球幾次 才算對準
-BALL_LOST_FRAMES = 8  #連續錯過幾次 才算真的lost ball
+BALL_LOST_FRAMES = 20  #連續錯過幾次 才算真的lost ball
+
+# 用球的面積 size 判斷距離，不再用 head_v 刻度判斷距離
+BALL_SIZE_OK_MIN = 930    # 球太小，代表太遠，要前進
+BALL_SIZE_OK_MAX = 1100   # 球太大，代表太近，要後退
+BALL_SIZE_REACH_FRAMES = 5
 
 # 走向球時的身體修正條件
 WALK_HEAD_H_TOL = 120 # 頭部水平偏差超過此值時，代表身體還沒對準球需用左右旋轉修正身體方向
 WALK_FORWARD_TOL = 80 # 頭部水平偏差小於此值時，代表球大致在身體前方，允許機器人往前走
 
 BALL_REACH_HEAD_V_MIN = 1230 # 看球垂直刻度範圍
-BALL_REACH_HEAD_V_MAX = 1350
+BALL_REACH_HEAD_V_MAX = 1600     #1350
 BALL_REACH_FRAMES = 5
 
 # 障礙物與射門前確認
 HEAD_OBSTACLE_SEARCH_V = 1900
 OBSTACLE_CENTER_FRAMES = 4
 
-HEAD_CONFIRM_BALL_V = 1400
+HEAD_CONFIRM_BALL_V = 1600
 CONFIRM_BALL_FRAMES = 4
 
 
@@ -181,6 +202,7 @@ class StatusPrinter(threading.Thread):
                     f" ball.confirm    : {n.confirm_ball_count}/{CONFIRM_BALL_FRAMES}\n"
                     f" ball.cx / cy    : {n.ball.cx} / {n.ball.cy}\n"
                     f" ball.area       : {n.ball.area}\n"
+                    f" ball.size.ok    : {BALL_SIZE_OK_MIN} ~ {BALL_SIZE_OK_MAX}\n"
                     f" ball.aspect     : {n.ball.aspect:.2f}\n"
 
                     f"#================== 藍色障礙物 =======================#\n"
@@ -190,6 +212,7 @@ class StatusPrinter(threading.Thread):
                     f" orbit.lost      : {n.orbit_obstacle_lost_count}/{ORBIT_OBSTACLE_LOST_FRAMES}\n"
                     f" orbit.head_lock : {n.orbit_head_locked}\n"
                     f" obstacle.cx/cy  : {n.obstacle.cx} / {n.obstacle.cy}\n"
+                    f" obstacle.headErr: {n.head_h - HEAD_H_CENTER} / {OBSTACLE_HEAD_H_TOL}\n"
                     f" obstacle.area   : {n.obstacle.area}\n"
                     f" obstacle.aspect : {n.obstacle.aspect:.2f}\n"
 
@@ -200,6 +223,8 @@ class StatusPrinter(threading.Thread):
                     f" search_dir      : {n.search_dir}\n"
                     f" search_count    : {n.search_count}\n"
                     f" search_level    : {n.search_level} / {SEARCH_LEVELS[n.search_level]}\n"
+                    f" obstacle.search : {n.obstacle_search_dir} level={n.obstacle_search_level} / {OBSTACLE_SEARCH_LEVELS[n.obstacle_search_level]}\n"
+                    f" confirm.search  : {n.confirm_search_dir} level={n.confirm_search_level} / {CONFIRM_SEARCH_LEVELS[n.confirm_search_level]}\n"
                     f"#====================================================#\n"
                 )
                 sys.stdout.flush()
@@ -211,7 +236,7 @@ class StatusPrinter(threading.Thread):
 
 class UnitedSoccer(API):
     def __init__(self):
-        super().__init__('us_full_strategy_orbit')
+        super().__init__('us_full_strategy_layered_search')
 
         self.ball = BallInfo(self)
         self.obstacle = ObstacleInfo(self)
@@ -222,6 +247,16 @@ class UnitedSoccer(API):
         self.search_dir = 'right'
         self.search_count = 0
         self.search_level = 0
+
+        # 尋找藍色障礙物專用搜尋狀態
+        self.obstacle_search_dir = 'right'
+        self.obstacle_search_count = 0
+        self.obstacle_search_level = 0
+
+        # confirm_ball 找不到球時專用搜尋狀態
+        self.confirm_search_dir = 'right'
+        self.confirm_search_count = 0
+        self.confirm_search_level = 0
 
         self.ball_lost_count = 0
         self.found_ball_count = 0
@@ -234,7 +269,7 @@ class UnitedSoccer(API):
         self.orbit_align_count = 0
         self.orbit_obstacle_lost_count = 0
 
-        # orbit 階段頭部鎖定旗標：避免頭又回去追球
+        # orbit 階段視覺鎖定旗標：避免頭又回去追球，鎖定後改追蹤藍色
         self.orbit_head_locked = False
 
         self.state = 'find_ball'
@@ -267,6 +302,14 @@ class UnitedSoccer(API):
         self.search_dir = 'right'
         self.search_count = 0
         self.search_level = 0
+
+        self.obstacle_search_dir = 'right'
+        self.obstacle_search_count = 0
+        self.obstacle_search_level = 0
+
+        self.confirm_search_dir = 'right'
+        self.confirm_search_count = 0
+        self.confirm_search_level = 0
 
     # 停止步態
     def _stop_walk(self):
@@ -324,24 +367,73 @@ class UnitedSoccer(API):
 
         self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
 
-    # 搜尋藍色障礙物
+    # 搜尋藍色障礙物：使用障礙物專用分層參數
     def _search_head_for_obstacle(self):
-        self.head_v = HEAD_OBSTACLE_SEARCH_V
+        # 每一層先固定 head_v，頭只做水平掃描
+        self.head_v = OBSTACLE_SEARCH_LEVELS[self.obstacle_search_level]
         self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
 
-        if self.search_dir == 'right':
-            self.head_h -= HEAD_SEARCH_STEP
+        if self.obstacle_search_dir == 'right':
+            self.head_h -= OBSTACLE_SEARCH_STEP
 
             if self.head_h <= HEAD_H_MIN:
                 self.head_h = HEAD_H_MIN
-                self.search_dir = 'left'
+                self.obstacle_search_dir = 'left'
+                self.obstacle_search_count += 1
+
+                # 重點：不要碰到邊界就立刻換層
+                # 要左右兩側都掃過，才換下一個垂直層
+                if self.obstacle_search_count % OBSTACLE_EDGES_PER_LEVEL == 0:
+                    self.obstacle_search_level = (
+                        self.obstacle_search_level + 1
+                    ) % len(OBSTACLE_SEARCH_LEVELS)
 
         else:
-            self.head_h += HEAD_SEARCH_STEP
+            self.head_h += OBSTACLE_SEARCH_STEP
 
             if self.head_h >= HEAD_H_MAX:
                 self.head_h = HEAD_H_MAX
-                self.search_dir = 'right'
+                self.obstacle_search_dir = 'right'
+                self.obstacle_search_count += 1
+
+                if self.obstacle_search_count % OBSTACLE_EDGES_PER_LEVEL == 0:
+                    self.obstacle_search_level = (
+                        self.obstacle_search_level + 1
+                    ) % len(OBSTACLE_SEARCH_LEVELS)
+
+        self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
+
+    # confirm_ball 找不到球時：使用確認球專用分層搜尋參數
+    def _search_head_for_confirm_ball(self):
+        # 每一層固定 head_v，先完整掃左右，再換下一層
+        self.head_v = CONFIRM_SEARCH_LEVELS[self.confirm_search_level]
+        self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
+
+        if self.confirm_search_dir == 'right':
+            self.head_h -= CONFIRM_SEARCH_STEP
+
+            if self.head_h <= HEAD_H_MIN:
+                self.head_h = HEAD_H_MIN
+                self.confirm_search_dir = 'left'
+                self.confirm_search_count += 1
+
+                if self.confirm_search_count % CONFIRM_EDGES_PER_LEVEL == 0:
+                    self.confirm_search_level = (
+                        self.confirm_search_level + 1
+                    ) % len(CONFIRM_SEARCH_LEVELS)
+
+        else:
+            self.head_h += CONFIRM_SEARCH_STEP
+
+            if self.head_h >= HEAD_H_MAX:
+                self.head_h = HEAD_H_MAX
+                self.confirm_search_dir = 'right'
+                self.confirm_search_count += 1
+
+                if self.confirm_search_count % CONFIRM_EDGES_PER_LEVEL == 0:
+                    self.confirm_search_level = (
+                        self.confirm_search_level + 1
+                    ) % len(CONFIRM_SEARCH_LEVELS)
 
         self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
 
@@ -391,17 +483,23 @@ class UnitedSoccer(API):
             self.ball_lost_count = 0
             self._track_object(self.ball.cx, self.ball.cy)
 
-            if BALL_REACH_HEAD_V_MIN <= self.head_v <= BALL_REACH_HEAD_V_MAX:
+            head_error = self.head_h - HEAD_H_CENTER
+
+            # ===== 用球的 size / area + 身體角度判斷射門位置 =====
+            ball_size_ok = BALL_SIZE_OK_MIN <= self.ball.area <= BALL_SIZE_OK_MAX
+            body_aligned = abs(head_error) <= WALK_HEAD_H_TOL
+
+            if ball_size_ok and body_aligned:
                 self.reach_ball_count += 1
 
-                if self.reach_ball_count >= BALL_REACH_FRAMES:
+                if self.reach_ball_count >= BALL_SIZE_REACH_FRAMES:
                     self._stop_walk()
 
                     print("\n########################################")
-                    print("######### 到達射門位置 #########")
+                    print("######### 到達射門位置(size判斷) #########")
                     print("########################################")
-                    print(f"head_v = {self.head_v}")
-                    print(f"area   = {self.ball.area}\n")
+                    print(f"ball.area = {self.ball.area}")
+                    print(f"head_v    = {self.head_v}\n")
 
                     self.head_h = HEAD_H_CENTER
                     self.head_v = HEAD_OBSTACLE_SEARCH_V
@@ -413,34 +511,48 @@ class UnitedSoccer(API):
                     self.orbit_obstacle_lost_count = 0
                     self.orbit_head_locked = False
 
+                    # 重置尋找障礙物專用分層搜尋
+                    self.obstacle_search_dir = 'right'
+                    self.obstacle_search_count = 0
+                    self.obstacle_search_level = 0
+
                     self.state = 'find_obstacle'
-                    self.action_detail = '到達射門位置，抬頭找藍色障礙物'
+                    self.action_detail = '球size到達射門位置，抬頭找藍色障礙物'
                     return
             else:
                 self.reach_ball_count = 0
 
-            head_error = self.head_h - HEAD_H_CENTER
-
             self.sendbodyAuto(1)
 
+            # 先修左右，避免還沒正對球就前後亂動
             if head_error > WALK_HEAD_H_TOL:
                 self.sendContinuousValue(*LEFT_CORRECT)
-                self.action_detail = f'走向球：左轉 head_error={head_error}'
+                self.action_detail = f'走向球：左轉 head_error={head_error} area={self.ball.area}'
 
             elif head_error < -WALK_HEAD_H_TOL:
                 self.sendContinuousValue(*RIGHT_CORRECT)
-                self.action_detail = f'走向球：右轉 head_error={head_error}'
+                self.action_detail = f'走向球：右轉 head_error={head_error} area={self.ball.area}'
 
-            elif abs(head_error) < WALK_FORWARD_TOL:
+            elif self.ball.area > BALL_SIZE_OK_MAX:
+                self.sendContinuousValue(*BACKWARD_MOVE)
+                self.action_detail = (
+                    f'走向球：球太大，後退 area={self.ball.area} '
+                    f'OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}'
+                )
+
+            elif self.ball.area < BALL_SIZE_OK_MIN and abs(head_error) < WALK_FORWARD_TOL:
                 self.sendContinuousValue(*FORWARD_MOVE)
                 self.action_detail = (
-                    f'走向球：前進 head_error={head_error} '
-                    f'head_v={self.head_v}'
+                    f'走向球：球太小，前進 area={self.ball.area} '
+                    f'OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}'
                 )
 
             else:
                 self.sendContinuousValue(*STOP_MOVE)
-                self.action_detail = f'走向球：等待對正 head_error={head_error}'
+                self.action_detail = (
+                    f'走向球：等待對正 head_error={head_error} '
+                    f'body_aligned={body_aligned} area={self.ball.area}'
+                )
 
         else:
             self.ball_lost_count += 1
@@ -460,109 +572,130 @@ class UnitedSoccer(API):
 
     # 狀態：尋找藍色障礙物 find_obstacle
     def _state_find_obstacle(self):
-        self._stop_walk()
+        """
+        找藍色障礙物 + 繞球對準合併在同一個 state。
+
+        orbit_head_locked = False：還在用障礙物專用分層搜尋找藍色。
+        orbit_head_locked = True ：已看到藍色，頭持續追蹤藍色，身體依頭部偏差繞球修正。
+        """
         self.obstacle.update()
 
-        if self.obstacle.visible:
-            print("\n########################################")
-            print("######### 藍色障礙物已看到 #########")
-            print("########################################")
-            print(f"obstacle_x = {self.obstacle.cx}")
-            print(f"obstacle_y = {self.obstacle.cy}")
-            print(f"area       = {self.obstacle.area}\n")
+        # =====================================================
+        # 1. 還沒鎖頭：用障礙物專用分層搜尋找藍色障礙物
+        # =====================================================
+        if not self.orbit_head_locked:
+            self._stop_walk()
 
-            # 進 orbit 前先把頭鎖到障礙物高度
-            # 後面 orbit 不再追球，只用身體修正藍色障礙物位置
-            self.head_h = HEAD_H_CENTER
-            self.head_v = HEAD_OBSTACLE_SEARCH_V
-            self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
-            self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
+            if self.obstacle.visible:
+                print("\n########################################")
+                print("######### 藍色障礙物已看到 #########")
+                print("########################################")
+                print(f"obstacle_x = {self.obstacle.cx}")
+                print(f"obstacle_y = {self.obstacle.cy}")
+                print(f"area       = {self.obstacle.area}\n")
+
+                # 看到藍色後進入視覺鎖定。後續仍持續追蹤藍色，
+                # 讓身體繞球直到 head_h 回到中心附近。
+
+                self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
+                self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
+
+                self.obstacle_center_count = 0
+                self.orbit_align_count = 0
+                self.orbit_obstacle_lost_count = 0
+                self.orbit_head_locked = True
+
+                self.action_detail = '看到藍色障礙物，進入追蹤並用頭部偏差繞球對準'
+                return
 
             self.obstacle_center_count = 0
             self.orbit_align_count = 0
             self.orbit_obstacle_lost_count = 0
-            self.orbit_head_locked = True
-
-            self.state = 'orbit_ball_align'
-            self.action_detail = '看到藍色障礙物，頭部鎖定，開始繞球對準'
+            self._search_head_for_obstacle()
+            self.action_detail = (
+                f'障礙物分層搜尋中 '
+                f'dir={self.obstacle_search_dir} '
+                f'level={self.obstacle_search_level} '
+                f'edge={self.obstacle_search_count}/{OBSTACLE_EDGES_PER_LEVEL} '
+                f'head_h={self.head_h} head_v={self.head_v}'
+            )
             return
 
-        self.obstacle_center_count = 0
-        self._search_head_for_obstacle()
-        self.action_detail = (
-            f'抬頭搜尋藍色障礙物 head_h={self.head_h} head_v={self.head_v}'
-        )
-
-    # 狀態：繞球對準障礙物 orbit_ball_align
-    def _state_orbit_ball_align(self):
-        """
-        繞著球去對準藍色障礙物。
-
-        重點：
-        1. orbit 階段不追球。
-        2. 頭部鎖在 HEAD_H_CENTER / HEAD_OBSTACLE_SEARCH_V。
-        3. 只用藍色障礙物的位置決定身體側移與旋轉。
-        4. 繞完後才低頭進 confirm_ball 重新確認球。
-        """
-
-        # orbit 階段只更新藍色障礙物，不更新球、不追球
-        self.obstacle.update()
-
-        # 頭只在剛進 orbit 或被重設時送一次
-        if not self.orbit_head_locked:
-            self.head_h = HEAD_H_CENTER
-            self.head_v = HEAD_OBSTACLE_SEARCH_V
-            self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
-            self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
-            self.orbit_head_locked = True
-
+        # =====================================================
+        # 2. 已鎖頭：在 find_obstacle 內直接用身體繞球修正
+        # =====================================================
         if not self.obstacle.visible:
             self.orbit_obstacle_lost_count += 1
             self.orbit_align_count = 0
+
+            # 藍色短暫消失時，不切 state，不掃頭
             self.sendContinuousValue(*STOP_MOVE)
             self.sendbodyAuto(0)
 
+
             if self.orbit_obstacle_lost_count > ORBIT_OBSTACLE_LOST_FRAMES:
+                # 真的太久找不到藍色，才解除鎖頭重新搜尋
                 self.orbit_head_locked = False
-                self.state = 'find_obstacle'
-                self.action_detail = '繞球時連續看不到藍色障礙物，回到 find_obstacle'
+                self.orbit_align_count = 0
+                self.orbit_obstacle_lost_count = 0
+                self.obstacle_search_dir = 'right'
+                self.obstacle_search_count = 0
+                self.obstacle_search_level = 0
+                self.action_detail = '藍色連續消失太久，解除鎖頭重新分層搜尋藍色'
                 return
 
             self.action_detail = (
-                f'繞球時藍色短暫消失 '
+                f'find_obstacle內繞球：藍色短暫消失，頭部保持鎖定 '
                 f'{self.orbit_obstacle_lost_count}/{ORBIT_OBSTACLE_LOST_FRAMES}'
             )
             return
 
         self.orbit_obstacle_lost_count = 0
+        obstacle_pixel_error = self.obstacle.cx - IMG_CX
+        obstacle_centered = abs(obstacle_pixel_error) <= OBSTACLE_BODY_TOL_X
 
-        obstacle_error = self.obstacle.cx - IMG_CX
+        # 鎖定後仍追蹤藍色。若只看 obstacle.cx，頭轉偏時會誤判身體已對準；
+        # 所以身體繞球方向改用 head_h 相對中心的偏差判斷。
+        self._track_object(self.obstacle.cx, self.obstacle.cy)
+        head_error = self.head_h - HEAD_H_CENTER
 
-        if obstacle_error > OBSTACLE_BODY_TOL_X:
+        if head_error < -OBSTACLE_HEAD_H_TOL:
             self.sendbodyAuto(1)
             self.sendContinuousValue(*ORBIT_RIGHT_MOVE)
             self.orbit_align_count = 0
             self.action_detail = (
-                f'繞球右修正 obstacle_error={obstacle_error}'
+                f'find_obstacle內繞球右修正 head_error={head_error} '
+                f'obstacle_pixel_error={obstacle_pixel_error}'
             )
 
-        elif obstacle_error < -OBSTACLE_BODY_TOL_X:
+        elif head_error > OBSTACLE_HEAD_H_TOL:
             self.sendbodyAuto(1)
             self.sendContinuousValue(*ORBIT_LEFT_MOVE)
             self.orbit_align_count = 0
             self.action_detail = (
-                f'繞球左修正 obstacle_error={obstacle_error}'
+                f'find_obstacle內繞球左修正 head_error={head_error} '
+                f'obstacle_pixel_error={obstacle_pixel_error}'
+            )
+
+        elif not obstacle_centered:
+            self.sendContinuousValue(*STOP_MOVE)
+            self.sendbodyAuto(0)
+            self.orbit_align_count = 0
+            self.action_detail = (
+                f'find_obstacle內頭部追蹤藍色中 '
+                f'head_error={head_error} '
+                f'obstacle_pixel_error={obstacle_pixel_error}'
             )
 
         else:
             self.sendContinuousValue(*STOP_MOVE)
             self.sendbodyAuto(0)
-
             self.orbit_align_count += 1
             self.action_detail = (
-                f'繞球對準完成中 '
+                f'find_obstacle內繞球對準完成中 '
                 f'{self.orbit_align_count}/{ORBIT_ALIGN_FRAMES} '
-                f'obstacle_error={obstacle_error}'
+                f'head_error={head_error} '
+                f'obstacle_pixel_error={obstacle_pixel_error}'
             )
 
             if self.orbit_align_count >= ORBIT_ALIGN_FRAMES:
@@ -570,11 +703,13 @@ class UnitedSoccer(API):
                 print("######### 繞球對準障礙物完成 #########")
                 print("########################################")
                 print(f"obstacle_x    = {self.obstacle.cx}")
-                print(f"obstacle_error= {obstacle_error}")
+                print(f"head_error    = {head_error}")
+                print(f"pixel_error   = {obstacle_pixel_error}")
                 print(f"area          = {self.obstacle.area}\n")
 
                 self._stop_walk()
 
+                # 低頭重新確認球
                 self.head_h = HEAD_H_CENTER
                 self.head_v = HEAD_CONFIRM_BALL_V
                 self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
@@ -582,19 +717,33 @@ class UnitedSoccer(API):
 
                 self.confirm_ball_count = 0
                 self.confirm_ball_lost_count = 0
+
+                # 重置 confirm_ball 專用分層搜尋
+                self.confirm_search_dir = 'right'
+                self.confirm_search_count = 0
+                self.confirm_search_level = 0
+
                 self.orbit_head_locked = False
+                self.orbit_align_count = 0
+                self.orbit_obstacle_lost_count = 0
+
                 self.state = 'confirm_ball'
-                self.action_detail = '繞球對準完成，低頭再次確認球'
+                self.action_detail = 'find_obstacle內繞球完成，低頭再次確認球'
+                return
 
     # 狀態：確認球 confirm_ball
     def _state_confirm_ball(self):
         if self.ball.visible:
             self.confirm_ball_lost_count = 0
-            self._track_object(self.ball.cx, self.ball.cy)
 
+            self._track_object(self.ball.cx, self.ball.cy)
             head_error = self.head_h - HEAD_H_CENTER
 
-            if BALL_REACH_HEAD_V_MIN <= self.head_v <= BALL_REACH_HEAD_V_MAX:
+            # 用球的 size / area + 身體角度判斷射門距離
+            ball_size_ok = BALL_SIZE_OK_MIN <= self.ball.area <= BALL_SIZE_OK_MAX
+            body_aligned = abs(head_error) <= WALK_HEAD_H_TOL
+
+            if ball_size_ok and body_aligned:
                 self.sendContinuousValue(*STOP_MOVE)
                 self.sendbodyAuto(0)
 
@@ -602,77 +751,104 @@ class UnitedSoccer(API):
 
                 if self.confirm_ball_count >= CONFIRM_BALL_FRAMES:
                     print("\n########################################")
-                    print("######### 射門前球位置確認完成 #########")
+                    print("######### 射門前球位置確認完成(size判斷) #########")
                     print("########################################")
-                    print(f"head_v = {self.head_v}")
-                    print(f"area   = {self.ball.area}\n")
+                    print(f"ball.area = {self.ball.area}")
+                    print(f"head_v    = {self.head_v}\n")
 
                     self.state = 'shoot'
-                    self.action_detail = '球位置再次確認完成，準備射門'
+                    self.action_detail = '球size再次確認完成，準備射門'
                     return
 
                 self.action_detail = (
-                    f'確認球位置中 '
-                    f'{self.confirm_ball_count}/{CONFIRM_BALL_FRAMES}'
+                    f'確認球size中 {self.confirm_ball_count}/{CONFIRM_BALL_FRAMES} '
+                    f'area={self.ball.area}'
                 )
 
             else:
                 self.confirm_ball_count = 0
                 self.sendbodyAuto(1)
 
+                # 先修左右，再修前後距離
                 if head_error > WALK_HEAD_H_TOL:
                     self.sendContinuousValue(*LEFT_CORRECT)
                     self.action_detail = (
-                        f'確認球：球偏左，左轉修正 head_error={head_error}'
+                        f'確認球：球偏左，左轉修正 head_error={head_error} area={self.ball.area}'
                     )
 
                 elif head_error < -WALK_HEAD_H_TOL:
                     self.sendContinuousValue(*RIGHT_CORRECT)
                     self.action_detail = (
-                        f'確認球：球偏右，右轉修正 head_error={head_error}'
+                        f'確認球：球偏右，右轉修正 head_error={head_error} area={self.ball.area}'
                     )
 
-                elif self.head_v > BALL_REACH_HEAD_V_MAX:
+                elif self.ball.area < BALL_SIZE_OK_MIN:
                     self.sendContinuousValue(*CONFIRM_FORWARD_MOVE)
                     self.action_detail = (
-                        f'確認球：球太遠，慢慢前進 head_v={self.head_v}'
+                        f'確認球：球太小，慢慢前進 area={self.ball.area} '
+                        f'OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}'
                     )
 
-                elif self.head_v < BALL_REACH_HEAD_V_MIN:
+                elif self.ball.area > BALL_SIZE_OK_MAX:
                     self.sendContinuousValue(*CONFIRM_BACKWARD_MOVE)
                     self.action_detail = (
-                        f'確認球：球太近，慢慢後退 head_v={self.head_v}'
+                        f'確認球：球太大，慢慢後退 area={self.ball.area} '
+                        f'OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}'
                     )
 
                 else:
                     self.sendContinuousValue(*STOP_MOVE)
                     self.action_detail = (
-                        f'確認球：等待修正 head_v={self.head_v}'
+                        f'確認球：等待修正 head_error={head_error} '
+                        f'body_aligned={body_aligned} area={self.ball.area}'
                     )
 
         else:
             self.confirm_ball_count = 0
             self.confirm_ball_lost_count += 1
 
-            self.sendContinuousValue(*STOP_MOVE)
-            self.sendbodyAuto(0)
+            # 第一段：先往後退，讓球比較容易回到畫面內
+            if self.confirm_ball_lost_count <= CONFIRM_BACKUP_FRAMES:
+                self.sendbodyAuto(1)
+                self.sendContinuousValue(*CONFIRM_BACKWARD_MOVE)
 
-            self.head_h = HEAD_H_CENTER
-            self.head_v = HEAD_CONFIRM_BALL_V
+                # 第一次看不到球時，先把頭放到確認球搜尋的第一層
+
+                self.action_detail = (
+                    f'確認球時看不到球，先後退 '
+                    f'{self.confirm_ball_lost_count}/{CONFIRM_BACKUP_FRAMES}'
+                )
+                return
+
+            # 第二段：後退完成後，停止身體，使用 confirm_ball 專用分層搜尋找球
+            if self.confirm_ball_lost_count <= CONFIRM_BALL_LOST_FRAMES:
+                self.sendContinuousValue(*STOP_MOVE)
+                self.sendbodyAuto(0)
+                self._search_head_for_confirm_ball()
+                self.action_detail = (
+                    f'確認球分層搜尋中 '
+                    f'lost={self.confirm_ball_lost_count}/{CONFIRM_BALL_LOST_FRAMES} '
+                    f'dir={self.confirm_search_dir} '
+                    f'level={self.confirm_search_level} '
+                    f'edge={self.confirm_search_count}/{CONFIRM_EDGES_PER_LEVEL} '
+                    f'head_h={self.head_h} head_v={self.head_v}'
+                )
+                return
+
+            # 第三段：真的太久找不到，才回 find_ball
+            self.found_ball_count = 0
+            self.ball_lost_count = 0
+            self.confirm_ball_lost_count = 0
+            self.confirm_search_dir = 'right'
+            self.confirm_search_count = 0
+            self.confirm_search_level = 0
+
             self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
             self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
 
-            if self.confirm_ball_lost_count > BALL_LOST_FRAMES:
-                self.found_ball_count = 0
-                self.ball_lost_count = 0
-                self.state = 'find_ball'
-                self.action_detail = '確認球失敗，回到 find_ball'
-                return
-
-            self.action_detail = (
-                f'確認球時看不到球 '
-                f'{self.confirm_ball_lost_count}/{BALL_LOST_FRAMES}'
-            )
+            self.state = 'find_ball'
+            self.action_detail = '確認球分層搜尋失敗，回到 find_ball'
+            return
 
     # 狀態：射門 shoot
     def _state_shoot(self):
@@ -713,8 +889,7 @@ class UnitedSoccer(API):
         elif self.state == 'find_obstacle':
             self._state_find_obstacle()
 
-        elif self.state == 'orbit_ball_align':
-            self._state_orbit_ball_align()
+        # orbit_ball_align 已合併進 find_obstacle，因此不再單獨切換 state。
 
         elif self.state == 'confirm_ball':
             self._state_confirm_ball()
