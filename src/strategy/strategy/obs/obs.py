@@ -78,7 +78,7 @@ PRETURN_LEFT          = False
 # PRETURN_LEFT          = True #預轉身左
 PRETURN_LEFT_ANGLE    = 40
 
-PRETURN_RIGHT         = True
+PRETURN_RIGHT         = False
 # PRETURN_RIGHT         = True #預轉身右
 PRETURN_RIGHT_ANGLE   = 50
 #===========================================
@@ -87,7 +87,7 @@ YELLOW_SMALL_TURNHEAD       = False #通道不夠大轉頭
 YELLOW_BLUE                 = True#黃線接藍牆
 YELLOW_IMU_LEFT        = False #黃色與藍牆夠近時 或 兩個藍色中有洞使用深度判斷 走完轉頭先imu_fix
 YELLOW_IMU_RIGHT       = False #黃色與藍牆夠近時 或 兩個藍色中有洞使用深度判斷 走完轉頭先imu_fix  
-SIMP_TURN_HEAD              = False #簡單轉頭 原本turn_for_wall的地方會先simp_turn_head再turn_for_wall
+SIMP_TURN_HEAD              = True #簡單轉頭 原本turn_for_wall的地方會先simp_turn_head再turn_for_wall
 
 FORCE_TURN_LEFT             = False #進轉頭策略 不轉頭強置左轉
 FORCE_TURN_RIGHT            = False #進轉頭策略 不轉頭強置右轉
@@ -1547,7 +1547,7 @@ class Obs(Node): #各種避障動作
                                         elif  self.image.deep_sum_l >= self.image.deep_sum_r and ( self.image.center_deep < 15 ) and (not SIMP_TURN_HEAD):
                                             while abs(send.imu_rpy[2]) < 39 and status.running and (not self.image.YY_2):    
                                                 self.walk.move('turn_left_for_wall')
-                                                status.obs_action = "turn_left_for_wall_1"
+                                                status.obs_action = "turn_left_for_wall"
                                                 # send.imu_rpy[2] = 39
                                                 
                                             self.imu_ok = True
