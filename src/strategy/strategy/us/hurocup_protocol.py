@@ -82,6 +82,18 @@ def make_state_object(type_id: int, x: int, y: int,
     return (type_id, x, y, int(orientation_rad * ORI_SCALE), confidence)
 
 
+def make_perception_object(type_id: int, x: int, y: int,
+                           orientation_rad: float = 0.0, confidence: int = 255):
+    # 與 state 物件同版面,差別只在 type 值(33-40)
+    return (type_id, x, y, int(orientation_rad * ORI_SCALE), confidence)
+
+
+def make_intention_object(type_id: int, x: int, y: int,
+                          orientation_rad: float = 0.0, offence: int = 128):
+    # type 65-67;最後一欄是 offence(侵略性)而非 confidence
+    return (type_id, x, y, int(orientation_rad * ORI_SCALE), offence)
+
+
 def make_referee_game_state(team_left_mask: int, team_right_mask: int,
                             time_left: int, state: int):
     # 對應 decode:a=team_left, b=team_right, c=time_left, d=state
