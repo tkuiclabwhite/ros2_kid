@@ -39,37 +39,54 @@ RATIO_NEAR = -1.35 #(2251-2363)/100
 
 # ========= 距離抓點參數：參考籃球 distance = FOCAL * REAL / pixel_length =========
 # 攀岩點實際高度，單位自己統一即可，先用 10 當基準
-CW_REAL_POINT_LENGTH = 10
+CW_REAL_POINT_LENGTH = 23
 # 相機焦距參數，先沿用籃球的 330，現場再校正
-CW_FOCAL_LENGTH = 330
+CW_FOCAL_LENGTH = 44
 
 # # # # # # # # 距離抓點# # # # # # # # # # # # # # # # 
 # 理想抓點距離，越大代表希望站/抓得更遠 抓太前面 → 調大 / 抓太後面 → 調小
-CW_DIST_TARGET = 60
+CW_DIST_TARGET = 24
 # 左右像素偏移轉手馬達量 左右抓歪
 CW_DIST_GAIN_X = 3.0
 # 上下像素偏移轉手馬達量 上下抓歪
 CW_DIST_GAIN_Y = 1.5
 # 遠近距離誤差轉手伸出去的量 如果：距離變很多手只動一點調大
 CW_DIST_GAIN_Z = 4.0
-CW_DIST_TARGET = 60
-CW_DIST_GAIN_X = 3.0
-CW_DIST_GAIN_Y = 1.5
-CW_DIST_GAIN_Z = 4.0
+
 #######################################################
 # ========= 手部抓點微調 =========
 # X：左右修正。左手抓太左/右手抓太左 -> 加大；抓太右 -> 減小
-LEFT_HAND_X_OFFSET = -20
-RIGHT_HAND_X_OFFSET = -200
+LEFT_HAND_X_OFFSET = -180
+RIGHT_HAND_X_OFFSET = -300
 
 # Y：高低修正。手抓太高 -> 減小；手抓太低 -> 加大
-LEFT_HAND_Y_OFFSET = 800
+LEFT_HAND_Y_OFFSET = 730
 RIGHT_HAND_Y_OFFSET = -750
 # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # 防止一次輸出太大，可依你的馬達安全範圍調整
 CW_HAND_X_LIMIT = 1000
 CW_HAND_Y_LIMIT = 1000
+
+# ========= 動態距離抓點參數（只影響抓點，不影響走路） =========
+# 現場校正方式：把單一攀岩點放在 17cm，讀 log 的 hold_area，填到 CW_GRIP_CALIB_AREA
+CW_DYNAMIC_GRIP_ENABLE = True
+CW_GRIP_CALIB_DISTANCE_CM = 24.0 #---------------------------------------------------------------------------------------------------------------------站在24cm
+CW_GRIP_CALIB_AREA = 1204.0  #-------------------------------------------------------------------------------------------------------------------------在24cm終端印出的面積
+# 希望手去抓點時的理想距離；抓太深/壓太多 -> 調大，抓不到/伸不夠 -> 調小
+CW_GRIP_TARGET_DISTANCE_CM = 17.0
+# 攀岩點實際寬度，拿來把像素 dx/dy 換成大概公分，選點會用
+CW_REAL_HOLD_WIDTH_CM = 4.0
+# 手臂可抓最大直線距離；常常找不到點 -> 調大，常選太遠抓不到 -> 調小＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃
+CW_ARM_MAX_LENGTH_CM = 50.0
+#######################################################################################################################
+# 距離補償變平滑，避免每次面積跳動造成手抖；0.0 不更新，1.0 完全跟最新值
+CW_DISTANCE_SMOOTH_ALPHA = 0.35
+# 動態距離轉手部 X 補償；抓太前面/壓太多通常調小，伸不夠調大
+CW_DIST_CM_GAIN_X = 35.0
+# 面積異常保護
+CW_MIN_HOLD_AREA = 300
+CW_MAX_VALID_DISTANCE_CM = 60.0
 
 #------------------#
 HEAD_HORIZONTAL            = 2048               #頭水平
@@ -79,7 +96,7 @@ HEAD_LEFT_HAND_H = 2550
 HEAD_LEFT_HAND_V = 2100  #2100
 
 HEAD_RIGHT_HAND_H = 1550
-HEAD_RIGHT_HAND_V = 2100
+HEAD_RIGHT_HAND_V = 2200
  
 HEAD_LEFT_LEG_H = 1750
 HEAD_LEFT_LEG_V = 1750
@@ -110,14 +127,14 @@ MY_LINE_X =160 #攀岩基準線
 MY_SIZE = 1020
 
 # ========= 走到定點微調 =========
-# 直接調這個控制停下來距離：走太近 -> 改更負；走太遠 -> 改大
-READY_DISTANCE_ADJUST = -50
-
+# 直接調這個控制停下來距離：走太近 -> 改更負；走太遠 -> 改大＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃
+READY_DISTANCE_ADJUST = 0
+###################################################################################################################
 # 保留原本參數但不再用它控制距離，避免搞混
 WALK_SIZE_OFFSET = 0
 
 # 左右：人站太左/太右時微調中心線；正負方向依現場測一次修
-WALK_X_OFFSET = 0
+WALK_X_OFFSET = 10
 
 ROI_RADIUS = 120
 
@@ -127,7 +144,7 @@ LEFT_HAND_TARGET_Y_OFFSET  = 55
 RIGHT_HAND_TARGET_Y_OFFSET = 55
 # 允許高度範圍；數字越小越不容易跳到別顆
 LEFT_HAND_Y_RANGE  = 25
-RIGHT_HAND_Y_RANGE = 20
+RIGHT_HAND_Y_RANGE = 25
 
 # 參照 0422：只掃左上、右上安全角度，避免頭亂掃卡到
 HAND_SAFE_SCAN_VIEWS = [
@@ -572,34 +589,66 @@ class WallClimbing(API):
         return target
 
 
+    def calculate_hold_distance_cm(self, current_target):
+        """
+        用面積估距離：distance = K / sqrt(area)
+        K = 校正距離 * sqrt(校正面積)
+        這裡只給抓點用，不會影響走路的 size 判斷。
+        """
+        area = float(current_target.get('size', 0) or 0)
+        xmin, ymin, xmax, ymax = current_target['bbox']
+        bbox_w = max(1, xmax - xmin)
+        bbox_h = max(1, ymax - ymin)
+
+        if area <= 0:
+            area = float(bbox_w * bbox_h)
+
+        if area < CW_MIN_HOLD_AREA:
+            self.get_logger().info(f"攀岩點面積太小 area={area:.1f}，不做距離抓點")
+            return None
+
+        k = CW_GRIP_CALIB_DISTANCE_CM * math.sqrt(CW_GRIP_CALIB_AREA)
+        distance_cm = k / math.sqrt(area)
+        distance_cm = self.clamp_value(distance_cm, 1.0, CW_MAX_VALID_DISTANCE_CM)
+
+        # 做一點濾波，不然面積跳動時手部補償會跟著跳
+        last = getattr(self, 'last_hold_distance_cm', None)
+        if last is None:
+            smooth_distance = distance_cm
+        else:
+            smooth_distance = (last * (1.0 - CW_DISTANCE_SMOOTH_ALPHA)) + (distance_cm * CW_DISTANCE_SMOOTH_ALPHA)
+        self.last_hold_distance_cm = smooth_distance
+
+        self.get_logger().info(
+            f"距離估測: hold_area={area:.1f}, bbox={bbox_w}x{bbox_h}, "
+            f"raw={distance_cm:.1f}cm, smooth={smooth_distance:.1f}cm"
+        )
+        return smooth_distance
+
     def calculate_hand_motor_by_distance(self, action, current_target):
         """
-        參考籃球 basket_distance()：
-        distance = FOCAL_LENGTH * REAL_LENGTH / pixel_length
-        這裡 pixel_length 用攀岩點 bbox 高度 ymax-ymin。
+        動態抓點：
+        1. 用攀岩點面積換算距離
+        2. 用距離誤差自動補 X 方向伸手量
+        3. 保留 LEFT/RIGHT_HAND_X/Y_OFFSET，方便現場最後微調
         """
         target_cx, target_cy = current_target['center']
-        xmin, ymin, xmax, ymax = current_target['bbox']
 
-        point_length = ymax - ymin
-        if point_length <= 0:
-            self.get_logger().info("攀岩點高度錯誤，停止抓點")
-            return None, None
-
-        target_distance = CW_FOCAL_LENGTH * CW_REAL_POINT_LENGTH / point_length
         target_dx = target_cx - MY_LINE_X
         target_dy = target_cy - MY_LINE_Y
-        distance_error = target_distance - CW_DIST_TARGET
 
-        # 左右偏移 + 遠近補償
-        # 左手、右手分開算，因為右手遠近方向相反
+        distance_cm = self.calculate_hold_distance_cm(current_target)
+        if distance_cm is None:
+            return None, None
+
+        distance_error_cm = distance_cm - CW_GRIP_TARGET_DISTANCE_CM
+
         if action == 'left_hand':
             motor_value_x = (
                 target_dx * CW_DIST_GAIN_X
-                + distance_error * CW_DIST_GAIN_Z
+                + distance_error_cm * CW_DIST_CM_GAIN_X
                 + LEFT_HAND_X_OFFSET
             )
-
             motor_value_y = (
                 target_dy * CW_DIST_GAIN_Y
                 + LEFT_HAND_Y_OFFSET
@@ -607,33 +656,23 @@ class WallClimbing(API):
 
         elif action == 'right_hand':
             motor_value_x = (
-                -(target_dx * CW_DIST_GAIN_X
-                - distance_error * CW_DIST_GAIN_Z)
+                -(target_dx * CW_DIST_GAIN_X)
+                + distance_error_cm * CW_DIST_CM_GAIN_X
                 + RIGHT_HAND_X_OFFSET
             )
-
             motor_value_y = (
                 target_dy * CW_DIST_GAIN_Y
                 + RIGHT_HAND_Y_OFFSET
             )
-
         else:
             return None, None
 
-        motor_value_x = self.clamp_value(
-            motor_value_x,
-            -CW_HAND_X_LIMIT,
-            CW_HAND_X_LIMIT
-        )
+        motor_value_x = self.clamp_value(motor_value_x, -CW_HAND_X_LIMIT, CW_HAND_X_LIMIT)
+        motor_value_y = self.clamp_value(motor_value_y, -CW_HAND_Y_LIMIT, CW_HAND_Y_LIMIT)
 
-        motor_value_y = self.clamp_value(
-            motor_value_y,
-            -CW_HAND_Y_LIMIT,
-            CW_HAND_Y_LIMIT
-        )
         self.get_logger().info(
-            f"{action} 距離抓點: point_length={point_length}, "
-            f"distance={target_distance:.1f}, error={distance_error:.1f}, "
+            f"{action} 動態抓點: dist={distance_cm:.1f}cm, "
+            f"target={CW_GRIP_TARGET_DISTANCE_CM:.1f}cm, err={distance_error_cm:.1f}cm, "
             f"dx={target_dx}, dy={target_dy}"
         )
         self.get_logger().info(
@@ -865,7 +904,6 @@ class WallClimbing(API):
         color_1 = self.target.color1
         color_2 = self.target.color2
         target_colors = [color_1, color_2]
-
         point_r = 10
 
         for color in target_colors:
@@ -873,12 +911,11 @@ class WallClimbing(API):
 
             for i in range(min(cnts, len(self.object_sizes[color]) + 1)):
                 size = self.object_sizes[color][i]
-                if size < 300:
+                if size < CW_MIN_HOLD_AREA:
                     continue
 
                 cx = (self.object_x_max[color][i] + self.object_x_min[color][i]) // 2
                 cy = (self.object_y_max[color][i] + self.object_y_min[color][i]) // 2
-                
                 if cx is None or cy is None:
                     continue
 
@@ -890,59 +927,71 @@ class WallClimbing(API):
                 if xmin <= 0 or xmax >= 320 or ymin <= 0 or ymax >= 240:
                     continue
 
-                dist = math.sqrt((cx - self.ROI_cx) ** 2 + (cy - self.ROI_cy) ** 2)
-                if (dist + point_r) > (ROI_RADIUS + 60):
+                dist_px = math.sqrt((cx - self.ROI_cx) ** 2 + (cy - self.ROI_cy) ** 2)
+                if (dist_px + point_r) > (ROI_RADIUS + 60):
                     continue
 
-                center_ratio = 1.0 - (dist / ROI_RADIUS)
-                center_score = center_ratio * W_CENTER
-#####################右手選點排序太高減 
-                if hasattr(self, 'action') and self.action == 'right_hand':
-                    height_score = int((240 - cy) * 8)
-                else:
-                    height_score = int((240 - cy) * 5)
-###########################
-                alignment_score = int((1 - abs(cx - self.ROI_cx) / ROI_RADIUS) * 55)
+                bbox_w = max(1, xmax - xmin)
+                pixel_to_cm = CW_REAL_HOLD_WIDTH_CM / bbox_w
+                z_cm = self.calculate_hold_distance_cm({
+                    'center': (cx, cy),
+                    'size': size,
+                    'bbox': (xmin, ymin, xmax, ymax),
+                })
+                if z_cm is None:
+                    continue
 
-                total_score = int(center_score + alignment_score + height_score)
+                x_cm = abs(cx - MY_LINE_X) * pixel_to_cm
+                y_cm = abs(cy - MY_LINE_Y) * pixel_to_cm
+                reach_cm = math.sqrt(z_cm ** 2 + x_cm ** 2 + y_cm ** 2)
+
+                # 超出手臂範圍就不要選，避免選到看得到但抓不到的點
+                if CW_DYNAMIC_GRIP_ENABLE and reach_cm > CW_ARM_MAX_LENGTH_CM:
+                    self.get_logger().info(
+                        f"略過太遠點 cx={cx}, cy={cy}, reach={reach_cm:.1f}cm > {CW_ARM_MAX_LENGTH_CM:.1f}cm"
+                    )
+                    continue
+
+                center_score = int((1.0 - (dist_px / ROI_RADIUS)) * W_CENTER)
+                alignment_score = int((1 - abs(cx - self.ROI_cx) / ROI_RADIUS) * W_ALIGN)
+                reach_score = int((CW_ARM_MAX_LENGTH_CM - reach_cm) * 10)
+
+                # 保留你原本「右手不要選太高」的邏輯，但變成參數化
+                if getattr(self, 'action', '') == 'right_hand':
+                    target_y = MY_LINE_Y - RIGHT_HAND_TARGET_Y_OFFSET
+                    height_score = -abs(cy - target_y) * 6
+                elif getattr(self, 'action', '') == 'left_hand':
+                    target_y = MY_LINE_Y - LEFT_HAND_TARGET_Y_OFFSET
+                    height_score = -abs(cy - target_y) * 5
+                else:
+                    height_score = int((240 - cy) * 3)
+
+                total_score = int(center_score + alignment_score + reach_score + height_score)
 
                 best_candidate.append({
                     'center': (cx, cy),
                     'score': total_score,
                     'size': size,
                     'bbox': (xmin, ymin, xmax, ymax),
-                    'id': {i}
+                    'distance_cm': z_cm,
+                    'reach_cm': reach_cm,
+                    'id': i
                 })
 
         if len(best_candidate) == 0:
-            self.get_logger().info("畫面中沒有符合條件的攀爬點...")
+            self.get_logger().info("畫面中沒有符合距離/臂長條件的攀爬點...")
             return 'no_object'
-##################右手抓點太高減 太矮加
-        if getattr(self, 'action', '') == 'right_hand':
-            best_candidate.sort(
-                key=lambda x: (
-                    abs(x['center'][1] - (MY_LINE_Y - 30)),
-                    -x['score']
-                )
-            )
-        else:
-            best_candidate.sort(key=lambda x: x['score'], reverse=True)
-##########################            
+
+        best_candidate.sort(key=lambda x: x['score'], reverse=True)
         best = best_candidate[0]
 
-        best_score = best['score']
-        best_size = best['size']
-        best_cx = best['center'][0]
-        best_cy = best['center'][1]
-        best_xmin = best['bbox'][0]
-        best_xmax = best['bbox'][2]
-        best_ymin = best['bbox'][1]
-        best_ymax = best['bbox'][3]
-
-        self.get_logger().info(f"total_score,{best_score}")
-        self.get_logger().info(f"size:{best_size}")
-        self.get_logger().info(f"cx:{best_cx},cy:{best_cy}")
-        self.get_logger().info(f"xmin,{best_xmin},ymin,{best_ymin},xmax,{best_xmax},ymax,{best_ymax},")
+        self.get_logger().info(f"total_score:{best['score']}")
+        self.get_logger().info(f"size:{best['size']}")
+        self.get_logger().info(f"distance:{best['distance_cm']:.1f}cm, reach:{best['reach_cm']:.1f}cm")
+        self.get_logger().info(f"cx:{best['center'][0]},cy:{best['center'][1]}")
+        self.get_logger().info(
+            f"xmin,{best['bbox'][0]},ymin,{best['bbox'][1]},xmax,{best['bbox'][2]},ymax,{best['bbox'][3]},"
+        )
 
         return best
 
