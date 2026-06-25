@@ -13,7 +13,7 @@ from rclpy.node import Node
 from tku_msgs.msg import SensorPackage
 
 # --- 全域參數 (對齊原始邏輯) ---
-WIGHT = 60
+WIGHT = 80
 HEAD_MOTOR_START = 1500    
 HEAD_MOTOR_FINISH = 1350    
 FLAG1 = False  
@@ -318,7 +318,7 @@ class WeightLift(API):
                 self.bar.update(1)
                 self.sendHeadMotor(2, HEAD_MOTOR_START, 100)
                 time.sleep(1)
-                self.sendBodySector(123)
+                #self.sendBodySector(123)
                 # time.sleep(1)
                 
                 self.real_bar_center = self.bar.center.x
