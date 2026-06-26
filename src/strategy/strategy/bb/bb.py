@@ -17,9 +17,9 @@ from rclpy.node import Node
 # 2025.8.7
 #======================================================================================
 
-CORRECT       = [-600, -400, -1]        # 原地踏步修正
-LEFT_CORRECT  = [-725, -350, 4]        # 左旋修正
-RIGHT_CORRECT = [-725, -300, -5]       # 右旋修正
+CORRECT       = [-600, -325, -1]        # 原地踏步修正
+LEFT_CORRECT  = [-725, -400, 4]        # 左旋修正
+RIGHT_CORRECT = [-725, -100, -5]       # 右旋修正
 #                 x , y , theta
 
 #====================================================================================
@@ -33,7 +33,7 @@ CATCH_BALL_CORRECT = 1230        #1500   900
 #CATCH_BALL_LINE  = [1680, 1, 1580]            # slow_degree, stop_degree, backward_degree
 CATCH_BALL_LINE  = [1540, 1485, 1465]         #1535, 1525]   1590, 1580      1540, 1518, 1495    [1540, 1485, 1475]   
 TWO_POINT_LINE   = [1800, 1630, 1615]            # slow_degree, stop_degree, backward_degree 
-THREE_POINT_LINE = [77, 67, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
+THREE_POINT_LINE = [77, 73, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 FIVE_POINT_LINE  = [105, 96, 93, 88]           # srward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 #67 65 / 66 64
 #THREE_POINT_LINE = [75, 66, 64, 62] 
