@@ -69,12 +69,11 @@ function NewRelativePosition()
   var div2=document.createElement('div');
   div2.className = "inthesmallbox4";
 
-  //first column    
+  //first column
   var input=document.createElement('input');
   input.type='text';
   input.className = 'textbox';
   input.style.backgroundColor='darkred';
-  input.id = 'relativePosition'+num;
   input.value=-1;
   div1.appendChild(input);
       
@@ -112,12 +111,6 @@ function NewRelativePosition()
   //appends them into the RelativePositionTable <div> in MotionControlInterface.html
   document.getElementById('RelativePositionTable').appendChild(div1);
   document.getElementById('RelativePositionTable').appendChild(div2);
-
-  //sets the relativePosition ID to be the same value as relativeSpeed ID
-  $('#relativePosition'+num).change(function ()
-  {
-    $('#relativeSpeed'+num).val($(this).val());
-  });
 }
 
 // function NewRelativeSpeed()
@@ -261,12 +254,9 @@ function NewRelativeSpeed() {
   div1.className = "inthesmallbox2";
   var input1 = document.createElement('input');
   input1.type = 'text';
-  input1.id = 'relativeSpeed' + num;
   input1.className = 'textbox';
   input1.style.backgroundColor = 'darkred';
   input1.value = -1;
-  // clamp 限制
-  // input1.addEventListener('change', makeClamper(100));
   div1.appendChild(input1);
 
   // 建立後面 41 欄
@@ -299,12 +289,24 @@ function NewRelativeSpeed() {
   var table = document.getElementById('RelativeSpeedTable');
   table.appendChild(div1);
   table.appendChild(div2);
-
-  // 綁定：當 relativeSpeedX 改變時，同步到 relativePositionX
-  $('#relativeSpeed' + num).change(function () {
-    $('#relativePosition' + num).val($(this).val());
-  });
 }
+
+
+$(document).on('change', '#RelativePositionTable > .inthesmallbox2 > .textbox', function() {
+  var posDivs = $('#RelativePositionTable > .inthesmallbox2');
+  var idx = posDivs.index($(this).parent());
+  if (idx >= 0) {
+    $('#RelativeSpeedTable > .inthesmallbox2').eq(idx).find('.textbox').val(this.value);
+  }
+});
+
+$(document).on('change', '#RelativeSpeedTable > .inthesmallbox2 > .textbox', function() {
+  var spdDivs = $('#RelativeSpeedTable > .inthesmallbox2');
+  var idx = spdDivs.index($(this).parent());
+  if (idx >= 0) {
+    $('#RelativePositionTable > .inthesmallbox2').eq(idx).find('.textbox').val(this.value);
+  }
+});
 
 
 

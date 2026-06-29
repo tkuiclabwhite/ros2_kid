@@ -13,11 +13,11 @@ from rclpy.node import Node
 from tku_msgs.msg import SensorPackage
 
 # --- 全域參數 (對齊原始邏輯) ---
-WIGHT = 60
+WIGHT = 80
 HEAD_MOTOR_START = 1500    
 HEAD_MOTOR_FINISH = 1350    
 FLAG1 = False  
-PRETURN = 1
+PRETURN = 2
 
 # 原始權重邏輯判斷 (修正重複判斷與賦值錯誤)
 if WIGHT == 86:
@@ -206,9 +206,9 @@ class WeightLift(API):
         self.theta = self.imu_fix()
         if self.ctrl_status == 'fourth_line':
             #if self.speed < 1800: self.speed += 200
-            self.sendContinuousValue(1300, -300, self.theta+0.5) #60:self.theta #70:self.theta-1
+            self.sendContinuousValue(1300, -300, self.theta) #60:self.theta #70:self.theta-1 #80:self.theta-1
         elif self.ctrl_status == 'second_line':
-            self.sendContinuousValue(1500, -300, -1)
+            self.sendContinuousValue(1300, -300, self.theta)
         else:
             self.sendContinuousValue(0, 0, self.theta)
 
@@ -244,7 +244,7 @@ class WeightLift(API):
                         self.line.update(2)
                         while True:
                             rclpy.spin_once(self, timeout_sec=0)
-                            if 120 <= self.bar.center.x or self.bar.center.x > 260: break
+                            if 110 <= self.bar.center.x or self.bar.center.x > 260: break
                             self.bar.update(1)
                             self.line.update(2)
                             self.sendContinuousValue(500, 1000, -1)
@@ -271,14 +271,14 @@ class WeightLift(API):
                 self.get_logger().info(f"紅色preturn (Y) = {self.bar.center.y}")
                 self.bar.update(1)
                 if self.imu_rpy[2] > 1.5 or self.imu_rpy[2] < -1.5:
-                    if self.bar.center.x > 150:
+                    if self.bar.center.x > 170:
                         self.sendContinuousValue(800, -800, -1)
                         print("右轉")
                     elif self.bar.center.x < 145 and self.bar.center.x > 0:
                         self.sendContinuousValue(800, 400, -1)
                         print("左轉") 
                 else:
-                    if self.bar.center.x > 150:
+                    if self.bar.center.x > 170:
                         self.sendContinuousValue(800, -800, -1)
                         print("右平移")
                     elif self.bar.center.x < 145 and self.bar.center.x > 0:
@@ -318,7 +318,7 @@ class WeightLift(API):
                 self.bar.update(1)
                 self.sendHeadMotor(2, HEAD_MOTOR_START, 100)
                 time.sleep(1)
-                self.sendBodySector(123)
+                #self.sendBodySector(123)
                 # time.sleep(1)
                 
                 self.real_bar_center = self.bar.center.x

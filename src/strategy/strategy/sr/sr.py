@@ -68,38 +68,13 @@ RIGHT_HAND_Y_OFFSET = -750
 CW_HAND_X_LIMIT = 1000
 CW_HAND_Y_LIMIT = 1000
 
-# ========= 走路距離目標：輸入幾公分，就用面積換算停在幾公分 =========
-# 之後只要改 CW_GRIP_TARGET_DISTANCE_CM：16 就停 16±1，17 就停 17±1
-#
-# 校正表填法：
-#   1. 先把機器人手動放在指定距離，例如 16cm
-#   2. 看 log 的「目前面積」
-#   3. 把 0.0 改成你量到的平均面積
-#
-# 注意：這裡是走路用的「紅+藍底部兩點總面積」，不是抓點 hold_area。
-# 如果某個距離還沒量，先保持 0.0，程式會自動略過，用已知點內插/外推。
-CW_WALK_DISTANCE_AREA_TABLE = [
-    (14.0, 1224.0),       # 14cm 面積，量到再填
-    (15.0, 1151.0),       # 15cm 面積，量到再填
-    (16.0, 1156.0),       # 16cm 面積，量到再填
-    (17.0, 1195.0),    # 你之前量到 17cm 約 1677
-    (18.0, 1111.0),       # 18cm 面積，量到再填
-    (24.0, 1204.0),    # 你之前量到 24cm 約 1204
-]
-
-# 保留單點校正作為備用：校正表不足時會用這組平方公式推算
-CW_WALK_CALIB_DISTANCE_CM = 24.0
-CW_WALK_CALIB_AREA = 1204.0
-
-# 你真正要改的目標距離：設定16就停16±1，設定17就停17±1
-CW_GRIP_TARGET_DISTANCE_CM = 16.0
-CW_GRIP_DISTANCE_TOLERANCE_CM = 1.0
-
-# ========= 動態距離抓點參數（只影響抓點選點/距離log，不影響左右補償） =========
-# 這裡沿用同一組校正，若之後要更準可另外用單一攀岩點 hold_area 校正
+# ========= 動態距離抓點參數（只影響抓點，不影響走路） =========
+# 現場校正方式：把單一攀岩點放在 17cm，讀 log 的 hold_area，填到 CW_GRIP_CALIB_AREA
 CW_DYNAMIC_GRIP_ENABLE = True
-CW_GRIP_CALIB_DISTANCE_CM = CW_WALK_CALIB_DISTANCE_CM
-CW_GRIP_CALIB_AREA = CW_WALK_CALIB_AREA
+CW_GRIP_CALIB_DISTANCE_CM = 24.0 #---------------------------------------------------------------------------------------------------------------------站在24cm
+CW_GRIP_CALIB_AREA = 1204.0  #-------------------------------------------------------------------------------------------------------------------------在24cm終端印出的面積
+# 希望手去抓點時的理想距離；抓太深/壓太多 -> 調大，抓不到/伸不夠 -> 調小
+CW_GRIP_TARGET_DISTANCE_CM = 17.0
 # 攀岩點實際寬度，拿來把像素 dx/dy 換成大概公分，選點會用
 CW_REAL_HOLD_WIDTH_CM = 4.0
 # 手臂可抓最大直線距離；常常找不到點 -> 調大，常選太遠抓不到 -> 調小＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃
@@ -107,7 +82,7 @@ CW_ARM_MAX_LENGTH_CM = 50.0
 #######################################################################################################################
 # 距離補償變平滑，避免每次面積跳動造成手抖；0.0 不更新，1.0 完全跟最新值
 CW_DISTANCE_SMOOTH_ALPHA = 0.35
-# 保留舊參數；新版不再拿距離誤差去改 X，避免左右補償反向
+# 動態距離轉手部 X 補償；抓太前面/壓太多通常調小，伸不夠調大
 CW_DIST_CM_GAIN_X = 35.0
 # 面積異常保護
 CW_MIN_HOLD_AREA = 300
@@ -152,8 +127,7 @@ MY_LINE_X =160 #攀岩基準線
 MY_SIZE = 1020
 
 # ========= 走到定點微調 =========
-# 正常不用改；如果輸入16但實測仍偏近/偏遠，再用這個做最後面積微調
-# 走太近 -> 改更負；走太遠 -> 改更大
+# 直接調這個控制停下來距離：走太近 -> 改更負；走太遠 -> 改大＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃
 READY_DISTANCE_ADJUST = 0
 ###################################################################################################################
 # 保留原本參數但不再用它控制距離，避免搞混
@@ -290,7 +264,7 @@ class WallClimbing(API):
                 #     rospy.sleep(2)
                 
                 if not self.readyclimb:
-                    self.sendbodyAuto(1)            #開始動作 # 0暫時不要走
+                    self.sendbodyAuto(1)            #開始動作
                     self.find_ladder()
                     self.track = (int(self.target_1_cy - MY_LINE_Y))*(38/240)
                     self.now_head_Vertical = self.now_head_Vertical - round(self.track * 4096 / 360 * 0.05)
@@ -503,67 +477,6 @@ class WallClimbing(API):
             self.get_logger().info("丟失目標...\033[K")
             
         
-    def calculate_walk_target_size(self, distance_cm):
-        """
-        走路仍然用面積控制，但目標面積由公分自動換算。
-
-        優先使用 CW_WALK_DISTANCE_AREA_TABLE：
-        - 如果剛好有該距離的實測面積，直接用實測值。
-        - 如果在兩個實測距離中間，用線性內插。
-        - 如果超出實測範圍，用最近兩點線性外推。
-        - 如果表格有效點不足2個，才退回單點平方公式。
-
-        這只影響前後停車，不會影響左右補償。
-        """
-        distance_cm = max(float(distance_cm), 1.0)
-
-        # 只取面積大於 0 的校正點，0.0 代表還沒量到，先略過
-        valid_points = []
-        for d, area in CW_WALK_DISTANCE_AREA_TABLE:
-            try:
-                d = float(d)
-                area = float(area)
-            except Exception:
-                continue
-            if d > 0 and area > 0:
-                valid_points.append((d, area))
-
-        valid_points.sort(key=lambda x: x[0])
-
-        # 剛好有實測點就直接用
-        for d, area in valid_points:
-            if abs(distance_cm - d) < 1e-6:
-                return area
-
-        # 有兩個以上實測點：內插/外推
-        if len(valid_points) >= 2:
-            # 找距離所在區間
-            if distance_cm <= valid_points[0][0]:
-                d1, a1 = valid_points[0]
-                d2, a2 = valid_points[1]
-            elif distance_cm >= valid_points[-1][0]:
-                d1, a1 = valid_points[-2]
-                d2, a2 = valid_points[-1]
-            else:
-                d1, a1 = valid_points[0]
-                d2, a2 = valid_points[-1]
-                for i in range(len(valid_points) - 1):
-                    left = valid_points[i]
-                    right = valid_points[i + 1]
-                    if left[0] <= distance_cm <= right[0]:
-                        d1, a1 = left
-                        d2, a2 = right
-                        break
-
-            if abs(d2 - d1) > 1e-6:
-                ratio = (distance_cm - d1) / (d2 - d1)
-                target_area = a1 + ratio * (a2 - a1)
-                return max(target_area, 1.0)
-
-        # 有效點不足：退回原本單點平方公式
-        target_area = CW_WALK_CALIB_AREA * (CW_WALK_CALIB_DISTANCE_CM / distance_cm) ** 2
-        return max(target_area, 1.0)
-
     def new_edge_judge(self):
         # 如果完全沒目標
         if not hasattr(self, 'lost_target_count'): self.lost_target_count = 0
@@ -582,39 +495,24 @@ class WallClimbing(API):
         # 偏差計算 ---
 
         target_x = MY_LINE_X + WALK_X_OFFSET
-
-        # 用你輸入的 CW_GRIP_TARGET_DISTANCE_CM 自動換算走路目標面積
-        # 例：24cm=1204 時，16cm 會自動換成約 2709；17cm 約 2401
-        target_size = self.calculate_walk_target_size(CW_GRIP_TARGET_DISTANCE_CM) + READY_DISTANCE_ADJUST
-
-        # 正負 1cm 的面積範圍。距離越近面積越大，距離越遠面積越小。
-        near_distance = max(CW_GRIP_TARGET_DISTANCE_CM - CW_GRIP_DISTANCE_TOLERANCE_CM, 1.0)
-        far_distance = CW_GRIP_TARGET_DISTANCE_CM + CW_GRIP_DISTANCE_TOLERANCE_CM
-        near_size = self.calculate_walk_target_size(near_distance) + READY_DISTANCE_ADJUST
-        far_size = self.calculate_walk_target_size(far_distance) + READY_DISTANCE_ADJUST
+        target_size = MY_SIZE + READY_DISTANCE_ADJUST
 
         error_x = target_x - self.object_x
         error_size = target_size - self.size
-        distance_ok = far_size <= self.size <= near_size
 
         self.get_logger().info(f"目前面積:{self.size}")
-        self.get_logger().info(
-            f"走路目標:{CW_GRIP_TARGET_DISTANCE_CM:.1f}±{CW_GRIP_DISTANCE_TOLERANCE_CM:.1f}cm, "
-            f"目標面積:{target_size:.1f}, 合格面積範圍:{far_size:.1f}~{near_size:.1f}"
-        )
-        self.get_logger().info(f"垂直線:{target_x}, WALK_X_OFFSET:{WALK_X_OFFSET}, READY_DISTANCE_ADJUST:{READY_DISTANCE_ADJUST}")
-        self.get_logger().info(f"誤差size:{error_size:.1f}, 誤差x:{error_x}")
+        self.get_logger().info(f"垂直線:{target_x},我的面積:{target_size}, WALK_X_OFFSET:{WALK_X_OFFSET}, READY_DISTANCE_ADJUST:{READY_DISTANCE_ADJUST}")
+        self.get_logger().info(f"誤差size:{error_size}, 誤差x:{error_x}")
         
-        # 前後距離控制：仍然用面積走路，只是目標面積由公分自動換算
+        # 前後距離控制 ---
         if not self.forward_ok :
-            if distance_ok:
+            if abs(error_size) <= 10:   #前進死區值
                 self.forward = 0.0 
                 time.sleep(2)
                 self.forward_ok = True 
             else:
-                # 面積太小 = 人太遠，要往前；面積太大 = 人太近，要後退
-                if self.size < far_size:
-                    if error_size > 200 and error_size < 400:
+                if error_size > 0:
+                    if error_size > 200 and error_size <400:
                         self.forward = FORWARD_NORMAL
                     elif error_size > 401:
                         self.forward = FORWARD_HIGH
@@ -730,9 +628,9 @@ class WallClimbing(API):
     def calculate_hand_motor_by_distance(self, action, current_target):
         """
         動態抓點：
-        1. 用攀岩點面積換算距離並印 log
-        2. X 左右補償只看 target_dx + LEFT/RIGHT_HAND_X_OFFSET
-        3. 不把距離誤差加到 X，避免改 16/17 時左右補償反向
+        1. 用攀岩點面積換算距離
+        2. 用距離誤差自動補 X 方向伸手量
+        3. 保留 LEFT/RIGHT_HAND_X/Y_OFFSET，方便現場最後微調
         """
         target_cx, target_cy = current_target['center']
 
@@ -743,13 +641,12 @@ class WallClimbing(API):
         if distance_cm is None:
             return None, None
 
-        # 距離誤差只拿來印 log，不再加入 X 左右補償。
-        # 這樣 CW_GRIP_TARGET_DISTANCE_CM 改 16/17/18，左右補償方向不會反過來。
         distance_error_cm = distance_cm - CW_GRIP_TARGET_DISTANCE_CM
 
         if action == 'left_hand':
             motor_value_x = (
                 target_dx * CW_DIST_GAIN_X
+                + distance_error_cm * CW_DIST_CM_GAIN_X
                 + LEFT_HAND_X_OFFSET
             )
             motor_value_y = (
@@ -760,6 +657,7 @@ class WallClimbing(API):
         elif action == 'right_hand':
             motor_value_x = (
                 -(target_dx * CW_DIST_GAIN_X)
+                + distance_error_cm * CW_DIST_CM_GAIN_X
                 + RIGHT_HAND_X_OFFSET
             )
             motor_value_y = (

@@ -42,10 +42,10 @@ FRAME_CX      = FRAME_W // 2   # 160
 ALIGN_DEADBAND = 40            # X 軸對準死區（像素）
 
 # 標記 Y 座標閾值（畫面高度 240，Y 越大越靠近底部）
-SIGN_Y_THRESHOLD = 215         # 標記 Y 座標超過此值視為「夠靠近」
+SIGN_Y_THRESHOLD = 210         # 標記 Y 座標超過此值視為「夠靠近」
 
 # 靠近累積幀數（Y 座標連續超過閾值幾幀才觸發）
-APPROACH_COUNT = 20            # 累積幀數（實測後調整）
+APPROACH_COUNT = 10            # 累積幀數（實測後調整）
 
 # 動作參數
 TURN_TARGET_ANGLE = 85         # 轉彎目標角度（度）
