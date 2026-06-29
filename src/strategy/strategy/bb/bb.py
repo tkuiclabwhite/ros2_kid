@@ -17,9 +17,9 @@ from rclpy.node import Node
 # 2025.8.7
 #======================================================================================
 
-CORRECT       = [-600, -325, -1]        # 原地踏步修正
-LEFT_CORRECT  = [-725, -400, 4]        # 左旋修正
-RIGHT_CORRECT = [-725, -100, -5]       # 右旋修正
+CORRECT       = [-700, 75, -1]        # 原地踏步修正
+LEFT_CORRECT  = [-825, 75, 4]        # 左旋修正
+RIGHT_CORRECT = [-775, -200, -5]       # 右旋修正
 #                 x , y , theta
 
 #====================================================================================
@@ -31,9 +31,9 @@ FIVEPOINT_HEAD_Y_DEGREE = [2010]      #投出去偏向左邊＝>頭 往左轉（
 CATCH_BALL_CORRECT = 1230        #1500   900
 
 #CATCH_BALL_LINE  = [1680, 1, 1580]            # slow_degree, stop_degree, backward_degree
-CATCH_BALL_LINE  = [1540, 1485, 1465]         #1535, 1525]   1590, 1580      1540, 1518, 1495    [1540, 1485, 1475]   
+CATCH_BALL_LINE  = [1540, 1473, 1460]         #1535, 1525]   1590, 1580      1540, 1518, 1495    [1540, 1485, 1475]   
 TWO_POINT_LINE   = [1800, 1630, 1615]            # slow_degree, stop_degree, backward_degree 
-THREE_POINT_LINE = [77, 73, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
+THREE_POINT_LINE = [77, 67, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 FIVE_POINT_LINE  = [105, 96, 93, 88]           # srward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 #67 65 / 66 64
 #THREE_POINT_LINE = [75, 66, 64, 62] 
@@ -42,7 +42,7 @@ BASTET_LENGTH =  10  #增加以下全域變數
 FOCAL_LENGTH  = 330 # 333 
 TEST_DISTANCE = 60
 
-VALUEE = 55
+VALUEE = 33
 #VALUEE = 2  #框測試.  比賽時輸入的狀態決定投的策略  取代Diovalue
 #VALUEE = 22 #2分球
 #VALUEE = 33 #3分球
@@ -568,7 +568,6 @@ class BasketBall(API):
                     self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 65) 
                     time.sleep(0.05)
                 else: 
-
                     self.motor.reg = 2048 - self.motor.head_horizon
                     self.motor.search_num = 0
 
@@ -617,7 +616,7 @@ class BasketBall(API):
                     self.get_logger().info('待機鎖球完成')
 
             else:
-                self.motor.view_search(2500,1668,1800,1200,120,0.05)
+                self.motor.view_search(2500,1500,1800,1200,80,0.05)
 
 
     def begin(self):
@@ -713,7 +712,7 @@ class BasketBall(API):
         if (self.motor.head_vertical <= CATCH_BALL_LINE[2]+10): # 球太近，先後退一段距離
             self.get_logger().info(f'球太大 -> 大倒退')
             self.motor.trace_revise(self.target.ball_x, self.target.ball_y, 100) 
-            self.motor.MoveContinuous(-600+CORRECT[0], 0+CORRECT[1], 0+CORRECT[2], 100, 100, 1) # 超大後退
+            self.motor.MoveContinuous(-600+CORRECT[0], 0+CORRECT[1], 0+CORRECT[2], 60, 60, 1) # 超大後退
 
         else:
             self.get_logger().debug(f'可進行微小修正')
