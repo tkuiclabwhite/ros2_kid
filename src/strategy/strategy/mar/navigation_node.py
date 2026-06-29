@@ -29,6 +29,48 @@ from collections import deque
 
 import cv2
 import numpy as np
+
+import sys, types, importlib.metadata as _md
+
+# 騙過版本檢查
+_real_ver = _md.version
+_md.version = lambda n: "0.18.0" if n == "torchvision" else _real_ver(n)
+
+# 建假 torchvision，並補上能用的 nms
+import torch as _torch
+_tv = types.ModuleType("torchvision")
+_tv.__version__ = "0.18.0"
+_ops = types.ModuleType("torchvision.ops")
+
+def _nms(boxes, scores, iou_threshold):
+    # 純 PyTorch 實作的 NMS，行為等同 torchvision.ops.nms
+    if boxes.numel() == 0:
+        return _torch.empty((0,), dtype=_torch.int64, device=boxes.device)
+    x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    areas = (x2 - x1) * (y2 - y1)
+    order = scores.argsort(descending=True)
+    keep = []
+    while order.numel() > 0:
+        i = order[0]
+        keep.append(i.item())
+        if order.numel() == 1:
+            break
+        xx1 = _torch.maximum(x1[i], x1[order[1:]])
+        yy1 = _torch.maximum(y1[i], y1[order[1:]])
+        xx2 = _torch.minimum(x2[i], x2[order[1:]])
+        yy2 = _torch.minimum(y2[i], y2[order[1:]])
+        w = (xx2 - xx1).clamp(min=0)
+        h = (yy2 - yy1).clamp(min=0)
+        inter = w * h
+        iou = inter / (areas[i] + areas[order[1:]] - inter)
+        order = order[1:][iou <= iou_threshold]
+    return _torch.tensor(keep, dtype=_torch.int64, device=boxes.device)
+
+_ops.nms = _nms
+_tv.ops = _ops
+sys.modules["torchvision"] = _tv
+sys.modules["torchvision.ops"] = _ops
+
 from ultralytics import YOLO
 
 import rclpy
@@ -289,7 +331,7 @@ class NavigationNode(Node):
         self._fps_t0 = time.time()
         self._fps_count = 0
 
-        model_path = os.path.join(BASE_DIR, 'best.engine')
+        model_path = os.path.join(BASE_DIR, 'best(9).engine')
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model not found: {model_path}")
         print(f"[Nav] Loading YOLO model: {model_path}")
@@ -318,7 +360,7 @@ class NavigationNode(Node):
         # Warmup (讓 engine 一次初始化完,避免後續延遲)
         print("[Nav] Warming up engine...")
         _dummy = np.zeros((320, 320, 3), dtype=np.uint8)
-        self.yolo_model(_dummy, imgsz=320, verbose=False)
+        self.yolo_model(_dummy, imgsz=640, verbose=False)
         print("[Nav] YOLO ready.")
 
         self.class_id_pub = self.create_publisher(String, 'class_id_topic', 1)
@@ -375,7 +417,7 @@ class NavigationNode(Node):
         geo_angle   = None
         final_action = None
 
-        results = self.yolo_model(frame, imgsz=320, verbose=False)
+        results = self.yolo_model(frame, imgsz=640, verbose=False)
         candidates = []
         for box in results[0].boxes:
             conf = float(box.conf[0])

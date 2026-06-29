@@ -17,27 +17,58 @@ IMG_H  = 240
 IMG_CX = IMG_W // 2
 IMG_CY = IMG_H // 2
 
+
+#小白
+# # 步態
+# STOP_MOVE = [-600, -400, 0]
+# LEFT_CORRECT = [-900, -970, 3]
+# RIGHT_CORRECT = [-900, 970, -7]
+# FORWARD_MOVE = [1500, -100, -1]
+# BACKWARD_MOVE = [-1000, 0, 0] 
+
+# CONFIRM_FORWARD_MOVE  = [500, 0, 0]    # 確認球時慢慢前進
+# CONFIRM_BACKWARD_MOVE = [-700, 0, 0]   # 確認球時慢慢後退
+# CONFIRM_LEFT_MOVE  = [-900, -670, 3]    
+# CONFIRM_RIGHT_MOVE = [-900, 670, -5]
+
+
+# # 藍色障礙物身體微調：
+# # 目標是讓機器人繞著球調整角度，讓身體朝向藍色障礙物
+# # 右邊看到藍色 -> ORBIT_RIGHT_MOVE
+# # 左邊看到藍色 -> ORBIT_LEFT_MOVE
+# ORBIT_LEFT_MOVE  = [-900, -770, 2]
+# ORBIT_RIGHT_MOVE = [-900, 770, -4]
+
+
+#小黑
 # 步態
-STOP_MOVE = [0, 0, 0]
-LEFT_CORRECT = [0, 0, 4]
-RIGHT_CORRECT = [50, 0, -4]
-FORWARD_MOVE = [1500, -100, -1]
-BACKWARD_MOVE = [-500, 0, 0] 
+STOP_MOVE = [-800, 200, 0]
+LEFT_CORRECT = [-1100, -1000, 3]
+RIGHT_CORRECT = [-1100, 1200, -2]
+FORWARD_MOVE = [1500, 200, 0]
+BACKWARD_MOVE = [-1000, 0, 0] 
 
 CONFIRM_FORWARD_MOVE  = [500, 0, 0]    # 確認球時慢慢前進
 CONFIRM_BACKWARD_MOVE = [-700, 0, 0]   # 確認球時慢慢後退
+CONFIRM_RIGHT_MOVE  = [-1100, -500, 3]    
+CONFIRM_LEFT_MOVE = [-900, 600, -2]
+
 
 # 藍色障礙物身體微調：
 # 目標是讓機器人繞著球調整角度，讓身體朝向藍色障礙物
 # 右邊看到藍色 -> ORBIT_RIGHT_MOVE
 # 左邊看到藍色 -> ORBIT_LEFT_MOVE
-ORBIT_LEFT_MOVE  = [0, -250, 4]
-ORBIT_RIGHT_MOVE = [0, 250, -4]
+ORBIT_LEFT_MOVE  = [-1100, -800, 2]
+ORBIT_RIGHT_MOVE = [-1100, 900, -2]
+
+
+
 ORBIT_ALIGN_FRAMES = 5
 ORBIT_OBSTACLE_LOST_FRAMES = 25 # orbit 時藍色短暫消失幾次才回 find_obstacle
 
-OBSTACLE_BODY_TOL_X = 10  # 藍色障礙物中心 x 距離畫面中心的容許誤差
+OBSTACLE_BODY_TOL_X = 45  # orbit 時藍色在此範圍內就交給身體修正，不再一直追頭
 OBSTACLE_HEAD_H_TOL = 80  # 繞球時，頭部水平刻度接近中心才代表身體朝向障礙物
+OBSTACLE_HEAD_MAX_STEP_H = 30  # orbit 時頭部水平追藍色的最大步幅，避免跟身體修正互相拉扯
 OBSTACLE_MIN_AREA = 300
 
 # 射門
@@ -88,12 +119,12 @@ BALL_LOST_FRAMES = 20  #連續錯過幾次 才算真的lost ball
 
 # 用球的面積 size 判斷距離，不再用 head_v 刻度判斷距離
 BALL_SIZE_OK_MIN = 930    # 球太小，代表太遠，要前進
-BALL_SIZE_OK_MAX = 1100   # 球太大，代表太近，要後退
+BALL_SIZE_OK_MAX = 1150   # 球太大，代表太近，要後退
 BALL_SIZE_REACH_FRAMES = 5
 
 # 走向球時的身體修正條件
-WALK_HEAD_H_TOL = 120 # 頭部水平偏差超過此值時，代表身體還沒對準球需用左右旋轉修正身體方向
-WALK_FORWARD_TOL = 80 # 頭部水平偏差小於此值時，代表球大致在身體前方，允許機器人往前走
+WALK_HEAD_H_TOL = 60 # 頭部水平偏差超過此值時，代表身體還沒對準球需用左右旋轉修正身體方向
+WALK_FORWARD_TOL = 60 # 頭部水平偏差小於此值時，代表球大致在身體前方，允許機器人往前走
 
 BALL_REACH_HEAD_V_MIN = 1230 # 看球垂直刻度範圍
 BALL_REACH_HEAD_V_MAX = 1600     #1350
@@ -105,6 +136,7 @@ OBSTACLE_CENTER_FRAMES = 4
 
 HEAD_CONFIRM_BALL_V = 1600
 CONFIRM_BALL_FRAMES = 4
+CONFIRM_BALL_BEARING_TOL = 80  # [新增] 球相對於障礙物對正方向的允許水平誤差  
 
 
 class BallInfo:
@@ -225,6 +257,10 @@ class StatusPrinter(threading.Thread):
                     f" search_level    : {n.search_level} / {SEARCH_LEVELS[n.search_level]}\n"
                     f" obstacle.search : {n.obstacle_search_dir} level={n.obstacle_search_level} / {OBSTACLE_SEARCH_LEVELS[n.obstacle_search_level]}\n"
                     f" confirm.search  : {n.confirm_search_dir} level={n.confirm_search_level} / {CONFIRM_SEARCH_LEVELS[n.confirm_search_level]}\n"
+                    f" confirm.base_h  : {n.confirm_base_head_h}\n"
+                    f" confirm.seen_h  : {n.confirm_ball_seen_head_h}\n"
+                    f" confirm.px_err  : {n.confirm_ball_pixel_error}\n"
+                    f" confirm.bearing : {n.confirm_ball_bearing_error} / {CONFIRM_BALL_BEARING_TOL}\n"
                     f"#====================================================#\n"
                 )
                 sys.stdout.flush()
@@ -263,6 +299,11 @@ class UnitedSoccer(API):
         self.reach_ball_count = 0
         self.confirm_ball_count = 0
         self.confirm_ball_lost_count = 0
+        self.confirm_base_head_h = HEAD_H_CENTER  # [新增] 障礙物對正完成當下的頭部水平基準
+        self.confirm_base_head_v = HEAD_CONFIRM_BALL_V  # [新增] 進入重新找球時的垂直基準
+        self.confirm_ball_bearing_error = 0  # [新增] 球相對於障礙物對正方向的水平誤差
+        self.confirm_ball_seen_head_h = HEAD_H_CENTER  # [新增] 找到球當下的頭部水平位置
+        self.confirm_ball_pixel_error = 0  # [新增] 找到球時，球在畫面中的水平偏差
         self.obstacle_center_count = 0
 
         # 繞球對準計數器
@@ -317,16 +358,24 @@ class UnitedSoccer(API):
         self.sendbodyAuto(0)
 
     # 頭部追蹤控制器
-    def _track_object(self, cx, cy):
+    def _track_object(
+        self,
+        cx,
+        cy,
+        tol_x=HEAD_TOL_X,
+        tol_y=HEAD_TOL_Y,
+        max_step_h=HEAD_MAX_STEP_H,
+        max_step_v=HEAD_MAX_STEP_V,
+    ):
         err_x = cx - IMG_CX
         err_y = cy - IMG_CY
 
-        centered_x = abs(err_x) < HEAD_TOL_X
-        centered_y = abs(err_y) < HEAD_TOL_Y
+        centered_x = abs(err_x) < tol_x
+        centered_y = abs(err_y) < tol_y
 
         if not centered_x:
             step_h = int(err_x * HEAD_KP_H)
-            step_h = max(-HEAD_MAX_STEP_H, min(HEAD_MAX_STEP_H, step_h))
+            step_h = max(-max_step_h, min(max_step_h, step_h))
 
             self.head_h -= step_h
             self.head_h = max(HEAD_H_MIN, min(HEAD_H_MAX, self.head_h))
@@ -334,7 +383,7 @@ class UnitedSoccer(API):
 
         if not centered_y:
             step_v = int(err_y * HEAD_KP_V)
-            step_v = max(-HEAD_MAX_STEP_V, min(HEAD_MAX_STEP_V, step_v))
+            step_v = max(-max_step_v, min(max_step_v, step_v))
 
             self.head_v -= step_v
             self.head_v = max(HEAD_V_MIN, min(HEAD_V_MAX, self.head_v))
@@ -656,7 +705,12 @@ class UnitedSoccer(API):
 
         # 鎖定後仍追蹤藍色。若只看 obstacle.cx，頭轉偏時會誤判身體已對準；
         # 所以身體繞球方向改用 head_h 相對中心的偏差判斷。
-        self._track_object(self.obstacle.cx, self.obstacle.cy)
+        self._track_object(
+            self.obstacle.cx,
+            self.obstacle.cy,
+            tol_x=OBSTACLE_BODY_TOL_X,
+            max_step_h=OBSTACLE_HEAD_MAX_STEP_H,
+        )
         head_error = self.head_h - HEAD_H_CENTER
 
         if head_error < -OBSTACLE_HEAD_H_TOL:
@@ -709,8 +763,16 @@ class UnitedSoccer(API):
 
                 self._stop_walk()
 
-                # 低頭重新確認球
-                self.head_h = HEAD_H_CENTER
+                # [新增] 記錄障礙物對正完成當下的頭部位置，當作射門方向基準。
+                # [新增] 之後頭可以掃球，但只用來量測球相對於這個基準偏多少。
+                self.confirm_base_head_h = self.head_h
+                self.confirm_base_head_v = self.head_v
+                self.confirm_ball_bearing_error = 0
+                self.confirm_ball_seen_head_h = self.head_h
+                self.confirm_ball_pixel_error = 0
+
+                # [新增] 低頭找球時，水平位置先保留障礙物對正完成時的頭位。
+                self.head_h = self.confirm_base_head_h
                 self.head_v = HEAD_CONFIRM_BALL_V
                 self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
                 self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
@@ -728,7 +790,7 @@ class UnitedSoccer(API):
                 self.orbit_obstacle_lost_count = 0
 
                 self.state = 'confirm_ball'
-                self.action_detail = 'find_obstacle內繞球完成，低頭再次確認球'
+                self.action_detail = '障礙物已對正，記錄頭部基準後開始重新找球'
                 return
 
     # 狀態：確認球 confirm_ball
@@ -736,14 +798,22 @@ class UnitedSoccer(API):
         if self.ball.visible:
             self.confirm_ball_lost_count = 0
 
-            self._track_object(self.ball.cx, self.ball.cy)
-            head_error = self.head_h - HEAD_H_CENTER
+            # [新增] 這裡不再呼叫 _track_object(ball)，避免頭追球中心後把身體方向帶歪。
+            # [新增] 頭部現在只當成量測器：用「掃到球時的頭位」+「球在畫面內偏差」
+            # [新增] 算出球相對於障礙物對正基準的偏差。
+            self.confirm_ball_seen_head_h = self.head_h
+            self.confirm_ball_pixel_error = self.ball.cx - IMG_CX
+            ball_bearing_h = (self.confirm_ball_seen_head_h- self.confirm_ball_pixel_error)
+            self.confirm_ball_bearing_error = (ball_bearing_h - self.confirm_base_head_h )
 
-            # 用球的 size / area + 身體角度判斷射門距離
+            # [新增] bearing_ok 代表球已經落在剛剛障礙物對正方向附近。
             ball_size_ok = BALL_SIZE_OK_MIN <= self.ball.area <= BALL_SIZE_OK_MAX
-            body_aligned = abs(head_error) <= WALK_HEAD_H_TOL
+            bearing_ok = (
+                abs(self.confirm_ball_bearing_error)
+                <= CONFIRM_BALL_BEARING_TOL
+            )
 
-            if ball_size_ok and body_aligned:
+            if ball_size_ok and bearing_ok:
                 self.sendContinuousValue(*STOP_MOVE)
                 self.sendbodyAuto(0)
 
@@ -751,17 +821,22 @@ class UnitedSoccer(API):
 
                 if self.confirm_ball_count >= CONFIRM_BALL_FRAMES:
                     print("\n########################################")
-                    print("######### 射門前球位置確認完成(size判斷) #########")
+                    print("######### 射門前球位置確認完成(方位+size) #########")
                     print("########################################")
-                    print(f"ball.area = {self.ball.area}")
-                    print(f"head_v    = {self.head_v}\n")
+                    print(f"base_head_h  = {self.confirm_base_head_h}")
+                    print(f"seen_head_h  = {self.confirm_ball_seen_head_h}")
+                    print(f"ball_px_err  = {self.confirm_ball_pixel_error}")
+                    print(f"bearing_err  = {self.confirm_ball_bearing_error}")
+                    print(f"ball.area    = {self.ball.area}")
+                    print(f"head_v       = {self.head_v}\n")
 
                     self.state = 'shoot'
-                    self.action_detail = '球size再次確認完成，準備射門'
+                    self.action_detail = '球相對障礙物方向確認完成，準備射門'
                     return
 
                 self.action_detail = (
-                    f'確認球size中 {self.confirm_ball_count}/{CONFIRM_BALL_FRAMES} '
+                    f'確認球方位中 {self.confirm_ball_count}/{CONFIRM_BALL_FRAMES} '
+                    f'bearing_error={self.confirm_ball_bearing_error} '
                     f'area={self.ball.area}'
                 )
 
@@ -769,38 +844,49 @@ class UnitedSoccer(API):
                 self.confirm_ball_count = 0
                 self.sendbodyAuto(1)
 
-                # 先修左右，再修前後距離
-                if head_error > WALK_HEAD_H_TOL:
-                    self.sendContinuousValue(*LEFT_CORRECT)
+                # [新增] 先依照「球相對於障礙物對正方向」修左右，再修前後距離。
+                if self.confirm_ball_bearing_error > CONFIRM_BALL_BEARING_TOL:
+                    self.sendContinuousValue(*CONFIRM_LEFT_MOVE)
                     self.action_detail = (
-                        f'確認球：球偏左，左轉修正 head_error={head_error} area={self.ball.area}'
+                        f'確認球：球相對射門方向偏左，修正位置 '
+                        f'bearing_error={self.confirm_ball_bearing_error} '
+                        f'base={self.confirm_base_head_h} '
+                        f'seen={self.confirm_ball_seen_head_h} '
+                        f'pixel={self.confirm_ball_pixel_error} '
+                        f'area={self.ball.area}'
                     )
 
-                elif head_error < -WALK_HEAD_H_TOL:
-                    self.sendContinuousValue(*RIGHT_CORRECT)
+                elif self.confirm_ball_bearing_error < -CONFIRM_BALL_BEARING_TOL:
+                    self.sendContinuousValue(*CONFIRM_RIGHT_MOVE)
                     self.action_detail = (
-                        f'確認球：球偏右，右轉修正 head_error={head_error} area={self.ball.area}'
+                        f'確認球：球相對射門方向偏右，修正位置 '
+                        f'bearing_error={self.confirm_ball_bearing_error} '
+                        f'base={self.confirm_base_head_h} '
+                        f'seen={self.confirm_ball_seen_head_h} '
+                        f'pixel={self.confirm_ball_pixel_error} '
+                        f'area={self.ball.area}'
                     )
 
                 elif self.ball.area < BALL_SIZE_OK_MIN:
                     self.sendContinuousValue(*CONFIRM_FORWARD_MOVE)
                     self.action_detail = (
-                        f'確認球：球太小，慢慢前進 area={self.ball.area} '
+                        f'確認球：方向OK但球太小，慢慢前進 area={self.ball.area} '
                         f'OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}'
                     )
 
                 elif self.ball.area > BALL_SIZE_OK_MAX:
                     self.sendContinuousValue(*CONFIRM_BACKWARD_MOVE)
                     self.action_detail = (
-                        f'確認球：球太大，慢慢後退 area={self.ball.area} '
+                        f'確認球：方向OK但球太大，慢慢後退 area={self.ball.area} '
                         f'OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}'
                     )
 
                 else:
                     self.sendContinuousValue(*STOP_MOVE)
                     self.action_detail = (
-                        f'確認球：等待修正 head_error={head_error} '
-                        f'body_aligned={body_aligned} area={self.ball.area}'
+                        f'確認球：等待穩定 '
+                        f'bearing_error={self.confirm_ball_bearing_error} '
+                        f'bearing_ok={bearing_ok} area={self.ball.area}'
                     )
 
         else:
@@ -824,6 +910,9 @@ class UnitedSoccer(API):
             if self.confirm_ball_lost_count <= CONFIRM_BALL_LOST_FRAMES:
                 self.sendContinuousValue(*STOP_MOVE)
                 self.sendbodyAuto(0)
+
+                # [新增] 找不到球時允許頭分層掃描；掃到球後會拿掃到時的 head_h
+                # [新增] 和前面記錄的 confirm_base_head_h 做相對誤差計算。
                 self._search_head_for_confirm_ball()
                 self.action_detail = (
                     f'確認球分層搜尋中 '
@@ -831,6 +920,7 @@ class UnitedSoccer(API):
                     f'dir={self.confirm_search_dir} '
                     f'level={self.confirm_search_level} '
                     f'edge={self.confirm_search_count}/{CONFIRM_EDGES_PER_LEVEL} '
+                    f'base_head_h={self.confirm_base_head_h} '
                     f'head_h={self.head_h} head_v={self.head_v}'
                 )
                 return

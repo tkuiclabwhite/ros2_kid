@@ -13,7 +13,7 @@ from rclpy.node import Node
 from tku_msgs.msg import SensorPackage
 
 # --- 全域參數 (對齊原始邏輯) ---
-WIGHT = 70
+WIGHT = 60
 HEAD_MOTOR_START = 1500    
 HEAD_MOTOR_FINISH = 1350    
 FLAG1 = False  
@@ -59,8 +59,8 @@ elif WIGHT == 70:
 
 elif WIGHT == 60:
     SPEED = 1300
-    THIRD_LINE = 200
-    FOURTH_LINE = 210
+    THIRD_LINE = 225
+    FOURTH_LINE = 225
     PICK_ONE = 601
     PICK_TWO = 602
     PICK_THREE = 603
@@ -206,9 +206,9 @@ class WeightLift(API):
         self.theta = self.imu_fix()
         if self.ctrl_status == 'fourth_line':
             #if self.speed < 1800: self.speed += 200
-            self.sendContinuousValue(1300, -300, -1)
+            self.sendContinuousValue(1300, -300, self.theta+0.5) #60:self.theta #70:self.theta-1
         elif self.ctrl_status == 'second_line':
-            self.sendContinuousValue(1500, -200, self.theta)
+            self.sendContinuousValue(1500, -300, -1)
         else:
             self.sendContinuousValue(0, 0, self.theta)
 
@@ -279,20 +279,20 @@ class WeightLift(API):
                         print("左轉") 
                 else:
                     if self.bar.center.x > 150:
-                        self.sendContinuousValue(800, -800, 0)
+                        self.sendContinuousValue(800, -800, -1)
                         print("右平移")
                     elif self.bar.center.x < 145 and self.bar.center.x > 0:
-                        self.sendContinuousValue(800, 400, 0)
+                        self.sendContinuousValue(800, 400, -1)
                         print("左平移")  
                     else:
                         self.walking(0, 0) # 直走
-                if self.bar.center.y >= 210:
+                if self.bar.center.y >= 230:
                     self.ctrl_status = 'turn_straight'
 
             elif self.ctrl_status == 'turn_straight':
                 print("turn_straight")
                 self.theta = self.imu_fix()
-                self.sendContinuousValue(-500, -300, self.theta-1)
+                self.sendContinuousValue(-500, -300, self.theta-2)
                 if abs(self.theta) <= 1:
                     time.sleep(0.5)
                     self.ctrl_status = 'pick_up'
@@ -318,7 +318,7 @@ class WeightLift(API):
                 self.bar.update(1)
                 self.sendHeadMotor(2, HEAD_MOTOR_START, 100)
                 time.sleep(1)
-                # self.sendBodySector(123)
+                self.sendBodySector(123)
                 # time.sleep(1)
                 
                 self.real_bar_center = self.bar.center.x
@@ -343,8 +343,6 @@ class WeightLift(API):
                 if self.body_auto: 
                     self.walk_switch()
                 time.sleep(2)
-                #self.sendBodySector(234)  #縮左腳
-                time.sleep(1)
                 self.sendBodySector(int(LIFT))
                 # 根據重量決定舉起後的等待時間
                 wait_time = 23.5 if WIGHT == 90 else 21 if WIGHT == 80 else 21 if WIGHT == 70 else 21
@@ -358,6 +356,8 @@ class WeightLift(API):
                     for _ in range(min(int((165 - self.real_bar_center) // 7), 4)):
                         self.sendBodySector(607)
                     time.sleep(3.5)
+                self.sendBodySector(234)  #縮左腳 #60迴圈外 ＃70迴圈內
+                time.sleep(1)
                 if FLAG1:
                     sector_fix = 3336 if WIGHT == 90 else 3335 if WIGHT == 80 else 3334 if WIGHT == 70 else 3333 if WIGHT == 60 else None
                     if sector_fix: self.sendBodySector(int(sector_fix))

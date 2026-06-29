@@ -45,7 +45,7 @@ setup(
             'hahafinal = strategy.mar.hahafinal:main',
             'newmar = strategy.mar.newmar:main',
             'mp = strategy.lc.mp:main',
-            'wl_tui  = strategy.wl.wl_new:main',
+            'wl_tui  = strategy.wl.wl_tui:main',
             'us_new = strategy.us.us_new:main',
             'trace = strategy.us.trace_ball_stop:main',
             'us_comm = strategy.us.comm_node:main',

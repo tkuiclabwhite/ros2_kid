@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# coding=utf-8
+#coding=utf-8
 import sys
-import rclpy
+import rclpy 
 from strategy.API import API
 import numpy as np
 import math
@@ -10,11 +10,11 @@ import time
 
 #--校正量--#
 #前進量校正
-FORWARD_CORRECTION         = -900
+FORWARD_CORRECTION         = -600
 #平移校正
 TRANSLATION_CORRECTION     = -400
 #旋轉校正
-THETA_CORRECTION           = -3
+THETA_CORRECTION           = -2
 #基礎變化量(前進&平移)
 BASE_CHANGE                = 300
 HEAD_CHANGE_H              = 5
@@ -30,50 +30,99 @@ W_ALIGN = 70  # 水平對齊的權重
 W_HEIGHT = -50  #高度權重
 
 
+W_FAR = 920
+RATIO_FAR = -0.90 #2251-2363)/100
+
+W_NEAR = 1120     
+RATIO_NEAR = -1.35 #(2251-2363)/100
+
 
 # ========= 距離抓點參數：參考籃球 distance = FOCAL * REAL / pixel_length =========
 # 攀岩點實際高度，單位自己統一即可，先用 10 當基準
-CW_REAL_POINT_LENGTH = 10
+CW_REAL_POINT_LENGTH = 23
 # 相機焦距參數，先沿用籃球的 330，現場再校正
-CW_FOCAL_LENGTH = 330
+CW_FOCAL_LENGTH = 44
 
 # # # # # # # # 距離抓點# # # # # # # # # # # # # # # # 
 # 理想抓點距離，越大代表希望站/抓得更遠 抓太前面 → 調大 / 抓太後面 → 調小
-CW_DIST_TARGET = 60
+CW_DIST_TARGET = 24
 # 左右像素偏移轉手馬達量 左右抓歪
 CW_DIST_GAIN_X = 3.0
 # 上下像素偏移轉手馬達量 上下抓歪
 CW_DIST_GAIN_Y = 1.5
 # 遠近距離誤差轉手伸出去的量 如果：距離變很多手只動一點調大
 CW_DIST_GAIN_Z = 4.0
-CW_DIST_TARGET = 60
-CW_DIST_GAIN_X = 3.0
-CW_DIST_GAIN_Y = 1.5
-CW_DIST_GAIN_Z = 4.0
 
-# 手部微調補償
-LEFT_HAND_X_OFFSET = 0
-RIGHT_HAND_X_OFFSET = -200
+#######################################################
+# ========= 手部抓點微調 =========
+# X：左右修正。左手抓太左/右手抓太左 -> 加大；抓太右 -> 減小
+LEFT_HAND_X_OFFSET = -180
+RIGHT_HAND_X_OFFSET = -300
 
-LEFT_HAND_Y_OFFSET = 850
-RIGHT_HAND_Y_OFFSET = -650
+# Y：高低修正。手抓太高 -> 減小；手抓太低 -> 加大
+LEFT_HAND_Y_OFFSET = 730
+RIGHT_HAND_Y_OFFSET = -750
 # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # 防止一次輸出太大，可依你的馬達安全範圍調整
 CW_HAND_X_LIMIT = 1000
 CW_HAND_Y_LIMIT = 1000
 
+# ========= 走路距離目標：輸入幾公分，就用面積換算停在幾公分 =========
+# 之後只要改 CW_GRIP_TARGET_DISTANCE_CM：16 就停 16±1，17 就停 17±1
+#
+# 校正表填法：
+#   1. 先把機器人手動放在指定距離，例如 16cm
+#   2. 看 log 的「目前面積」
+#   3. 把 0.0 改成你量到的平均面積
+#
+# 注意：這裡是走路用的「紅+藍底部兩點總面積」，不是抓點 hold_area。
+# 如果某個距離還沒量，先保持 0.0，程式會自動略過，用已知點內插/外推。
+CW_WALK_DISTANCE_AREA_TABLE = [
+    (14.0, 1224.0),       # 14cm 面積，量到再填
+    (15.0, 1151.0),       # 15cm 面積，量到再填
+    (16.0, 1156.0),       # 16cm 面積，量到再填
+    (17.0, 1195.0),    # 你之前量到 17cm 約 1677
+    (18.0, 1111.0),       # 18cm 面積，量到再填
+    (24.0, 1204.0),    # 你之前量到 24cm 約 1204
+]
+
+# 保留單點校正作為備用：校正表不足時會用這組平方公式推算
+CW_WALK_CALIB_DISTANCE_CM = 24.0
+CW_WALK_CALIB_AREA = 1204.0
+
+# 你真正要改的目標距離：設定16就停16±1，設定17就停17±1
+CW_GRIP_TARGET_DISTANCE_CM = 16.0
+CW_GRIP_DISTANCE_TOLERANCE_CM = 1.0
+
+# ========= 動態距離抓點參數（只影響抓點選點/距離log，不影響左右補償） =========
+# 這裡沿用同一組校正，若之後要更準可另外用單一攀岩點 hold_area 校正
+CW_DYNAMIC_GRIP_ENABLE = True
+CW_GRIP_CALIB_DISTANCE_CM = CW_WALK_CALIB_DISTANCE_CM
+CW_GRIP_CALIB_AREA = CW_WALK_CALIB_AREA
+# 攀岩點實際寬度，拿來把像素 dx/dy 換成大概公分，選點會用
+CW_REAL_HOLD_WIDTH_CM = 4.0
+# 手臂可抓最大直線距離；常常找不到點 -> 調大，常選太遠抓不到 -> 調小＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃
+CW_ARM_MAX_LENGTH_CM = 50.0
+#######################################################################################################################
+# 距離補償變平滑，避免每次面積跳動造成手抖；0.0 不更新，1.0 完全跟最新值
+CW_DISTANCE_SMOOTH_ALPHA = 0.35
+# 保留舊參數；新版不再拿距離誤差去改 X，避免左右補償反向
+CW_DIST_CM_GAIN_X = 35.0
+# 面積異常保護
+CW_MIN_HOLD_AREA = 300
+CW_MAX_VALID_DISTANCE_CM = 60.0
 
 #------------------#
-HEAD_HORIZONTAL            = 2048
-HEAD_VERTICAL              = 2048
+HEAD_HORIZONTAL            = 2048               #頭水平
+HEAD_VERTICAL              = 2048              #頭垂直 #30cm2150
 
 HEAD_LEFT_HAND_H = 2550
-HEAD_LEFT_HAND_V = 2100
+HEAD_LEFT_HAND_V = 2100  #2100
 
 HEAD_RIGHT_HAND_H = 1550
-HEAD_RIGHT_HAND_V = 2100
-
+HEAD_RIGHT_HAND_V = 2200
+ 
 HEAD_LEFT_LEG_H = 1750
 HEAD_LEFT_LEG_V = 1750
 
@@ -97,28 +146,52 @@ MOTOR_RIGHT_HEAP = 0
 
 
 #判斷值
-MY_LINE_Y = 120
-MY_LINE_X = 160
+# FOOTLADDER_LINE            = 215                   #上梯基準線
+MY_LINE_Y= 120 #攀岩基準線
+MY_LINE_X =160 #攀岩基準線
 MY_SIZE = 1020
+
+# ========= 走到定點微調 =========
+# 正常不用改；如果輸入16但實測仍偏近/偏遠，再用這個做最後面積微調
+# 走太近 -> 改更負；走太遠 -> 改更大
+READY_DISTANCE_ADJUST = 0
+###################################################################################################################
+# 保留原本參數但不再用它控制距離，避免搞混
+WALK_SIZE_OFFSET = 0
+
+# 左右：人站太左/太右時微調中心線；正負方向依現場測一次修
+WALK_X_OFFSET = 10
+
 ROI_RADIUS = 120
 
+#==================== 抓點高度微調 ====================
+# 目標抓 MY_LINE_Y 上方多少 pixel；數字越大，抓越高
+LEFT_HAND_TARGET_Y_OFFSET  = 55
+RIGHT_HAND_TARGET_Y_OFFSET = 55
+# 允許高度範圍；數字越小越不容易跳到別顆
+LEFT_HAND_Y_RANGE  = 25
+RIGHT_HAND_Y_RANGE = 25
+
+# 參照 0422：只掃左上、右上安全角度，避免頭亂掃卡到
+HAND_SAFE_SCAN_VIEWS = [
+    (HEAD_LEFT_HAND_H,  HEAD_LEFT_HAND_V),
+    (HEAD_RIGHT_HAND_H, HEAD_RIGHT_HAND_V),
+]
+
 #前後值
-BACK_MIN                   = -600
-FORWARD_MIN                = 100
-FORWARD_LOW                = 200
-FORWARD_NORMAL             = 300
-FORWARD_HIGH               = 500
+BACK_MIN                   = -600                #小退後
+FORWARD_MIN               = 100
+FORWARD_LOW               = 200             #小前進 300
+FORWARD_NORMAL             = 300                 #前進
+FORWARD_HIGH                = 500               #大前進
 
 #平移值
-TRANSLATION_BIG            = 500
+TRANSLATION_BIG            = 500                  #大平移
 TRANSLATION_NORMAL         = 300
-
 #旋轉值
-IMU_YAW_DEAD_ZONE          = 2.0
-IMU_YAW_BIG_ZONE           = 5.0
-IMU_THETA_SMALL            = 1
-IMU_THETA_BIG              = 3
-
+# THETA_MIN                  = 3                     #小旋轉
+# THETA_NORMAL               = 1                    #旋轉
+# THETA_BIG                  = 5                     #大旋轉
 #----------------------------------------手校正
 LHEAD_X_CA = 2576
 LHEAD_Y_CA = 2101
@@ -141,20 +214,22 @@ LEG_Y_CA = 1
 
 
 class WallClimbing(API):
-    # CW主策略
+#CW主策略
     def __init__(self):
         super().__init__('wall_climbing_node')
-        self.target = ObjectInfo(TARGET_COLOAR_1, TARGET_COLOAR_2, 'Ladder', self)
+        self.target = ObjectInfo(TARGET_COLOAR_1,TARGET_COLOAR_2,'Ladder',self)
         self.init()
         self.timer = self.create_timer(0.05, self.strategy_loop)
         self.get_logger().info("Wall Climbing Node Initialized")
+        
+        # self.STAND_CORRECT_CW = STAND_CORRECT_CW
 
     def strategy_loop(self):
-        if self.is_start:
+        if self.is_start :
             self.current_strategy = "Wall_Climb_on"
         else:
-            self.current_strategy = "Wall_Climb_off"
-
+            self.current_strategy = "Wall_Climb_off" 
+        # self.current_strategy = "Wall_Climb_on"            
         strategy = self.current_strategy
         if DRAW_FUNCTION_FLAG:
             self.draw_function()
@@ -169,59 +244,76 @@ class WallClimbing(API):
         self.get_logger().info(f"target_1_cy: {self.target_1_cy}\033[K")
         self.get_logger().info(f"head_h : {int(self.now_head_Horizontal)},head_v: {int(self.now_head_Vertical)},track:{int(self.track)}\033[K")
         self.get_logger().info('￣￣￣￣￣￣')
-
+        
+        
         if strategy == "Wall_Climb_off":
+        #關閉策略,初始化設定
+        
             if (not self.walkinggait_stop and self.climbing):
                 self.get_logger().info("🔊CW parameter reset\033[K")
                 self.init()
                 self.sendbodyAuto(0)
-                self.sendSensorReset()
+                self.sendSensorReset()           #IMUreset
                 time.sleep(2)
-                self.sendBodySector(29)
+                self.sendBodySector(29)             #基礎站姿磁區
                 time.sleep(1.5)
+                # if STAND_CORRECT_CW:
+                #     send.sendBodySector(30)             #CW基礎站姿調整磁區
+                #     STAND_CORRECT_CW = False 
+                
                 self.get_logger().info("reset\033[K")
                 self.imu_reset = True
-
-            self.sendHeadMotor(1, HEAD_HORIZONTAL, 100)
-            self.sendHeadMotor(2, HEAD_VERTICAL, 100)
+            self.sendHeadMotor(1,HEAD_HORIZONTAL,100)  #水平
+            self.sendHeadMotor(2,HEAD_VERTICAL,100)    #垂直
             self.init()
+            # self.find_ladder()
+            # self.keep_head()
             self.get_logger().info("turn off\033[K")
             self.walkinggait_stop = True
 
-        elif strategy == "Wall_Climb_on":
+        elif strategy == "Wall_Climb_on":#為甚麼要有兩個參數
+        #開啟CW策略
             if self.reset:
-                self.sendHeadMotor(1, HEAD_HORIZONTAL, 80)
-                self.sendHeadMotor(2, HEAD_VERTICAL, 80)
-                time.sleep(1)
-                self.reset = False
+                    #self.sendSensorReset()   #!!記得改 debug用
+                    self.sendHeadMotor(1,HEAD_HORIZONTAL, 80)#水平
+                    self.sendHeadMotor(2,HEAD_VERTICAL, 80)#垂直
+                    time.sleep(1)
+                    self.reset = False
 
             if self.state != 'cw_finish':
+                # if self.STAND_CORRECT_CW:
+                #     send.sendBodySector(102)             #CW基礎站姿調整磁區
+                #     while not send.execute:
+                #         rospy.logdebug("站立姿勢\033[K")
+                #     send.execute = False
+                #     self.STAND_CORRECT_CW = False
+                #     rospy.sleep(2)
+                
                 if not self.readyclimb:
-                    self.sendbodyAuto(1)
+                    self.sendbodyAuto(1)            #開始動作 # 0暫時不要走
                     self.find_ladder()
-                    self.track = (int(self.target_1_cy - MY_LINE_Y)) * (38 / 240)
+                    self.track = (int(self.target_1_cy - MY_LINE_Y))*(38/240)
                     self.now_head_Vertical = self.now_head_Vertical - round(self.track * 4096 / 360 * 0.05)
-
-                    if abs(self.now_head_Vertical - 2048) > 900:
-                        if (self.now_head_Vertical - 2048) > 0:
+                    if abs(self.now_head_Vertical - 2048) > 900 :   # 防止馬達過度旋轉
+                        if (self.now_head_Vertical - 2048 ) > 0 :
                             self.now_head_Vertical = 2048 + 900
-                        elif (self.now_head_Vertical - 2048) < 0:
+                        elif (self.now_head_Vertical - 2048) < 0 :
                             self.now_head_Vertical = 2048 - 900
-
-                    self.sendHeadMotor(2, self.now_head_Vertical, 100)
+                    self.sendHeadMotor(2,self.now_head_Vertical,100)  #像素轉換馬達值
+                    # self.sendHeadMotor(2,HEAD_VERTICAL ,20)
                     motion = self.new_edge_judge()
                     self.walkinggait(motion)
-
+                    
                 else:
-                    if not self.climbing:
+                    if not self.climbing:  # readyclimb == True：開始抓點 + 動作
                         self.action, self.value = self.lambs_select()
 
+                        # 關鍵：找不到點就只掃描，不要進 climbmode 卡死
                         if self.action == 'searching' or self.value == 'no_object' or self.value is None:
-                            self.get_logger().info(
-                                f"找不到點，持續掃描中... step={getattr(self, 'climb_step', 0)} scan={getattr(self, 'scan_count', 0)}\033[K"
-                            )
+                            self.get_logger().info(f"找不到點，持續掃描中... step={getattr(self,'climb_step',0)} scan={getattr(self,'scan_count',0)}\033[K")
                             return
-
+                        
+                        # 找到點才真的執行動作
                         self.get_logger().info(f"看完了嘛:{self.lookok}\033[K")
                         if self.lookok:
                             self.state = '已找到攀爬點，準備切換追蹤模式'
@@ -229,6 +321,7 @@ class WallClimbing(API):
                             self.lookok = False
                     else:
                         if self.move_ok:
+                            # 動作做完了，狀態重置，準備換下一隻手
                             self.get_logger().info("動作完成，重置狀態換手")
                             self.beseen_lamb = False
                             self.climbing = False
@@ -239,33 +332,45 @@ class WallClimbing(API):
                         else:
                             self.state = "視覺追蹤與姿態準備中"
                             self.climbmode(self.action, self.value)
+                            
 
+                    
+                    
+                    
     def init(self):
-        self.state = '停止'
+        #狀態
+        self.state                 = '停止'
         self.is_start = False
-        self.walkinggait_stop = True
-
-        self.now_head_Horizontal = HEAD_HORIZONTAL
+        #步態啟動旗標
+        self.walkinggait_stop      = True  
+        
+        #設定頭部馬達
+        self.now_head_Horizontal   = HEAD_HORIZONTAL
         self.now_head_Vertical = HEAD_VERTICAL
-        self.imu_reset = True
+        
+        #imu_reast
+        self.imu_reset             = True
 
         self.target_1_y = 0
         self.target_1_ym = 0
         self.target_2_y = 0
         self.target_2_ym = 0
 
-        self.forward = 0
-        self.translation = 0
-        self.theta = 0
-        self.now_forward = 0
-        self.now_translation = 0
-        self.now_theta = 0
 
-        self.new_target_xmin = 0
-        self.new_target_xmax = 0
-        self.size = 0
+        #步態參數
+        self.forward               = 0
+        self.translation           = 0 
+        self.theta                 = 0 
+        self.now_forward           = 0 
+        self.now_translation       = 0
+        self.now_theta             = 0
+
+        self.new_target_xmin       = 0
+        self.new_target_xmax       = 0 
+        self.size = 0 
 
         self.lost_target_count = 0
+
         self.forward_ok = False
         self.dist_ok = False
         self.pos_x_ok = False
@@ -273,10 +378,10 @@ class WallClimbing(API):
         self.head = True
         self.action = None
         self.value = None
-        self.reset = True
-        self.readyclimb = False
+        self.reset =True
+        self.readyclimb=False 
         self.lookok = False
-        self.climbing = False
+        self.climbing=False
         self.beseen = False
         self.move_ok = False
         self.track_ok = False
@@ -284,8 +389,8 @@ class WallClimbing(API):
         self.allontarget = False
         self.been_done = False
 
-        self.object_x = 0
-        self.object_y = 0
+        self.object_x = 0  #debug default 0
+        self.object_y = 0  # 0
         self.object_y1_len = 0
         self.object_y2_len = 0
         self.target_1_cx = 160
@@ -297,10 +402,14 @@ class WallClimbing(API):
 
         self.track = 0
         self.stoptime = 0
+
         self.cnt = 1
+
 
         self.best_candidate = None
         self.max_score = -1
+
+       
         self.times = 1
 
         self.score_left_hand = 0
@@ -308,19 +417,23 @@ class WallClimbing(API):
         self.score_left_leg = 0
         self.score_right_leg = 0
 
-        head1 = np.array([[LHEAD_X_CA, 0], [0, LHEAD_X_CA]])
-        hand1 = np.array([[LHAND_X_CA], [LHAND_Y_CA]])
-        linear_solution = np.linalg.solve(head1, hand1)
+        head1 = np.array([[LHEAD_X_CA,0],[0,LHEAD_X_CA]])
+        hand1 = np.array([[LHAND_X_CA],[LHAND_Y_CA]])
+        linear_solution = np.linalg.solve(head1,hand1)
+
         self.p_x1 = linear_solution[0]
         self.p_y1 = linear_solution[1]
 
-        head2 = np.array([[RHEAD_X_CA, 0], [0, RHEAD_X_CA]])
-        hand2 = np.array([[RHAND_X_CA], [RHAND_Y_CA]])
-        linear_solution = np.linalg.solve(head2, hand2)
+
+        head2 = np.array([[RHEAD_X_CA,0],[0,RHEAD_X_CA]])
+        hand2 = np.array([[RHAND_X_CA],[RHAND_Y_CA]])
+        linear_solution = np.linalg.solve(head2,hand2)
+
         self.p_x2 = linear_solution[0]
         self.p_y2 = linear_solution[1]
 
         self.search_stage = 0
+        # self.p_height = HEAP_HEIGHT / TARGET_SIZE 
 
     def clamp_value(self, value, min_value, max_value):
         return max(min(value, max_value), min_value)
@@ -328,8 +441,12 @@ class WallClimbing(API):
     def find_ladder(self):
         sys.stdout.write("\033[K")
 
+        # 1. 確保變數存在，初始化以預防 AttributeError
+
         color_1 = self.target.color1
         color_2 = self.target.color2
+
+
         target_colors = [color_1, color_2]
         candidates_y_max = []
 
@@ -337,40 +454,32 @@ class WallClimbing(API):
             obj_count = self.color_counts[color]
             self.get_logger().info(f"color {color} subject cnts: {obj_count}\033[K")
             actual_list_len = len(self.object_sizes[color])
-            for i in range(min(obj_count, actual_list_len + 1)):
+            for i in range(min(obj_count, actual_list_len+1)):
                 if self.object_sizes[color][i] > 100:
                     cx = (self.object_x_max[color][i] + self.object_x_min[color][i]) // 2
                     cy = (self.object_y_max[color][i] + self.object_y_min[color][i]) // 2
-                    ###########左手只抓 x < 160 的點 右手只抓 x > 160 的點#############
-                    if getattr(self, 'action', '') == 'right_hand':
-                        if cx < 180:
-                            continue
-
-                    elif getattr(self, 'action', '') == 'left_hand':
-                        if cx > 140:
-                            continue
-                        ######################################################
                     if cx is not None:
                         candidates_y_max.append({
-                            'y_max': self.object_y_max[color][i],
+                            'y_max':self.object_y_max[color][i],
                             'color': color,
-                            'cx': cx,
-                            'cy': cy,
-                            'size': self.object_sizes[color][i],
+                            'cx':cx,
+                            'cy':cy,
+                            'size':self.object_sizes[color][i],
                             'idx': i
                         })
-
-        candidates_y_max.sort(key=lambda x: x['y_max'], reverse=True)
+            
+            # 修正 2: 修正 key 名稱 (y_max 而非 ymax)
+        candidates_y_max.sort(key=lambda x: x['y_max'], reverse=True) 
 
         if len(candidates_y_max) >= 1:
             c1 = candidates_y_max[0]
             self.target_1_cy = c1['cy']
             self.target_1_cx = c1['cx']
-            self.target_1_size = c1['size']
+            self.target_1_size =c1['size']
 
             if len(candidates_y_max) >= 2:
                 c2 = candidates_y_max[1]
-                if abs(c1['cx'] - c2['cx']) > 30:
+                if abs(c1['cx'] - c2['cx']) > 30 :
                     self.target_2_cy = c2['cy']
                     self.target_2_cx = c2['cx']
                     self.target_2_size = c2['size']
@@ -379,51 +488,133 @@ class WallClimbing(API):
                         c2 = candidates_y_max[2]
                         self.target_2_cy = c2['cy']
                         self.target_2_cx = c2['cx']
-                        self.target_2_size = c2['size']
+                        self.target_2_size =c2['size']
                     else:
                         self.target_2_cx = self.target_1_cx
 
-                self.object_x = abs(self.target_1_cx + self.target_2_cx) // 2
-                self.size = self.target_1_size + self.target_2_size
+                self.object_x = abs(self.target_1_cx + self.target_2_cx)//2
+                self.size = self.target_1_size + self.target_2_size             #面積
             else:
                 self.object_x = 0
-
             self.get_logger().info(f"鎖定目標 - Y1:cx,cy:{self.target_1_cx},{self.target_1_cy}, X_Dist:{self.object_x}")
             self.get_logger().info(f"鎖定目標 - Y2:cx,cy:{self.target_2_cx},{self.target_2_cy}")
             self.get_logger().info(f"鎖定目標 - Y1:size:{self.target_1_size},鎖定目標 - Y2:size:{self.target_2_size}")
         else:
             self.get_logger().info("丟失目標...\033[K")
+            
+        
+    def calculate_walk_target_size(self, distance_cm):
+        """
+        走路仍然用面積控制，但目標面積由公分自動換算。
+
+        優先使用 CW_WALK_DISTANCE_AREA_TABLE：
+        - 如果剛好有該距離的實測面積，直接用實測值。
+        - 如果在兩個實測距離中間，用線性內插。
+        - 如果超出實測範圍，用最近兩點線性外推。
+        - 如果表格有效點不足2個，才退回單點平方公式。
+
+        這只影響前後停車，不會影響左右補償。
+        """
+        distance_cm = max(float(distance_cm), 1.0)
+
+        # 只取面積大於 0 的校正點，0.0 代表還沒量到，先略過
+        valid_points = []
+        for d, area in CW_WALK_DISTANCE_AREA_TABLE:
+            try:
+                d = float(d)
+                area = float(area)
+            except Exception:
+                continue
+            if d > 0 and area > 0:
+                valid_points.append((d, area))
+
+        valid_points.sort(key=lambda x: x[0])
+
+        # 剛好有實測點就直接用
+        for d, area in valid_points:
+            if abs(distance_cm - d) < 1e-6:
+                return area
+
+        # 有兩個以上實測點：內插/外推
+        if len(valid_points) >= 2:
+            # 找距離所在區間
+            if distance_cm <= valid_points[0][0]:
+                d1, a1 = valid_points[0]
+                d2, a2 = valid_points[1]
+            elif distance_cm >= valid_points[-1][0]:
+                d1, a1 = valid_points[-2]
+                d2, a2 = valid_points[-1]
+            else:
+                d1, a1 = valid_points[0]
+                d2, a2 = valid_points[-1]
+                for i in range(len(valid_points) - 1):
+                    left = valid_points[i]
+                    right = valid_points[i + 1]
+                    if left[0] <= distance_cm <= right[0]:
+                        d1, a1 = left
+                        d2, a2 = right
+                        break
+
+            if abs(d2 - d1) > 1e-6:
+                ratio = (distance_cm - d1) / (d2 - d1)
+                target_area = a1 + ratio * (a2 - a1)
+                return max(target_area, 1.0)
+
+        # 有效點不足：退回原本單點平方公式
+        target_area = CW_WALK_CALIB_AREA * (CW_WALK_CALIB_DISTANCE_CM / distance_cm) ** 2
+        return max(target_area, 1.0)
 
     def new_edge_judge(self):
-        if not hasattr(self, 'lost_target_count'):
-            self.lost_target_count = 0
+        # 如果完全沒目標
+        if not hasattr(self, 'lost_target_count'): self.lost_target_count = 0
 
         if self.size == 0 and self.object_x == 0:
             self.lost_target_count += 1
             self.forward = 0.0
             self.translation = 0.0
-            if self.lost_target_count > 20:
+            if self.lost_target_count > 20: # 連續 1 秒沒看到
                 self.state = "目標丟失：搜尋中"
-                self.forward = 500
-            return 'walking'
+                self.forward= 500 # 緩慢直走找尋
+            return 'walking'  
         else:
             self.lost_target_count = 0
 
-        error_x = MY_LINE_X - self.object_x
-        error_size = MY_SIZE - self.size
+        # 偏差計算 ---
+
+        target_x = MY_LINE_X + WALK_X_OFFSET
+
+        # 用你輸入的 CW_GRIP_TARGET_DISTANCE_CM 自動換算走路目標面積
+        # 例：24cm=1204 時，16cm 會自動換成約 2709；17cm 約 2401
+        target_size = self.calculate_walk_target_size(CW_GRIP_TARGET_DISTANCE_CM) + READY_DISTANCE_ADJUST
+
+        # 正負 1cm 的面積範圍。距離越近面積越大，距離越遠面積越小。
+        near_distance = max(CW_GRIP_TARGET_DISTANCE_CM - CW_GRIP_DISTANCE_TOLERANCE_CM, 1.0)
+        far_distance = CW_GRIP_TARGET_DISTANCE_CM + CW_GRIP_DISTANCE_TOLERANCE_CM
+        near_size = self.calculate_walk_target_size(near_distance) + READY_DISTANCE_ADJUST
+        far_size = self.calculate_walk_target_size(far_distance) + READY_DISTANCE_ADJUST
+
+        error_x = target_x - self.object_x
+        error_size = target_size - self.size
+        distance_ok = far_size <= self.size <= near_size
 
         self.get_logger().info(f"目前面積:{self.size}")
-        self.get_logger().info(f"垂直線:{MY_LINE_X},我的面積:{MY_SIZE}")
-        self.get_logger().info(f"誤差size:{error_size}, 誤差x:{error_x}")
-
-        if not self.forward_ok:
-            if abs(error_size) <= 10:
-                self.forward = 0.0
+        self.get_logger().info(
+            f"走路目標:{CW_GRIP_TARGET_DISTANCE_CM:.1f}±{CW_GRIP_DISTANCE_TOLERANCE_CM:.1f}cm, "
+            f"目標面積:{target_size:.1f}, 合格面積範圍:{far_size:.1f}~{near_size:.1f}"
+        )
+        self.get_logger().info(f"垂直線:{target_x}, WALK_X_OFFSET:{WALK_X_OFFSET}, READY_DISTANCE_ADJUST:{READY_DISTANCE_ADJUST}")
+        self.get_logger().info(f"誤差size:{error_size:.1f}, 誤差x:{error_x}")
+        
+        # 前後距離控制：仍然用面積走路，只是目標面積由公分自動換算
+        if not self.forward_ok :
+            if distance_ok:
+                self.forward = 0.0 
                 time.sleep(2)
-                self.forward_ok = True
+                self.forward_ok = True 
             else:
-                if error_size > 0:
-                    if 200 < error_size < 400:
+                # 面積太小 = 人太遠，要往前；面積太大 = 人太近，要後退
+                if self.size < far_size:
+                    if error_size > 200 and error_size < 400:
                         self.forward = FORWARD_NORMAL
                     elif error_size > 401:
                         self.forward = FORWARD_HIGH
@@ -432,67 +623,63 @@ class WallClimbing(API):
                 else:
                     self.forward = BACK_MIN
         else:
-            self.get_logger().info("前進對齊,準備平移")
-            if self.object_x > 0:
-                self.translation = max(min(error_x * 35, 1000), -1000) if abs(error_x) > 10.0 else 0.0
-            else:
-                self.translation = 0.0
+                self.get_logger().info("前進對齊,準備平移")
+                if self.object_x > 0:            
+                    self.translation = max(min(error_x * 35, 1000), -1000) if abs(error_x) > 10.0 else 0.0
+                else:
+                    self.translation = 0.0
 
-            self.pos_x_ok = abs(error_x) <= 15 or self.object_x == 0
+                self.pos_x_ok = abs(error_x) <= 15 or self.object_x == 0      #平移死區值
 
-        if self.forward_ok and self.pos_x_ok:
-            if not hasattr(self, 'ready_count'):
-                self.ready_count = 0
+        if self.forward_ok  and self.pos_x_ok : 
+            if not hasattr(self, 'ready_count'): self.ready_count = 0
             self.get_logger().info("穩定加一")
             time.sleep(0.25)
             self.ready_count += 1
         else:
             self.ready_count = 0
 
-        if self.ready_count > 2:
+        if  self.ready_count > 2: #  5 幀穩定
             self.state = "對齊完成：切換攀爬模式"
             return "ready_to_cw"
         else:
-            self.state = f"對齊中...穩定度:{int(self.ready_count / 2 * 100)}%"
+            self.state = f"對齊中...穩定度:{int(self.ready_count/2*100)}%"
             return "walking"
+         
 
-    def imu_walk_theta(self):
-        yaw = self.imu_rpy[2]
 
-        if yaw > IMU_YAW_BIG_ZONE:
-            return -IMU_THETA_BIG
-        elif yaw > IMU_YAW_DEAD_ZONE:
-            return -IMU_THETA_SMALL
-        elif yaw < -IMU_YAW_BIG_ZONE:
-            return IMU_THETA_BIG
-        elif yaw < -IMU_YAW_DEAD_ZONE:
-            return IMU_THETA_SMALL
-        return 0
-
-    def walkinggait(self, motion):
+    def walkinggait(self,motion):
+    #步態函數
         if motion == 'ready_to_cw':
             self.get_logger().info("正面對齊：準備攀爬\033[K")
             self.forward = 0.0
             self.translation = 0.0
-            self.sendbodyAuto(0)
+
+            self.sendbodyAuto(0)        #停止步態
             time.sleep(0.5)
-            self.sendSensorReset(True)
+            self.sendSensorReset(True)  #IMU reset 避免機器人步態修正錯誤
             self.state = 'ready_finish'
-            self.readyclimb = True
+            self.readyclimb = True  
+
+
         else:
             self.now_forward = self.ramp_speed(self.now_forward, self.forward, BASE_CHANGE)
             self.now_translation = self.ramp_speed(self.now_translation, self.translation, BASE_CHANGE)
-            self.theta = self.imu_walk_theta()
-
-            f = max(min(int(self.now_forward), 1001), -1001)
+               
+            f = max(min(int(self.now_forward), 501), -501)
             t = max(min(int(self.now_translation), 1001), -1001)
-            r = max(min(int(self.theta), 5), -5)
-            self.get_logger().info(f"f:{f}, t:{t},t:{r}")
 
+            self.get_logger().info(f"now_forward   :{self.now_forward}")
+            self.get_logger().info(f"now_translation  : {self.now_translation}")
+            
+            self.get_logger().info(f"f   :{f}")
+            self.get_logger().info(f"t   :{t}")
+            
             if not self.forward_ok:
-                self.sendContinuousValue(f, TRANSLATION_CORRECTION, r)
+                self.sendContinuousValue(f, TRANSLATION_CORRECTION ,THETA_CORRECTION)
             else:
-                self.sendContinuousValue(FORWARD_CORRECTION, t, r)
+                self.sendContinuousValue(FORWARD_CORRECTION,t,THETA_CORRECTION)
+
 
     def ramp_speed(self, current, target, step):
         if abs(current - target) < step:
@@ -503,34 +690,68 @@ class WallClimbing(API):
             return current - step
         return target
 
+
+    def calculate_hold_distance_cm(self, current_target):
+        """
+        用面積估距離：distance = K / sqrt(area)
+        K = 校正距離 * sqrt(校正面積)
+        這裡只給抓點用，不會影響走路的 size 判斷。
+        """
+        area = float(current_target.get('size', 0) or 0)
+        xmin, ymin, xmax, ymax = current_target['bbox']
+        bbox_w = max(1, xmax - xmin)
+        bbox_h = max(1, ymax - ymin)
+
+        if area <= 0:
+            area = float(bbox_w * bbox_h)
+
+        if area < CW_MIN_HOLD_AREA:
+            self.get_logger().info(f"攀岩點面積太小 area={area:.1f}，不做距離抓點")
+            return None
+
+        k = CW_GRIP_CALIB_DISTANCE_CM * math.sqrt(CW_GRIP_CALIB_AREA)
+        distance_cm = k / math.sqrt(area)
+        distance_cm = self.clamp_value(distance_cm, 1.0, CW_MAX_VALID_DISTANCE_CM)
+
+        # 做一點濾波，不然面積跳動時手部補償會跟著跳
+        last = getattr(self, 'last_hold_distance_cm', None)
+        if last is None:
+            smooth_distance = distance_cm
+        else:
+            smooth_distance = (last * (1.0 - CW_DISTANCE_SMOOTH_ALPHA)) + (distance_cm * CW_DISTANCE_SMOOTH_ALPHA)
+        self.last_hold_distance_cm = smooth_distance
+
+        self.get_logger().info(
+            f"距離估測: hold_area={area:.1f}, bbox={bbox_w}x{bbox_h}, "
+            f"raw={distance_cm:.1f}cm, smooth={smooth_distance:.1f}cm"
+        )
+        return smooth_distance
+
     def calculate_hand_motor_by_distance(self, action, current_target):
         """
-        參考籃球 basket_distance()：
-        distance = FOCAL_LENGTH * REAL_LENGTH / pixel_length
-        這裡 pixel_length 用攀岩點 bbox 高度 ymax-ymin。
+        動態抓點：
+        1. 用攀岩點面積換算距離並印 log
+        2. X 左右補償只看 target_dx + LEFT/RIGHT_HAND_X_OFFSET
+        3. 不把距離誤差加到 X，避免改 16/17 時左右補償反向
         """
         target_cx, target_cy = current_target['center']
-        xmin, ymin, xmax, ymax = current_target['bbox']
 
-        point_length = ymax - ymin
-        if point_length <= 0:
-            self.get_logger().info("攀岩點高度錯誤，停止抓點")
-            return None, None
-
-        target_distance = CW_FOCAL_LENGTH * CW_REAL_POINT_LENGTH / point_length
         target_dx = target_cx - MY_LINE_X
         target_dy = target_cy - MY_LINE_Y
-        distance_error = target_distance - CW_DIST_TARGET
 
-        # 左右偏移 + 遠近補償
-        # 左手、右手分開算，因為右手遠近方向相反
+        distance_cm = self.calculate_hold_distance_cm(current_target)
+        if distance_cm is None:
+            return None, None
+
+        # 距離誤差只拿來印 log，不再加入 X 左右補償。
+        # 這樣 CW_GRIP_TARGET_DISTANCE_CM 改 16/17/18，左右補償方向不會反過來。
+        distance_error_cm = distance_cm - CW_GRIP_TARGET_DISTANCE_CM
+
         if action == 'left_hand':
             motor_value_x = (
                 target_dx * CW_DIST_GAIN_X
-                + distance_error * CW_DIST_GAIN_Z
                 + LEFT_HAND_X_OFFSET
             )
-
             motor_value_y = (
                 target_dy * CW_DIST_GAIN_Y
                 + LEFT_HAND_Y_OFFSET
@@ -538,33 +759,22 @@ class WallClimbing(API):
 
         elif action == 'right_hand':
             motor_value_x = (
-                -(target_dx * CW_DIST_GAIN_X
-                - distance_error * CW_DIST_GAIN_Z)
+                -(target_dx * CW_DIST_GAIN_X)
                 + RIGHT_HAND_X_OFFSET
             )
-
             motor_value_y = (
                 target_dy * CW_DIST_GAIN_Y
                 + RIGHT_HAND_Y_OFFSET
             )
-
         else:
             return None, None
 
-        motor_value_x = self.clamp_value(
-            motor_value_x,
-            -CW_HAND_X_LIMIT,
-            CW_HAND_X_LIMIT
-        )
+        motor_value_x = self.clamp_value(motor_value_x, -CW_HAND_X_LIMIT, CW_HAND_X_LIMIT)
+        motor_value_y = self.clamp_value(motor_value_y, -CW_HAND_Y_LIMIT, CW_HAND_Y_LIMIT)
 
-        motor_value_y = self.clamp_value(
-            motor_value_y,
-            -CW_HAND_Y_LIMIT,
-            CW_HAND_Y_LIMIT
-        )
         self.get_logger().info(
-            f"{action} 距離抓點: point_length={point_length}, "
-            f"distance={target_distance:.1f}, error={distance_error:.1f}, "
+            f"{action} 動態抓點: dist={distance_cm:.1f}cm, "
+            f"target={CW_GRIP_TARGET_DISTANCE_CM:.1f}cm, err={distance_error_cm:.1f}cm, "
             f"dx={target_dx}, dy={target_dy}"
         )
         self.get_logger().info(
@@ -726,14 +936,15 @@ class WallClimbing(API):
             self.move_ok = True
             self.state = '攀爬結束'
 
-    def keep_head(self, coordinate):
-        cx, cy = coordinate
+    def keep_head(self,coordinate):
 
-        error_x = cx - MY_LINE_X
-        error_y = cy - MY_LINE_Y
+        cx,cy = coordinate
 
-        diff_h = (error_x * (51 / 320)) * (4096 / 360) * 0.05
-        diff_v = (error_y * (38 / 240)) * (4096 / 360) * 0.05
+        error_x = cx - MY_LINE_X # 水平誤差
+        error_y = cy - MY_LINE_Y # 垂直誤差
+
+        diff_h = (error_x * (51/320)) * (4096/360) *0.05
+        diff_v = (error_y * (38/240)) * (4096/360) *0.05
 
         self.get_logger().info(f"diff_h:{diff_h},diff_v :{diff_v}")
 
@@ -743,48 +954,58 @@ class WallClimbing(API):
         self.now_head_Horizontal = max(1000, min(3000, self.now_head_Horizontal))
         self.now_head_Vertical = max(1000, min(3000, self.now_head_Vertical))
 
-        self.sendHeadMotor(1, int(self.now_head_Horizontal), 100)
-        self.sendHeadMotor(2, int(self.now_head_Vertical), 100)
+        self.sendHeadMotor(1, int(self.now_head_Horizontal), 100) # 水平
+        self.sendHeadMotor(2, int(self.now_head_Vertical), 100) # 垂直
 
-        if abs(error_x) < 10 and abs(error_y) < 10:
-            self.track_ok = True
+        if abs(error_x) < 10 and abs(error_y) < 10 :
+            self.track_ok = True 
         else:
             self.track_ok = False
 
-    def imu_angle(self):
-        imu_ranges = [
-            (180, -3), (90, -3), (60, -3), (45, -3), (20, -3),
-            (10, -2), (5, -2), (2, -1), (0, 0), (-2, 1),
-            (-5, 2), (-10, 2), (-20, 3), (-45, 3), (-60, 3),
-            (-90, 3), (-180, 3)
-        ]
-        for imu_range in imu_ranges:
+
+    def imu_angle(self):      #一般 imu修正角度
+        imu_ranges = [  (180,  -3),
+                        (90,  -3), 
+                        (60,  -3), 
+                        (45,  -3), 
+                        (20,  -3), 
+                        (10,  -2), 
+                        (5,   -2), 
+                        (2,   -1), 
+                        (0,    0),
+                        (-2,    1),
+                        (-5,    2),
+                        (-10,   2),
+                        (-20,   3),
+                        (-45,   3),
+                        (-60,   3),
+                        (-90,   3),
+                        (-180,   3)]
+        for imu_range in imu_ranges:           
             if self.imu_rpy[2] >= imu_range[0]:
                 return imu_range[1]
         return 0
+    def draw_function(self): 
+            self.drawImageFunction(1,1,0,320,MY_LINE_Y,MY_LINE_Y,255,255,3) #水平判斷線
+            self.drawImageFunction(2,1,MY_LINE_X,MY_LINE_X,0,240,255,255,3) #垂直判斷線
+            edge_x = 160-ROI_RADIUS  #最左上角的x
+            edge_y = 120-ROI_RADIUS  #最左上角的y
+            xmin = edge_x
+            xmax = ROI_RADIUS*2 + edge_x
+            ymin =edge_y
+            ymax =ROI_RADIUS*2 + edge_y
 
-    def draw_function(self):
-        self.drawImageFunction(1, 1, 0, 320, MY_LINE_Y, MY_LINE_Y, 255, 255, 3)
-        self.drawImageFunction(2, 1, MY_LINE_X, MY_LINE_X, 0, 240, 255, 255, 3)
-        edge_x = 160 - ROI_RADIUS
-        edge_y = 120 - ROI_RADIUS
-        xmin = edge_x
-        xmax = ROI_RADIUS * 2 + edge_x
-        ymin = edge_y
-        ymax = ROI_RADIUS * 2 + edge_y
-
-        self.ROI_cx = ROI_RADIUS + edge_x
-        self.ROI_cy = ROI_RADIUS + edge_y
-
-        self.drawImageFunction(3, 1, xmin, xmax, ymin, ymax, 0, 255, 255)
-        self.drawImageFunction(4, 1, self.ROI_cx, self.ROI_cx, self.ROI_cy, self.ROI_cy, 0, 255, 255)
+            self.ROI_cx = ROI_RADIUS + edge_x
+            self.ROI_cy = ROI_RADIUS + edge_y
+           
+            self.drawImageFunction(3,1,xmin,xmax,ymin,ymax,0,255,255)
+            self.drawImageFunction(4,1,self.ROI_cx,self.ROI_cx,self.ROI_cy,self.ROI_cy,0,255,255)
 
     def get_best_climbing_target(self):
         best_candidate = []
         color_1 = self.target.color1
         color_2 = self.target.color2
         target_colors = [color_1, color_2]
-
         point_r = 10
 
         for color in target_colors:
@@ -792,12 +1013,11 @@ class WallClimbing(API):
 
             for i in range(min(cnts, len(self.object_sizes[color]) + 1)):
                 size = self.object_sizes[color][i]
-                if size < 300:
+                if size < CW_MIN_HOLD_AREA:
                     continue
 
                 cx = (self.object_x_max[color][i] + self.object_x_min[color][i]) // 2
                 cy = (self.object_y_max[color][i] + self.object_y_min[color][i]) // 2
-                
                 if cx is None or cy is None:
                     continue
 
@@ -809,59 +1029,71 @@ class WallClimbing(API):
                 if xmin <= 0 or xmax >= 320 or ymin <= 0 or ymax >= 240:
                     continue
 
-                dist = math.sqrt((cx - self.ROI_cx) ** 2 + (cy - self.ROI_cy) ** 2)
-                if (dist + point_r) > (ROI_RADIUS + 60):
+                dist_px = math.sqrt((cx - self.ROI_cx) ** 2 + (cy - self.ROI_cy) ** 2)
+                if (dist_px + point_r) > (ROI_RADIUS + 60):
                     continue
 
-                center_ratio = 1.0 - (dist / ROI_RADIUS)
-                center_score = center_ratio * W_CENTER
-#####################右手選點排序太高減 
-                if hasattr(self, 'action') and self.action == 'right_hand':
-                    height_score = int((240 - cy) * 8)
-                else:
-                    height_score = int((240 - cy) * 5)
-###########################
-                alignment_score = int((1 - abs(cx - self.ROI_cx) / ROI_RADIUS) * 55)
+                bbox_w = max(1, xmax - xmin)
+                pixel_to_cm = CW_REAL_HOLD_WIDTH_CM / bbox_w
+                z_cm = self.calculate_hold_distance_cm({
+                    'center': (cx, cy),
+                    'size': size,
+                    'bbox': (xmin, ymin, xmax, ymax),
+                })
+                if z_cm is None:
+                    continue
 
-                total_score = int(center_score + alignment_score + height_score)
+                x_cm = abs(cx - MY_LINE_X) * pixel_to_cm
+                y_cm = abs(cy - MY_LINE_Y) * pixel_to_cm
+                reach_cm = math.sqrt(z_cm ** 2 + x_cm ** 2 + y_cm ** 2)
+
+                # 超出手臂範圍就不要選，避免選到看得到但抓不到的點
+                if CW_DYNAMIC_GRIP_ENABLE and reach_cm > CW_ARM_MAX_LENGTH_CM:
+                    self.get_logger().info(
+                        f"略過太遠點 cx={cx}, cy={cy}, reach={reach_cm:.1f}cm > {CW_ARM_MAX_LENGTH_CM:.1f}cm"
+                    )
+                    continue
+
+                center_score = int((1.0 - (dist_px / ROI_RADIUS)) * W_CENTER)
+                alignment_score = int((1 - abs(cx - self.ROI_cx) / ROI_RADIUS) * W_ALIGN)
+                reach_score = int((CW_ARM_MAX_LENGTH_CM - reach_cm) * 10)
+
+                # 保留你原本「右手不要選太高」的邏輯，但變成參數化
+                if getattr(self, 'action', '') == 'right_hand':
+                    target_y = MY_LINE_Y - RIGHT_HAND_TARGET_Y_OFFSET
+                    height_score = -abs(cy - target_y) * 6
+                elif getattr(self, 'action', '') == 'left_hand':
+                    target_y = MY_LINE_Y - LEFT_HAND_TARGET_Y_OFFSET
+                    height_score = -abs(cy - target_y) * 5
+                else:
+                    height_score = int((240 - cy) * 3)
+
+                total_score = int(center_score + alignment_score + reach_score + height_score)
 
                 best_candidate.append({
                     'center': (cx, cy),
                     'score': total_score,
                     'size': size,
                     'bbox': (xmin, ymin, xmax, ymax),
-                    'id': {i}
+                    'distance_cm': z_cm,
+                    'reach_cm': reach_cm,
+                    'id': i
                 })
 
         if len(best_candidate) == 0:
-            self.get_logger().info("畫面中沒有符合條件的攀爬點...")
+            self.get_logger().info("畫面中沒有符合距離/臂長條件的攀爬點...")
             return 'no_object'
-##################右手抓點太高減 太矮加
-        if getattr(self, 'action', '') == 'right_hand':
-            best_candidate.sort(
-                key=lambda x: (
-                    abs(x['center'][1] - (MY_LINE_Y - 30)),
-                    -x['score']
-                )
-            )
-        else:
-            best_candidate.sort(key=lambda x: x['score'], reverse=True)
-##########################            
+
+        best_candidate.sort(key=lambda x: x['score'], reverse=True)
         best = best_candidate[0]
 
-        best_score = best['score']
-        best_size = best['size']
-        best_cx = best['center'][0]
-        best_cy = best['center'][1]
-        best_xmin = best['bbox'][0]
-        best_xmax = best['bbox'][2]
-        best_ymin = best['bbox'][1]
-        best_ymax = best['bbox'][3]
-
-        self.get_logger().info(f"total_score,{best_score}")
-        self.get_logger().info(f"size:{best_size}")
-        self.get_logger().info(f"cx:{best_cx},cy:{best_cy}")
-        self.get_logger().info(f"xmin,{best_xmin},ymin,{best_ymin},xmax,{best_xmax},ymax,{best_ymax},")
+        self.get_logger().info(f"total_score:{best['score']}")
+        self.get_logger().info(f"size:{best['size']}")
+        self.get_logger().info(f"distance:{best['distance_cm']:.1f}cm, reach:{best['reach_cm']:.1f}cm")
+        self.get_logger().info(f"cx:{best['center'][0]},cy:{best['center'][1]}")
+        self.get_logger().info(
+            f"xmin,{best['bbox'][0]},ymin,{best['bbox'][1]},xmax,{best['bbox'][2]},ymax,{best['bbox'][3]},"
+        )
 
         return best
 
@@ -1010,21 +1242,22 @@ class WallClimbing(API):
                     self.get_logger().info(f"Any 模式選定目標: {best_limb}, 分數: {best_score}")
                     return self.lambs_select()
 
-
 class Coordinate:
+#儲存座標
     def __init__(self, x, y):
         self.x = x
         self.y = y
 
-
-class ObjectInfo:
-    def __init__(self, color1, color2, object_type, api_node):
+class ObjectInfo():  #最大物件的訊息
+    # 顏色與編號對照
+    def __init__(self, color1,color2, object_type,api_node):
+        
         self.api = api_node
         self.color_dict = {
-            'Orange': 0, 'Yellow': 1, 'Blue': 2, 'Green': 3,
-            'Black': 4, 'Red': 5, 'White': 6
-        }
-        self.color1 = self.color_dict[color1]
+        'Orange': 0, 'Yellow': 1, 'Blue': 2, 'Green': 3,
+        'Black': 4, 'Red': 5, 'White': 6
+        } 
+        self.color1= self.color_dict[color1]
         self.color1_str = color1
         self.color2 = self.color_dict[color2]
         self.color2_str = color2
@@ -1035,6 +1268,7 @@ class ObjectInfo:
         self.get_target = False
         self.target_size = 0
 
+        # 設定物件尋找策略
         update_strategy = {
             'Board': self.get_object,
             'Ladder': self.get_object,
@@ -1043,42 +1277,50 @@ class ObjectInfo:
         self.find_object = update_strategy[object_type]
 
     def get_object(self):
-        color_type = [self.color1, self.color2]
+        """獲取最大面積物件的編號"""
 
-        max_size = 0
-        max_idx = None
-        self.max_size_color = None
+        color_type = [self.color1,self.color2]
 
-        for color in color_type:
+        for color in color_type :
+            
             count = self.api.color_counts[color]
+
             if count == 0:
-                continue
+                return None
+            else:
+                for i in range(1,count+1):
+                    max_size = 0
+                    max_idx = None
+                    size = self.api.object_sizes[color][i]
 
-            for i in range(count):
-                size = self.api.object_sizes[color][i]
-                if size > max_size:
-                    max_size = size
-                    max_idx = i
-                    self.max_size_color = color
-
-        return max_idx if max_size > 100 else None
+                    if size > max_size:
+                        max_size = size
+                        max_idx = i
+                        self.max_size_color = color
+            
+            # 門檻判斷 (面積 > 100 像素才視為目標)
+            return max_idx if max_size > 100 else None
 
     def update(self):
-        object_idx = self.find_object()
+        """更新目標物的所有詳細資訊"""
+        object_idx = self.find_object() #max_idx
 
         if object_idx is not None:
             self.get_target = True
+            # 更新邊界座標 (API: object_x_min/max, object_y_min/max)
             self.edge_max.x = self.api.object_x_max[self.max_size_color][object_idx]
             self.edge_min.x = self.api.object_x_min[self.max_size_color][object_idx]
             self.edge_max.y = self.api.object_y_max[self.max_size_color][object_idx]
             self.edge_min.y = self.api.object_y_min[self.max_size_color][object_idx]
-
+            
+            # 更新中心點 (API: get_object_cx/cy)
             self.center.x = self.api.get_object_cx(self.max_size_color, object_idx)
             self.center.y = self.api.get_object_cy(self.max_size_color, object_idx)
+            
+            # 更新面積 (API: object_sizes)
             self.target_size = self.api.object_sizes[self.max_size_color][object_idx]
         else:
             self.get_target = False
-
 
 def main(args=None):
     rclpy.init(args=args)
@@ -1090,7 +1332,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()

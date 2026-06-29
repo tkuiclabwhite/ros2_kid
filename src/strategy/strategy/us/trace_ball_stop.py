@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 # coding=utf-8
 """
-United Soccer 策略 v2 — find_ball + approach_ball
+United Soccer 策略 v2 — find_ball + approach_ball + find_pole + adjust_position
 狀態機:
   find_ball    : 頭部掃描搜尋球，對準中心連續 10 幀後進入下一狀態
   approach_ball:
     turn_to_ball : 身體旋轉對正球（頭 H 偏角歸零）
     walk_to_ball : 直走靠近，小幅 theta 修正，head_v <= APPROACH_STOP_V 停止
+  find_pole:
+    scan         : 分層水平掃描搜尋藍色球門柱，記錄找到時的頭部刻度
+    return_head  : 找到後頭部回到球的位置，等待 RETURN_HEAD_WAIT_FRAMES 幀
+  adjust_position:
+    頭部固定在 ball_head_h/v，依 pole_found_h 誤差做弧形繞球修正，
+    ball.cy 控制 x 維持距離，達到目標幀數後進入下一狀態
 """
 import sys
 import time
@@ -20,6 +26,7 @@ from strategy.API import API
 # ===========================================================================
 
 COLOR_BALL = 'yellow'
+COLOR_POLE = 'blue'
 
 IMG_W  = 320
 IMG_H  = 240
@@ -50,6 +57,31 @@ HEAD_TOL_Y      = 20
 # --- 搜尋 ---
 HEAD_SEARCH_STEP_H  = 60
 HEAD_SEARCH_V_LEVELS = [1300, 1450, 1600, 1750]
+
+# --- find_pole 掃描 ---
+POLE_SEARCH_V_LEVELS   = [1450, 1600, 1750, 1900, 2020]
+POLE_SEARCH_STEP_H     = 60
+
+# --- 球門柱過濾條件 ---
+POLE_MIN_AREA    = 80
+POLE_ASPECT_MIN  = 0.1   # 柱子是細長形，不限制比例
+POLE_ASPECT_MAX  = 5.0
+
+# --- find_pole: 頭部回球位 ---
+POLE_CONFIRM_FRAMES     = 5    # 連續看到藍柱幾幀才算找到（可調）
+RETURN_HEAD_WAIT_FRAMES = 15   # 等待馬達移動到位的幀數（0.1s × 15 ≈ 1.5s）
+
+# --- adjust_position: 繞球軌道修正 ---
+ORBIT_Y_LEFT      = 800   # 往左繞（orbit_dir= 1）側向步長（可調）
+ORBIT_Y_RIGHT     = -700   # 往右繞（orbit_dir=-1）側向步長（可調）
+ORBIT_THETA_LEFT  = -3     # 往左繞旋轉步長（可調）
+ORBIT_THETA_RIGHT = 4     # 往右繞旋轉步長（可調）
+ORBIT_V_GAIN      = 60.0   # head_v 偏差 → x 步長係數（可調）
+ORBIT_X_MAX       = 900   # x 步長上限
+ORBIT_TICK_GAIN   = 0.18  # pole_h 誤差刻度 → 目標幀數係數（可調，影響繞球總量）
+
+# --- kick: 踢球動作 ---
+KICK_WAIT_FRAMES  = 30   # 等待踢球動作完成的幀數（0.1s × 30 = 3s，可調）
 
 # --- 球消失容忍 ---
 BALL_LOST_FRAMES = 8
@@ -118,6 +150,37 @@ class BallInfo:
         self.aspect = best['aspect_ratio']
 
 # ===========================================================================
+# 視覺：球門柱
+# ===========================================================================
+
+class PoleInfo:
+    def __init__(self, api: API):
+        self.api     = api
+        self.visible = False
+        self.cx = self.cy = self.area = 0
+        self.aspect = 0.0
+
+    def update(self):
+        objs = self.api.get_objects(COLOR_POLE)
+        if not objs:
+            self.visible = False
+            return
+        candidates = [
+            o for o in objs
+            if o['area'] > POLE_MIN_AREA
+            and POLE_ASPECT_MIN < o['aspect_ratio'] < POLE_ASPECT_MAX
+        ]
+        if not candidates:
+            self.visible = False
+            return
+        best = max(candidates, key=lambda o: o['area'])
+        self.visible = True
+        self.cx     = best['centroid'][0]
+        self.cy     = best['centroid'][1]
+        self.area   = best['area']
+        self.aspect = best['aspect_ratio']
+
+# ===========================================================================
 # Debug 印表
 # ===========================================================================
 
@@ -144,12 +207,24 @@ class StatusPrinter(threading.Thread):
                     f" ball.cx / cy  : {n.ball.cx} / {n.ball.cy}\n"
                     f" ball.area     : {n.ball.area}\n"
                     f" centered_cnt  : {n.ball_centered_count}/{BALL_CENTERED_FRAMES}\n"
+                    f" pole.visible  : {n.pole.visible}\n"
+                    f" pole.cx / cy  : {n.pole.cx} / {n.pole.cy}\n"
                     f"#============== 頭部狀態 ===============#\n"
                     f" head_h        : {n.head_h}  偏角={h_deg:+.1f}°\n"
                     f" head_v        : {n.head_v}"
                     f"  (停止門檻={APPROACH_STOP_V})\n"
                     f" search_v_idx  : {n.search_v_idx}/{len(HEAD_SEARCH_V_LEVELS)-1}"
                     f"  V={HEAD_SEARCH_V_LEVELS[n.search_v_idx]}\n"
+                    f"#=========== find_pole 狀態 ============#\n"
+                    f" pole_found_h  : {n.pole_found_h}\n"
+                    f" pole_found_v  : {n.pole_found_v}\n"
+                    f" pole_scan_idx : {n.pole_search_v_idx}/{len(POLE_SEARCH_V_LEVELS)-1}"
+                    f"  V={POLE_SEARCH_V_LEVELS[n.pole_search_v_idx]}\n"
+                    f" return_frames : {n._return_head_frames}/{RETURN_HEAD_WAIT_FRAMES}\n"
+                    f"#======= adjust_position 狀態 ==========#\n"
+                    f" orbit_dir     : {n._orbit_dir}"
+                    f"  ({'往左繞' if n._orbit_dir == 1 else '往右繞'})\n"
+                    f" orbit_frames  : {n._orbit_frames}/{n._orbit_target_frames}\n"
                     f"#=======================================#\n"
                 )
                 sys.stdout.flush()
@@ -166,6 +241,7 @@ class UnitedSoccer(API):
         super().__init__('us_v2')
 
         self.ball = BallInfo(self)
+        self.pole = PoleInfo(self)
 
         self.head_h = HEAD_H_CENTER
         self.head_v = HEAD_V_CENTER
@@ -176,9 +252,34 @@ class UnitedSoccer(API):
         self.ball_lost_count     = 0
         self.ball_centered_count = 0   # 對準中心的連續幀計數
 
-        self.state      = 'find_ball'
-        self.sub_state  = ''
-        self.action_detail = '初始化'
+        # approach_ball 結束時的頭部位置（供 find_pole 用）
+        self.ball_head_h = HEAD_H_CENTER
+        self.ball_head_v = HEAD_V_FOOT
+
+        # find_pole 掃描方向與層索引
+        self.pole_search_dir   = 'right'
+        self.pole_search_v_idx = 0
+
+        # find_pole 找到球門柱時記錄的頭部刻度
+        self.pole_found_h = HEAD_H_CENTER
+        self.pole_found_v = HEAD_V_CENTER
+
+        # find_pole 確認與回正計數器
+        self._pole_confirm_frames = 0
+        self._return_head_frames  = 0
+
+        # adjust_position 軌道修正
+        self._orbit_dir           = 1    # 1=往左繞, -1=往右繞
+        self._orbit_frames        = 0    # 已執行幀數
+        self._orbit_target_frames = 0    # 目標幀數
+
+        # kick 踢球
+        self._kick_wait_frames    = 0
+
+        self.initialized   = False
+        self.state         = 'find_ball'
+        self.sub_state     = ''
+        self.action_detail = '等待開始'
 
         self._printer = StatusPrinter(self)
         self._printer.start()
@@ -248,6 +349,29 @@ class UnitedSoccer(API):
     def _head_offset_deg(self):
         """回傳頭部 H 偏離中心的角度，正值=偏左，負值=偏右"""
         return (HEAD_H_CENTER - self.head_h) / HEAD_DEG_PER_TICK
+
+    def _search_pole_head(self):
+        """分層水平掃描球門柱（V 層較高，對應柱子高度）"""
+        target_v = POLE_SEARCH_V_LEVELS[self.pole_search_v_idx]
+        if self.head_v != target_v:
+            self.head_v = target_v
+            self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
+
+        if self.pole_search_dir == 'right':
+            self.head_h -= POLE_SEARCH_STEP_H
+            if self.head_h <= HEAD_H_MIN:
+                self.head_h = HEAD_H_MIN
+                self.pole_search_dir = 'left'
+        else:
+            self.head_h += POLE_SEARCH_STEP_H
+            if self.head_h >= HEAD_H_MAX:
+                self.head_h = HEAD_H_MAX
+                self.pole_search_dir = 'right'
+                self.pole_search_v_idx += 1
+                if self.pole_search_v_idx >= len(POLE_SEARCH_V_LEVELS):
+                    self.pole_search_v_idx = 0   # 掃完一輪，重頭繼續
+
+        self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
 
     # -----------------------------------------------------------------------
     # find_ball
@@ -379,13 +503,21 @@ class UnitedSoccer(API):
         """
         # 到達條件
         if self.head_v <= APPROACH_STOP_V:
-            self.sendContinuousValue(x=0, y=0, theta=0)   # 步長歸零
-            self.sendbodyAuto(0)                           # 停止步態
+            self.sendContinuousValue(x=0, y=0, theta=0)
+            self.sendbodyAuto(0)
+            # 記錄抵達時的頭部位置，供 find_pole 回正用
+            self.ball_head_h = self.head_h
+            self.ball_head_v = self.head_v
+            # 重置 find_pole 掃描狀態
+            self.pole_search_dir    = 'right'
+            self.pole_search_v_idx  = 0
+            self._pole_confirm_frames = 0
+            self._return_head_frames  = 0
+            self.state     = 'find_pole'
+            self.sub_state = 'scan'
             self.action_detail = (
-                f'抵達球旁 head_v={self.head_v} ✅ → 下一狀態'
+                f'抵達球旁 head_v={self.head_v} ✅ → find_pole'
             )
-            # TODO: 之後在這裡切換到 find_pole
-            # self.state = 'find_pole'
             return
 
         # theta 修正邏輯：
@@ -416,12 +548,187 @@ class UnitedSoccer(API):
         )
 
     # -----------------------------------------------------------------------
+    # find_pole
+    # -----------------------------------------------------------------------
+
+    def _state_find_pole(self):
+        """
+        sub_state = 'scan'        : 分層水平掃描搜尋藍色球門柱
+        sub_state = 'center_pole' : P-controller 將頭對準藍柱中心，穩定後計幀數
+        sub_state = 'return_head' : 找到後頭部回到球的位置，等待 RETURN_HEAD_WAIT_FRAMES 幀
+        """
+        if self.sub_state == 'scan':
+            self.pole.update()
+            if self.pole.visible:
+                # 看到藍柱：停止掃描，切換到對準模式
+                self._pole_confirm_frames = 0
+                self.sub_state = 'center_pole'
+                self.action_detail = f'發現藍柱，切換對準模式 cx={self.pole.cx}'
+            else:
+                self._search_pole_head()
+                self.action_detail = (
+                    f'掃描藍柱中 dir={self.pole_search_dir}  '
+                    f'層={self.pole_search_v_idx}  '
+                    f'V={POLE_SEARCH_V_LEVELS[self.pole_search_v_idx]}  '
+                    f'head_h={self.head_h}'
+                )
+
+        elif self.sub_state == 'center_pole':
+            self.pole.update()
+            if not self.pole.visible:
+                # 追丟了：回去繼續掃
+                self._pole_confirm_frames = 0
+                self.sub_state = 'scan'
+                self.action_detail = '藍柱追丟，回掃描'
+            else:
+                centered = self._track_object(self.pole.cx, self.pole.cy)
+                if centered:
+                    self._pole_confirm_frames += 1
+                    self.action_detail = (
+                        f'藍柱對準中，確認幀 ({self._pole_confirm_frames}/{POLE_CONFIRM_FRAMES})  '
+                        f'cx={self.pole.cx}  head_h={self.head_h}'
+                    )
+                    if self._pole_confirm_frames >= POLE_CONFIRM_FRAMES:
+                        # 穩定對準：記錄頭部刻度，送出回正指令
+                        self.pole_found_h = self.head_h
+                        self.pole_found_v = self.head_v
+                        self.head_h = self.ball_head_h
+                        self.head_v = self.ball_head_v
+                        self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
+                        self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
+                        self._pole_confirm_frames = 0
+                        self._return_head_frames  = 0
+                        self.sub_state = 'return_head'
+                        self.action_detail = (
+                            f'找到藍柱 ✅ pole_h={self.pole_found_h} pole_v={self.pole_found_v} '
+                            f'cx={self.pole.cx} cy={self.pole.cy} → 頭部回正中'
+                        )
+                else:
+                    self._pole_confirm_frames = 0   # 還沒對準，計數歸零
+                    self.action_detail = (
+                        f'對準藍柱中 cx={self.pole.cx} head_h={self.head_h}'
+                    )
+
+        elif self.sub_state == 'return_head':
+            self._return_head_frames += 1
+            self.action_detail = (
+                f'頭部回正中 ({self._return_head_frames}/{RETURN_HEAD_WAIT_FRAMES})  '
+                f'目標 h={self.ball_head_h} v={self.ball_head_v}'
+            )
+            if self._return_head_frames >= RETURN_HEAD_WAIT_FRAMES:
+                # 計算繞球方向與目標幀數
+                # pole_found_h > HEAD_H_CENTER → 柱在左 → 繞到球右側 → 往右繞 → orbit_dir = -1
+                # pole_found_h < HEAD_H_CENTER → 柱在右 → 繞到球左側 → 往左繞 → orbit_dir =  1
+                pole_error = self.pole_found_h - HEAD_H_CENTER
+                self._orbit_dir           = 1 if pole_error < 0 else -1
+                self._orbit_target_frames = int(abs(pole_error) * ORBIT_TICK_GAIN)
+                self._orbit_frames        = 0
+                self.sendbodyAuto(1)
+                self.state     = 'adjust_position'
+                self.sub_state = ''
+                self.action_detail = (
+                    f'頭部回正完成 ✅ → adjust_position  '
+                    f'orbit_dir={self._orbit_dir}  '
+                    f'target={self._orbit_target_frames} 幀'
+                )
+
+    # -----------------------------------------------------------------------
+    # adjust_position
+    # -----------------------------------------------------------------------
+
+    def _state_adjust_position(self):
+        """
+        弧形繞球修正踢球角度：
+        - 頭部 H+V 雙軸追蹤球，保持球在畫面中央
+        - head_v 偏離 ball_head_v → x 補償前後距離
+          head_v > ball_head_v：頭抬起 → 球跑遠 → 前進
+          head_v < ball_head_v：頭更下沉 → 球太近 → 後退
+        - orbit_dir 決定 y + theta 方向，同時送出形成弧形
+        - 達到 _orbit_target_frames 後停步進入下一狀態
+        """
+        # 到達目標幀數 → 完成修正
+        if self._orbit_frames >= self._orbit_target_frames:
+            self.sendContinuousValue(x=0, y=0, theta=0)
+            self.sendbodyAuto(0)
+            self._kick_wait_frames = 0
+            self.state = 'kick'
+            self.action_detail = '軌道修正完成 ✅ → kick'
+            return
+
+        # 頭部追蹤球（H+V），同時用 head_v 判斷距離
+        if self.ball.visible:
+            self._track_object(self.ball.cx, self.ball.cy)
+            v_err = self.head_v - self.ball_head_v
+            x = int(v_err * ORBIT_V_GAIN)
+            x = max(-ORBIT_X_MAX, min(ORBIT_X_MAX, x))
+        else:
+            x = 0
+            v_err = 0
+
+        if self._orbit_dir == 1:   # 往左繞
+            y     =  ORBIT_Y_LEFT
+            theta =  ORBIT_THETA_LEFT
+        else:                      # 往右繞
+            y     = -ORBIT_Y_RIGHT
+            theta = -ORBIT_THETA_RIGHT
+
+        self.sendContinuousValue(x=x, y=y, theta=theta)
+        self._orbit_frames += 1
+        self.action_detail = (
+            f'繞球中 [{self._orbit_frames}/{self._orbit_target_frames}]  '
+            f'dir={self._orbit_dir}  x={x}  y={y}  theta={theta}  '
+            f'head_v={self.head_v}  v_err={v_err}'
+        )
+
+    def _state_kick(self):
+        """
+        踢球：依繞球方向選擇左/右腳，等待動作完成後回到 find_ball。
+        orbit_dir == -1（往右繞）→ 右腳踢 sendBodySector(100)
+        orbit_dir ==  1（往左繞）→ 左腳踢 sendBodySector(200)
+        """
+        if self._kick_wait_frames == 0:
+            if self._orbit_dir == -1:
+                self.sendBodySector(100)
+                time.sleep(13)
+                self.action_detail = '右腳踢球 sector=100'
+            else:
+                self.sendBodySector(200)
+                time.sleep(13)
+                self.action_detail = '左腳踢球 sector=200'
+
+        self._kick_wait_frames += 1
+        if self._kick_wait_frames >= KICK_WAIT_FRAMES:
+            self.state     = 'find_ball'
+            self.sub_state = ''
+            self.action_detail = '踢球完成 ✅ → find_ball'
+
+    def _initialize(self):
+        """每次撥開關啟動時執行一次：頭部歸中、停走、重置狀態。"""
+        self.head_h = HEAD_H_CENTER
+        self.head_v = HEAD_V_CENTER
+        self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
+        self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
+        self.sendbodyAuto(0)
+        # self.sendBodySector(29)
+        self.state         = 'find_ball'
+        self.sub_state     = ''
+        self.action_detail = '初始化完成 → find_ball'
+
+    # -----------------------------------------------------------------------
     # 主迴圈
     # -----------------------------------------------------------------------
 
     def main(self):
         if not self.is_start:
-            self.sendbodyAuto(0)
+            if self.initialized:
+                self.sendbodyAuto(0)
+                self.initialized   = False
+                self.action_detail = '=== 停止 ==='
+            return
+
+        if not self.initialized:
+            self._initialize()
+            self.initialized = True
             return
 
         self.ball.update()
@@ -430,6 +737,12 @@ class UnitedSoccer(API):
             self._state_find_ball()
         elif self.state == 'approach_ball':
             self._state_approach_ball()
+        elif self.state == 'find_pole':
+            self._state_find_pole()
+        elif self.state == 'adjust_position':
+            self._state_adjust_position()
+        elif self.state == 'kick':
+            self._state_kick()
 
 # ===========================================================================
 # 進入點
