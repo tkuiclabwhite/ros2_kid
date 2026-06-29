@@ -16,7 +16,7 @@
 
 		var wasOnline = true;
 		var ros = new ROSLIB.Ros({
-			url: "ws://192.168.1.58:9090"
+			url: "ws://192.168.1.59:9090"
 		});
 
 		// Override Interface.js topics so they use miniDRC's ros instance,
@@ -363,7 +363,7 @@
 
 		//-----
 		var connectFlag = false;
-		var myAddress = "192.168.1.58";
+		var myAddress = "192.168.1.59";
 
 		/* Kick Ball Variables Start */
 		var X_Swing_Range_tmp = 0;
@@ -1865,7 +1865,7 @@
 				<tr>
 					<td>
 						<select style="height:25px; margin-right: 5px;" id="addressSelect">
-							<option value="192.168.1.58">192.168.1.58</option>
+							<option value="192.168.1.59">192.168.1.59</option>
 							<option value="localhost">localhost</option>
 						</select>
 					</td>
@@ -1878,7 +1878,7 @@
 		<div id="container" align="center">
 			<!-- 攝影機畫面 -->
             <div id="div_orign_image">
-				<img id="orign_image" style="-webkit-user-select: none; display:inline; transform: scale(3.5);margin-top: 300px;" src="http://192.168.1.58:8080/stream?topic=/zoom_in">
+				<img id="orign_image" style="-webkit-user-select: none; display:inline; transform: scale(3.5);margin-top: 300px;" src="http://192.168.1.59:8080/stream?topic=/zoom_in">
 			</div>
             <!-- 攝影機參數方向 -->
             <div id="select">

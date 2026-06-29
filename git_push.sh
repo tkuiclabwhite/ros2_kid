@@ -1,0 +1,85 @@
+#!/bin/bash
+cd "$(dirname "$0")"
+
+git config user.name "tkuiclabwhite"
+git config user.email "tkuiclabwhite@gmail.com"
+
+BRANCH="black"
+
+declare -A NICKNAMES
+NICKNAMES=(
+    ["ar"]="src/strategy/strategy/ar"
+    ["bb"]="src/strategy/strategy/bb"
+    ["bm"]="src/strategy/strategy/bm"
+    ["lc"]="src/strategy/strategy/lc"
+    ["mar"]="src/strategy/strategy/mar"
+    ["obs"]="src/strategy/strategy/obs"
+    ["sp"]="src/strategy/strategy/sp"
+    ["sr"]="src/strategy/strategy/sr"
+    ["wl"]="src/strategy/strategy/wl"
+    ["us"]="src/strategy/strategy/us"
+    ["strategy"]="src/strategy"
+    ["all"]="src/strategy"
+)
+
+INPUT=$1
+if [ -z "$INPUT" ]; then
+    TARGET="src/strategy"
+elif [[ -n "${NICKNAMES[$INPUT]}" ]]; then
+    TARGET="${NICKNAMES[$INPUT]}"
+else
+    TARGET="$INPUT"
+fi
+
+echo "📂 目標路徑：$TARGET"
+
+if [ ! -d "$TARGET" ] && [ "$TARGET" != "." ]; then
+    echo "❌ 錯誤：找不到路徑 '$TARGET'，請檢查暱稱或路徑是否正確。"
+    exit 1
+fi
+
+# --- 檢查網路是否能連到這個 repo 的 remote ---
+echo "🌐 檢查與 GitHub 的連線..."
+if ! git ls-remote origin "$BRANCH" &> /dev/null; then
+    echo "❌ 無法連接到 GitHub remote (origin)。"
+    echo "   可能原因：未連接 WiFi、WiFi 無法上網、或 DNS/防火牆問題。"
+    echo "   請確認網路後再執行一次。"
+    exit 1
+fi
+echo "✅ 連線正常"
+
+# --- 加入變動並視情況 commit ---
+git add "$TARGET"
+
+if git diff-index --quiet HEAD --; then
+    echo "ℹ️  沒有偵測到新變動。"
+else
+    current_date=$(date +"%Y-%m-%d %H:%M")
+    git commit -m "Update ($TARGET): $current_date"
+fi
+
+# --- 跟遠端比對，看本地是否領先 ---
+git fetch origin "$BRANCH" --quiet
+
+LOCAL=$(git rev-parse HEAD)
+REMOTE=$(git rev-parse "origin/$BRANCH")
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+    echo "✅ 本地與遠端已同步，沒有需要上傳的內容。"
+    exit 0
+fi
+
+# --- 執行 push 並檢查結果 ---
+git push origin "$BRANCH"
+PUSH_STATUS=$?
+
+echo "-------------------------------"
+if [ $PUSH_STATUS -eq 0 ]; then
+    echo "✅ 上傳成功！[push package: ${INPUT:-all}] -> $TARGET (branch: black)"
+    echo "✅ 日期: $(date +"%Y-%m-%d %H:%M")"
+else
+    echo "❌ 上傳失敗！git push 回傳錯誤，請檢查上方訊息。"
+    echo "（commit 已存在本機，下次有網路時重跑這支腳本即可補推）"
+    exit 1
+fi
+echo "-------------------------------"

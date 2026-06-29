@@ -31,7 +31,7 @@ canvas{display:block}
 </div>
 <div id="ctrl-bar">
   <select style="height:25px; margin-right:5px;" id="addressSelect">
-    <option value="192.168.1.58">192.168.1.58</option>
+    <option value="192.168.1.59">192.168.1.59</option>
     <option value="localhost">localhost</option>
   </select>
   <button type="button" style="width:110px;height:25px;" onclick="enterAddress()">Enter Address</button>
@@ -730,7 +730,7 @@ function physicsStep(dt) {
 // ════════════════════════════════════════════════════════════
 //  ROS 連線（IP 可從 select 切換）
 // ════════════════════════════════════════════════════════════
-var myAddress   = '192.168.1.58';
+var myAddress   = '192.168.1.59';
 var connectFlag = false;
 const ros = new ROSLIB.Ros({ url: 'ws://' + myAddress + ':9090' });
 let jsSub = null;

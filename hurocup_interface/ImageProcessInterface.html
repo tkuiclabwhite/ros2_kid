@@ -16,7 +16,7 @@
 		var wasOnline = true;
 		var checkConnectionInterval = null;
 		var ros = new ROSLIB.Ros({
-		url: "ws://192.168.1.58:9090"
+		url: "ws://192.168.1.59:9090"
 		});
 
 		function checkConnection() {
@@ -280,7 +280,7 @@
 
 		//-----
 		var connectFlag = false;
-		var myAddress = "192.168.1.58";
+		var myAddress = "192.168.1.59";
 		// var myAddress = "0.0.0.0";
 
 		var B_SetupCamera_Flag = true;
@@ -1215,7 +1215,7 @@
 					<td>
 						<select style="height:25px; margin-right: 5px;" id="addressSelect">
 							<!-- <option value="172.17.121.10">172.17.121.10</option> -->
-							<option value="192.168.1.58">192.168.1.58</option>
+							<option value="192.168.1.59">192.168.1.59</option>
 							<option value="localhost">localhost</option>
 
 						</select>
@@ -1260,7 +1260,7 @@
 				<img
 					id="orign_image"
 					style="width:320px; height:240px; display:inline-block;"
-					src="http://192.168.1.58:8080/stream?topic=/zoom_in"					
+					src="http://192.168.1.59:8080/stream?topic=/zoom_in"					
 				/>
 				<!-- src="http://0.0.0.0:8080/stream?topic=/zed/zed_node/right/image_rect_color&image_transport=compressed"					 -->
 
@@ -1275,7 +1275,7 @@
 				<img 
 					id="color_image" 
 					style="width:320px; height:240px; display:inline-block;" 
-					src="http://192.168.1.58:8080/stream?topic=/processed_image&image_transport=compressed"
+					src="http://192.168.1.59:8080/stream?topic=/processed_image&image_transport=compressed"
 					alt="Processed Image Stream"
 				/>
 			</div>

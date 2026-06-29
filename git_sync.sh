@@ -1,71 +1,41 @@
 #!/bin/bash
 cd "$(dirname "$0")"
 
-# --- 1. 設定身分 ---
-git config user.name "tkuiclabwhite"
-git config user.email "tkuiclabwhite@gmail.com"
+SOURCE_BRANCH="main"
 
-# --- 2. 定義暱稱映射表 (在這邊增加你的縮寫) ---
-# 格式為： [暱稱]="實際完整路徑"
-declare -A NICKNAMES
-NICKNAMES=(
-    ["ar"]="src/strategy/strategy/ar"
-    ["bb"]="src/strategy/strategy/bb"
-    ["bm"]="src/strategy/strategy/bm"
-    ["lc"]="src/strategy/strategy/lc"
-    ["mar"]="src/strategy/strategy/mar"
-    ["obs"]="src/strategy/strategy/obs"
-    ["sp"]="src/strategy/strategy/sp"
-    ["sr"]="src/strategy/strategy/sr"
-    ["wl"]="src/strategy/strategy/wl"
-    ["us"]="src/strategy/strategy/us"
-    ["strategy"]="src/strategy"
-    ["image"]="src/imageprocess"
-    ["motion"]="src/motionpackage"
-    ["motor"]="src/motor_control"
-    ["msgs"]="src/tku_msgs"
-    ["usb_cam"]="src/usb_cam"
-    ["walking"]="src/walking"
-    ["all"]="."
-)
-
-# --- 3. 處理輸入參數 ---
-INPUT=$1
-
-# 如果沒輸入參數，預設上傳全部 (.)
-if [ -z "$INPUT" ]; then
-    TARGET="."
-# 如果輸入的字在暱稱表裡有對應
-elif [[ -n "${NICKNAMES[$INPUT]}" ]]; then
-    TARGET="${NICKNAMES[$INPUT]}"
-# 如果輸入的不是暱稱，就當作它是原始路徑
-else
-    TARGET="$INPUT"
+# --- 1. 檢查網路是否能連到 GitHub ---
+echo ":globe_with_meridians: 檢查與 GitHub 的連線..."
+if ! git ls-remote origin "$SOURCE_BRANCH" &> /dev/null; then
+    echo ":x: 無法連接到 GitHub remote (origin)。"
+    echo "   可能原因：未連接 WiFi、WiFi 無法上網、或 DNS/防火牆問題。"
+    echo "   請確認網路後再執行一次。"
+    exit 1
 fi
+echo ":white_check_mark: 連線正常"
 
-# --- 4. 執行 Git 流程 ---
-echo ":open_file_folder: 目標路徑：$TARGET"
+# --- 2. Fetch 主機器人的最新系統 ---
+git fetch origin "$SOURCE_BRANCH"
+FETCH_STATUS=$?
 
-# 檢查資料夾是否存在，防止打錯字
-if [ ! -d "$TARGET" ] && [ "$TARGET" != "." ]; then
-    echo ":x: 錯誤：找不到路徑 '$TARGET'，請檢查暱稱或路徑是否正確。"
+if [ $FETCH_STATUS -ne 0 ]; then
+    echo ":x: Fetch 失敗，無法取得主機器人最新版本，請檢查上方錯誤訊息。"
     exit 1
 fi
 
-git add "$TARGET"
-
-# 檢查是否有變動
-if git diff-index --quiet HEAD --; then
-    echo ":information_source:  沒有偵測到變動，取消上傳。"
-    exit 0
-fi
-
-current_date=$(date +"%Y-%m-%d %H:%M")
-git commit -m "Update ($TARGET): $current_date"
-
-git push origin main
+# --- 3. Merge 進來，並檢查是否有衝突 ---
+current_date=$(date +%Y-%m-%d_%H:%M)
+git merge "origin/$SOURCE_BRANCH" -m "Sync from main $current_date"
+MERGE_STATUS=$?
 
 echo "-------------------------------"
-echo "上傳成功！[push package: ${INPUT:-all}] -> $TARGET"
-echo "上傳成功！日期: $current_date"
+if [ $MERGE_STATUS -eq 0 ]; then
+    echo ":white_check_mark: 已同步主機器人最新系統 (stand.ini / 29.ini / config.js 保留副機器人本地版本)"
+    echo ":white_check_mark: 日期: $current_date"
+else
+    echo ":x: Merge 發生衝突！"
+    echo "   請執行 'git status' 查看衝突檔案，手動解決後再執行："
+    echo "   git add <衝突檔案>"
+    echo "   git commit"
+    exit 1
+fi
 echo "-------------------------------"
