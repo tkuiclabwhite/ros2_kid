@@ -13,11 +13,11 @@ from rclpy.node import Node
 from tku_msgs.msg import SensorPackage
 
 # --- 全域參數 (對齊原始邏輯) ---
-WIGHT = 80
+WIGHT = 70
 HEAD_MOTOR_START = 1500    
 HEAD_MOTOR_FINISH = 1350    
 FLAG1 = False  
-PRETURN = 2
+PRETURN = 1
 
 # 原始權重邏輯判斷 (修正重複判斷與賦值錯誤)
 if WIGHT == 86:
@@ -38,8 +38,8 @@ elif WIGHT == 90:
     FINAL = 905
 
 elif WIGHT == 80:
-    THIRD_LINE = 224
-    FOURTH_LINE = 224
+    THIRD_LINE = 220
+    FOURTH_LINE = 220
     SPEED = 1300
     PICK_ONE = 801
     PICK_TWO = 802
@@ -180,7 +180,7 @@ class WeightLift(API):
             self.sendbodyAuto(1)
 
     def imu_fix(self):
-        theta = 0
+        # theta = 0
         if self.imu_rpy[2] > 2.0:
             theta = -2
         elif self.imu_rpy[2] < -2.0:
@@ -206,9 +206,9 @@ class WeightLift(API):
         self.theta = self.imu_fix()
         if self.ctrl_status == 'fourth_line':
             #if self.speed < 1800: self.speed += 200
-            self.sendContinuousValue(1300, -300, self.theta) #60:self.theta #70:self.theta-1 #80:self.theta-1
+            self.sendContinuousValue(1300, 0, self.theta) #60:self.theta #70:self.theta #80:self.theta+1
         elif self.ctrl_status == 'second_line':
-            self.sendContinuousValue(1300, -300, self.theta)
+            self.sendContinuousValue(1300, 0, self.theta-1)
         else:
             self.sendContinuousValue(0, 0, self.theta)
 
@@ -217,6 +217,7 @@ class WeightLift(API):
             self.get_logger().info(f'ctrl_status : {self.ctrl_status}')
             self.get_logger().info(f'WIGHT : {WIGHT}')
             self.get_logger().info(f'123')
+            self.sendSensorReset(True)
             if self.ctrl_status == 'head_shake':
                 print("head_shake")
                 #self.sendBodySector(123)  #提右手拉左腳
@@ -286,7 +287,7 @@ class WeightLift(API):
                         print("左平移")  
                     else:
                         self.walking(0, 0) # 直走
-                if self.bar.center.y >= 230:
+                if self.bar.center.y >= 220:
                     self.ctrl_status = 'turn_straight'
 
             elif self.ctrl_status == 'turn_straight':
@@ -318,7 +319,7 @@ class WeightLift(API):
                 self.bar.update(1)
                 self.sendHeadMotor(2, HEAD_MOTOR_START, 100)
                 time.sleep(1)
-                #self.sendBodySector(123)
+                self.sendBodySector(123)
                 # time.sleep(1)
                 
                 self.real_bar_center = self.bar.center.x
@@ -356,7 +357,7 @@ class WeightLift(API):
                     for _ in range(min(int((165 - self.real_bar_center) // 7), 4)):
                         self.sendBodySector(607)
                     time.sleep(3.5)
-                self.sendBodySector(234)  #縮左腳 #60迴圈外 ＃70迴圈內
+                self.sendBodySector(234)   #60迴圈外 ＃70迴圈內
                 time.sleep(1)
                 if FLAG1:
                     sector_fix = 3336 if WIGHT == 90 else 3335 if WIGHT == 80 else 3334 if WIGHT == 70 else 3333 if WIGHT == 60 else None

@@ -18,8 +18,8 @@ HEAD_CHECK = 2080
 HAND_BACK = 222
 LEG_BACK = 1812                                                   # slow x-5
 VERTICAL_HEAD = 2048                                             #tight:[243, 245, 240, 243, 241]
-X_BENCHMARK = [241, 240, 235, 235, 237] # [最左,中左,中間,中右,最右] loose:[220, 228, 224, 226, 224]  tight = loose +15~20(17)
-Y_BENCHMARK = 205                                                 #one step distance +20 (initial 160) x-5
+X_BENCHMARK = [238, 238, 235, 237, 239] # [最左,中左,中間,中右,最右] loose:[220, 228, 224, 226, 224]  tight = loose +15~20(17)
+Y_BENCHMARK = 190                                                 #one step distance +20 (initial 160) x-5
 SHOOT_DELAY = 0.69      # +1s -0.151s    7.07  5     4.47    3.36     2.67       
                          #shoot_delay:   0.68  0.70  0.71    0.75     0.77     
 # motion sector
