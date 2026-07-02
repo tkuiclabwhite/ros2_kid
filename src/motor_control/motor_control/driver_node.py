@@ -278,7 +278,7 @@ class DynamixelDriver(Node):
         real_id = self.head_map.get(msg.id)
         if real_id and real_id in self.id_port_map:
             try:
-                self.get_logger().info(f"收到指令! ID:{real_id} 目標:{msg.position} 速度:{msg.speed}")
+                # self.get_logger().info(f"收到指令! ID:{real_id} 目標:{msg.position} 速度:{msg.speed}")
                 self.joint_data[real_id]['goal']     = int(msg.position)
                 self.joint_data[real_id]['velocity'] = int(msg.speed)
                 if hasattr(msg, 'acceleration'):

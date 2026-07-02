@@ -49,6 +49,7 @@ setup(
             'us_new = strategy.us.us_new:main',
             'trace = strategy.us.trace_ball_stop:main',
             'us_comm = strategy.us.comm_node:main',
+            'compare_accuracy = strategy.mar.compare_accuracy:main',
             ],
     },
 )
