@@ -17,9 +17,9 @@ from rclpy.node import Node
 # 2025.8.7
 #======================================================================================
 
-CORRECT       = [-700, 75, -1]        # 原地踏步修正
-LEFT_CORRECT  = [-825, 75, 4]        # 左旋修正
-RIGHT_CORRECT = [-775, -200, -5]       # 右旋修正
+CORRECT       = [-600, 150, -1]        # 原地踏步修正
+LEFT_CORRECT  = [-625, 125, 4]        # 左旋修正
+RIGHT_CORRECT = [-600, -250, -5]       # 右旋修正
 #                 x , y , theta
 
 #====================================================================================
@@ -34,7 +34,7 @@ CATCH_BALL_CORRECT = 1230        #1500   900
 CATCH_BALL_LINE  = [1540, 1473, 1460]         #1535, 1525]   1590, 1580      1540, 1518, 1495    [1540, 1485, 1475]   
 TWO_POINT_LINE   = [1800, 1630, 1615]            # slow_degree, stop_degree, backward_degree 
 THREE_POINT_LINE = [77, 67, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
-FIVE_POINT_LINE  = [105, 96, 93, 88]           # srward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
+FIVE_POINT_LINE  = [105, 101, 97, 88]           # srward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 #67 65 / 66 64
 #THREE_POINT_LINE = [75, 66, 64, 62] 
 # 計算焦距判斷距離
@@ -42,7 +42,7 @@ BASTET_LENGTH =  10  #增加以下全域變數
 FOCAL_LENGTH  = 330 # 333 
 TEST_DISTANCE = 60
 
-VALUEE = 33
+VALUEE = 55
 #VALUEE = 2  #框測試.  比賽時輸入的狀態決定投的策略  取代Diovalue
 #VALUEE = 22 #2分球
 #VALUEE = 33 #3分球
@@ -766,10 +766,10 @@ class BasketBall(API):
             #time.sleep(0.05)
             
         else:
-            if (self.motor.head_horizon - 1920) > 1: 
+            if (self.motor.head_horizon - 1910) > 1: 
                 self.get_logger().info(f'球不在視野中間 -> 貓頭鷹修腰')
                 # self.get_logger().info(f"motor.head_horizon = {motor.head_horizon}")
-                self.motor.Owl_Rotate(1920)
+                self.motor.Owl_Rotate(1910)
             else :
                 self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
                 self.get_logger().info(f'球水平位置在中間')
@@ -1085,10 +1085,10 @@ class BasketBall(API):
                         self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
                         time.sleep(0.05)
                     else:
-                        if abs(self.motor.head_horizon-2010) > 20: 
+                        if abs(self.motor.head_horizon-1975) > 20: #2010
                             self.get_logger().info(f'匡不在視野中間->貓頭鷹修腰')
                             self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
-                            self.motor.Owl_Rotate(2010)
+                            self.motor.Owl_Rotate(1975)
     
                         else:
                             time.sleep(0.5)
@@ -1097,7 +1097,7 @@ class BasketBall(API):
                             # time.sleep(0.05) 
                             self.get_logger().info(f'開爪') #5301 7 
                             self.sendBodySector(5502)
-                            time.sleep(10)
+                            time.sleep(8)
                             self.get_logger().info(f'投籃')
                             self.sendBodySector(503)
                             #self.sendBodySector(5503)

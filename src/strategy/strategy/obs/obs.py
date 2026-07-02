@@ -26,7 +26,7 @@ HEAD_HEIGHT_    = 2300
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
 STAY_X                          = -250
-STAY_Y                          = 200
+STAY_Y                          = 100
 STAY_THETA                      = -1
 #=========================================== 
 MAX_FORWARD_X                   = 2500                                                     
@@ -39,29 +39,29 @@ SMALL_FORWARD_THETA             = -1
 #=========================================== 
 SMALL_BACK_X                    = -1700                                                  
 SMALL_BACK_Y                    = 0
-SMALL_BACK_THETA                = -0.5   
+SMALL_BACK_THETA                = 0   
 #=========================================== 
-IMU_RIGHT_X                     = -500
-IMU_RIGHT_Y                     = 450        
+IMU_RIGHT_X                     = -400
+IMU_RIGHT_Y                     = 350        
 #===========================================                 
-TURN_RIGHT_X                    = -500                                              
-TURN_RIGHT_Y                    = 450                                                 
+TURN_RIGHT_X                    = -400                                              
+TURN_RIGHT_Y                    = 350                                                 
 TURN_RIGHT_THETA                = -4       #3 
 #=========================================== 
 IMU_LEFT_X                      = -350
-IMU_LEFT_Y                      = -100
+IMU_LEFT_Y                      = -200
 #===========================================                                         
 TURN_LEFT_X                     = -350                                          
-TURN_LEFT_Y                     = -100                                                
+TURN_LEFT_Y                     = -200                                                
 TURN_LEFT_THETA                 = 4       #3
 #===========================================
 SLOPE_RIGHT_TRANSLATE_X         = -300  
-SLOPE_RIGHT_TRANSLATE_Y         = -900
-SLOPE_RIGHT_TRANSLATE_THETA     = -2
+SLOPE_RIGHT_TRANSLATE_Y         = -800
+SLOPE_RIGHT_TRANSLATE_THETA     = -2.5
 #===========================================
-SLOPE_LEFT_TRANSLATE_X          = -200
+SLOPE_LEFT_TRANSLATE_X          = -250
 SLOPE_LEFT_TRANSLATE_Y          = 900
-SLOPE_LEFT_TRANSLATE_THETA      = 0.5
+SLOPE_LEFT_TRANSLATE_THETA      = -0.5
 #===========================================
 YY_WALKWAY            =     100 #黃黃通道大小
 YY_ERRO               =     15 #黃黃通道中心與畫面中心誤差值
@@ -74,11 +74,11 @@ REDDOOR_IMU     = False
 REDDOOR_AFTER     = 'None' #紅門爬起後修正 'None' 'simp_turn_head' 'turn_head'
 
 #===========================================
-PRETURN_LEFT          = False
+PRETURN_LEFT          = True
 # PRETURN_LEFT          = True #預轉身左
-PRETURN_LEFT_ANGLE    = 60
+PRETURN_LEFT_ANGLE    = 70
 
-PRETURN_RIGHT         = True
+PRETURN_RIGHT         = False
 # PRETURN_RIGHT         = True #預轉身右
 PRETURN_RIGHT_ANGLE   = 65
 #===========================================
