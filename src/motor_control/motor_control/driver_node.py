@@ -87,7 +87,7 @@ class DynamixelDriver(Node):
         self.add_on_set_parameters_callback(self._param_cb)
 
         # 6. 控制迴圈 20Hz
-        self.timer = self.create_timer(0.05, self._control_loop)
+        self.timer = self.create_timer(0.02, self._control_loop)
 
         addr, length = self._get_read_params()
         self.get_logger().info(

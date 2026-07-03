@@ -18,12 +18,12 @@ from tku_msgs.msg import SensorPackage
 
 #步態校正
 CORRECT_x = -500
-CORRECT_y = 0
+CORRECT_y = 200
 CORRECT_theta = 0
 
 # 頭部俯角（看地板標記）
 HEAD_DOWN_X = 2048   # 水平置中
-HEAD_DOWN_Y = 1500   # 俯角位置（看地板）
+HEAD_DOWN_Y = 1450   # 俯角位置（看地板）
 
 # 行走速度
 WALK_SPEED_NORMAL  = 2000 + CORRECT_x  # 正常前進速度 #1500
@@ -45,7 +45,7 @@ ALIGN_DEADBAND = 40            # X 軸對準死區（像素）
 SIGN_Y_THRESHOLD = 210         # 標記 Y 座標超過此值視為「夠靠近」
 
 # 靠近累積幀數（Y 座標連續超過閾值幾幀才觸發）
-APPROACH_COUNT = 20           # 累積幀數（實測後調整）
+APPROACH_COUNT = 15           # 累積幀數（實測後調整）
 
 # 動作參數
 TURN_TARGET_ANGLE = 85         # 轉彎目標角度（度）

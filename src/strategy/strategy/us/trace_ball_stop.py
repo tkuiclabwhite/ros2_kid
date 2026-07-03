@@ -29,14 +29,17 @@ import rclpy
 from rclpy.executors import MultiThreadedExecutor
 from strategy.API import API
 
+import json
+from std_msgs.msg import String
+
 # ===========================================================================
 # 調參區
 # ===========================================================================
-
+USE_REFEREE_COMM = False
 # --- 策略開關 ---
 # 'KICK_OBSTACLE' : 踢向障礙物（find_pole → adjust_position → kick）
 # 'SHOOT'         : 射門（find_goal → ...，尚未實作）
-STRATEGY_MODE = 'SHOOT'
+STRATEGY_MODE = 'KICK_OBSTACLE'
 
 COLOR_BALL = 'yellow'
 COLOR_POLE = 'blue'
@@ -70,7 +73,7 @@ HEAD_TOL_Y      = 12
 
 # --- 搜尋 ---
 HEAD_SEARCH_STEP_H  = 60
-HEAD_SEARCH_V_LEVELS = [1300, 1450, 1600, 1750]
+HEAD_SEARCH_V_LEVELS = [1300, 1450, 1600, 1750,1950]
 
 # --- find_pole 掃描 ---
 POLE_SEARCH_V_LEVELS   = [1450, 1600, 1750, 1900, 2020]
@@ -91,7 +94,7 @@ ORBIT_Y_RIGHT     = -800   # 往右繞（orbit_dir=-1）側向步長（可調）
 ORBIT_THETA_LEFT  = -4     # 往左繞旋轉步長（可調）
 ORBIT_THETA_RIGHT = 4     # 往右繞旋轉步長（可調）
 ORBIT_V_GAIN      = 60.0   # head_v 偏差 → x 步長係數（可調）
-ORBIT_X_MAX       = 900   # x 步長上限
+ORBIT_X_MAX       = 500   # x 步長上限
 ORBIT_TICK_GAIN   = 0.18  # pole_h 誤差刻度 → 目標幀數係數（可調，影響繞球總量）
 
 # --- kick: 踢球動作 ---
@@ -136,7 +139,7 @@ WALK_THETA_GAIN  = 1.15   # 可調整，值越大修正越積極
 WALK_THETA_MAX   = 5      # theta 修正上限，避免走太斜
 # 直走時 theta 死區：head_h 偏離中心小於此刻度數時 theta=0，讓機器人安心前進
 # 建議從 150 開始（約 13 度），走太斜再調小
-WALK_THETA_DEAD_TICKS = 100
+WALK_THETA_DEAD_TICKS = 60
 # 球夠近後停止 theta 修正，直接直走到底
 # head_v 低於此值（球已很近）就強制 theta=0
 WALK_THETA_STOP_V = 1600
@@ -365,11 +368,55 @@ class UnitedSoccer(API):
         self.sub_state     = ''
         self.action_detail = '等待開始'
 
+        # referee comm 狀態
+        self.ref_state = 0
+        self.ref_state_name = 'NO_REF'
+        self.ref_play = False
+        self.ref_self_enabled = False
+        self.ref_time_left = 0
+
+        # 訂閱通訊節點送出的 referee 狀態
+        self.create_subscription(
+            String,
+            '/comm/game_state',
+            self._comm_game_state_cb,
+            10
+        )
+
         self._printer = StatusPrinter(self)
         self._printer.start()
 
         self._reset_head()
         self.create_timer(0.1, self.main)
+
+
+
+
+    def _comm_game_state_cb(self, msg):
+        """
+        接收 us_comm.py 發出的 /comm/game_state
+
+        msg.data 內容大概是：
+        {
+            "state": 5,
+            "state_name": "Play: Ball in play",
+            "time_left": xxx,
+            "self_enabled": true,
+            "play": true,
+            ...
+        }
+        """
+        try:
+            data = json.loads(msg.data)
+        except Exception as e:
+            self.action_detail = f'comm json 解析失敗: {e}'
+            return
+
+        self.ref_state = data.get('state', 0)
+        self.ref_state_name = data.get('state_name', 'UNKNOWN')
+        self.ref_play = bool(data.get('play', False))
+        self.ref_self_enabled = bool(data.get('self_enabled', False))
+        self.ref_time_left = data.get('time_left', 0)
 
     # -----------------------------------------------------------------------
     # 頭部控制
@@ -897,22 +944,83 @@ class UnitedSoccer(API):
         orbit_dir ==  1（往左繞）→ 左腳踢 sendBodySector(200)
         """
         if self._kick_wait_frames == 0:
-            if self._orbit_dir == -1:
-                self.sendBodySector(999)
-                time.sleep(1)
-                self.sendBodySector(100)
-                time.sleep(14)
-                self.sendBodySector(29)
-                time.sleep(1)
-                self.action_detail = '右腳踢球 sector=100'
+            self.ball.update()
+
+
+            if self.ball.visible:
+                time.sleep(2)
+                if self.ball.cx < IMG_CX:
+                    # 球在畫面左半邊 → 左腳
+                    time.sleep(2)
+                    self.sendBodySector(999)
+                    time.sleep(2)
+                    self.sendBodySector(200)
+                    time.sleep(14)
+                    self.sendBodySector(29)
+                    time.sleep(1)
+                    self.action_detail = (
+                        f'球在左半邊 cx={self.ball.cx} < {IMG_CX} '
+                        f'→ 左腳踢球 sector=200'
+                    )
+                else:
+                    # 球在畫面右半邊 → 右腳
+                    time.sleep(2)
+                    self.sendBodySector(999)
+                    time.sleep(2)
+                    self.sendBodySector(100)
+                    time.sleep(14)
+                    self.sendBodySector(29)
+                    time.sleep(1)
+                    self.action_detail = (
+                        f'球在右半邊 cx={self.ball.cx} >= {IMG_CX} '
+                        f'→ 右腳踢球 sector=100'
+                    )
+
             else:
-                self.sendBodySector(999)
-                time.sleep(1)
-                self.sendBodySector(200)
-                time.sleep(14)
-                self.sendBodySector(29)
-                time.sleep(1)
-                self.action_detail = '左腳踢球 sector=200'
+                # 如果踢球瞬間看不到球，就用最後一次 cx 判斷
+                if self.ball.cx < IMG_CX:
+                    time.sleep(2)
+                    self.sendBodySector(999)
+                    time.sleep(2)
+                    self.sendBodySector(200)
+                    time.sleep(14)
+                    self.sendBodySector(29)
+                    time.sleep(1)
+                    self.action_detail = (
+                        f'踢球瞬間球不可見，用最後 cx={self.ball.cx} '
+                        f'→ 左腳踢球 sector=200'
+                    )
+                else:
+                    time.sleep(2)
+                    self.sendBodySector(999)
+                    time.sleep(2)
+                    self.sendBodySector(100)
+                    time.sleep(14)
+                    self.sendBodySector(29)
+                    time.sleep(1)
+                    self.action_detail = (
+                        f'踢球瞬間球不可見，用最後 cx={self.ball.cx} '
+                        f'→ 右腳踢球 sector=100'
+                    )
+
+
+
+            # if self._orbit_dir == -1:
+            #     self.sendBodySector(999)
+            #     time.sleep(1)
+            #     self.sendBodySector(100)
+            #     time.sleep(14)
+            #     self.sendBodySector(29)
+            #     time.sleep(1)
+            #     self.action_detail = '右腳踢球 sector=100'
+            # else:
+            #     self.sendBodySector(999)
+            #     time.sleep(1)
+            #     self.sendBodySector(200)
+            #     time.sleep(14)
+            #     self.sendBodySector(29)
+            #     time.sleep(1)
+            #     self.action_detail = '左腳踢球 sector=200'
 
         self._kick_wait_frames += 1
         if self._kick_wait_frames >= KICK_WAIT_FRAMES:
@@ -968,13 +1076,33 @@ class UnitedSoccer(API):
     # -----------------------------------------------------------------------
 
     def main(self):
-        if not self.is_start:
-            if self.initialized:
-                self.sendbodyAuto(0)
-                self.initialized   = False
-                self.action_detail = '=== 停止 ==='
-            return
+        # ------------------------------------------------------------
+        # 啟動條件：
+        # USE_REFEREE_COMM = False → 用原本網頁 Start / Stop
+        # USE_REFEREE_COMM = True  → 網頁 Start + referee PLAY + self_enabled
+        # ------------------------------------------------------------
+        if USE_REFEREE_COMM:
+            allow_run = self.is_start and self.ref_play and self.ref_self_enabled
+        else:
+            allow_run = self.is_start
 
+        if not allow_run:
+            if self.initialized:
+                self.sendContinuousValue(x=0, y=0, theta=0)
+                self.sendbodyAuto(0)
+                self.initialized = False
+
+            if USE_REFEREE_COMM:
+                self.action_detail = (
+                    f'等待裁判指令 state={self.ref_state} '
+                    f'{self.ref_state_name} '
+                    f'play={self.ref_play} '
+                    f'enabled={self.ref_self_enabled}'
+                )
+            else:
+                self.action_detail = '=== 停止 ==='
+
+            return
         if not self.initialized:
             self._initialize()
             self.initialized = True
