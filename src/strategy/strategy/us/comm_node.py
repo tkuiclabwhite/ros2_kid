@@ -3,10 +3,12 @@
 """
 HuroCup United Soccer 通訊節點 (Phase 1:收 + 發,含終端視覺化)。
 
-單一 UDP socket 收裁判(ID 32)+ 隊友(ID 0-26)的 broadcast/unicast 封包,
-解析後 publish:
+單一 UDP socket 收裁判(ID 32)+ 場上其他機器人(ID 0-10 左隊 / 16-26 右隊)的
+broadcast/unicast 封包。ID 所屬 team_side 跟本機 team_side 相同才是隊友,
+不同則是對手(US-21.7),解析後 publish:
   /comm/game_state  std_msgs/String (JSON)
-  /comm/teammates   std_msgs/String (JSON)
+  /comm/teammates   std_msgs/String (JSON)  同側隊友
+  /comm/opponents   std_msgs/String (JSON)  對側對手
 
 dashboard 參數開啟時(預設 True),終端即時顯示收到的訊號。
 之後接主策略要安靜跑時,用 -p dashboard:=false 關掉。
@@ -54,12 +56,14 @@ class CommNode(Node):
 
         self.game_state_pub = self.create_publisher(String, '/comm/game_state', 10)
         self.teammates_pub = self.create_publisher(String, '/comm/teammates', 10)
+        self.opponents_pub = self.create_publisher(String, '/comm/opponents', 10)
 
         # 共享狀態(rx thread 寫,dashboard timer 讀)
         self._lock = threading.Lock()
         self._last_ref = None
         self._teammates = {}
-        self._rx_total = self._rx_ref = self._rx_mate = self._drops = 0
+        self._opponents = {}
+        self._rx_total = self._rx_ref = self._rx_mate = self._rx_opp = self._drops = 0
         self._last_drop = '-'
         self._rate_t = time.time()
         self._rate_n = 0
@@ -113,8 +117,16 @@ class CommNode(Node):
         rid = msg['robot_id']
         if rid == proto.REFEREE_ID:
             self._handle_referee(msg)
-        elif rid != self.robot_id:
+            return
+        if rid == self.robot_id:
+            return   # 自己送出的封包,忽略
+
+        side = proto.team_side_of(rid)
+        if side == self.team_side:
             self._handle_teammate(msg, addr)
+        elif side is not None:
+            self._handle_opponent(msg, addr)
+        # side is None: ID 不在任何已知隊伍範圍內,忽略
 
     def _handle_referee(self, msg):
         gs = next((o for o in msg['objects'] if o['kind'] == 'referee'), None)
@@ -148,6 +160,18 @@ class CommNode(Node):
                 't': time.time(), 'ip': addr[0],
             }
 
+    def _handle_opponent(self, msg, addr):
+        out = {'robot_id': msg['robot_id'], 'seq': msg['seq'], 'objects': msg['objects']}
+        m = String()
+        m.data = json.dumps(out)
+        self.opponents_pub.publish(m)
+        with self._lock:
+            self._rx_opp += 1
+            self._opponents[msg['robot_id']] = {
+                'seq': msg['seq'], 'objects': msg['objects'],
+                't': time.time(), 'ip': addr[0],
+            }
+
     # ------------------------------------------------------------ dashboard
     @staticmethod
     def _summ(objs):
@@ -169,8 +193,9 @@ class CommNode(Node):
         with self._lock:
             ref = self._last_ref
             mates = dict(self._teammates)
-            rx, rr, rm, dr, ld = (self._rx_total, self._rx_ref, self._rx_mate,
-                                  self._drops, self._last_drop)
+            opps = dict(self._opponents)
+            rx, rr, rm, ro, dr, ld = (self._rx_total, self._rx_ref, self._rx_mate,
+                                      self._rx_opp, self._drops, self._last_drop)
             dt = now - self._rate_t
             if dt >= 1.0:
                 self._rate = self._rate_n / dt
@@ -181,7 +206,7 @@ class CommNode(Node):
         L = [
             f"{ANSI['bold']}#======== US Comm — RX dashboard ========#{ANSI['reset']}",
             f" listen  : {self.bind_addr}:{self.udp_port}  id={self.robot_id} side={self.team_side}",
-            f" rx      : {rx}  (ref {rr} / mate {rm} / drop {dr})   {rate:.1f} pkt/s",
+            f" rx      : {rx}  (ref {rr} / mate {rm} / opp {ro} / drop {dr})   {rate:.1f} pkt/s",
             "#======== Referee (id 32) ========#",
         ]
         if ref is None:
@@ -203,6 +228,17 @@ class CommNode(Node):
         else:
             for rid in sorted(mates):
                 t = mates[rid]
+                age = now - t['t']
+                fresh = ANSI['grn'] if age < 1.0 else ANSI['dim']
+                L.append(f" {fresh}id {rid:2d}{ANSI['reset']}  seq {t['seq']:5d}  "
+                         f"age {age:4.1f}s  | {self._summ(t['objects'])}")
+
+        L.append("#======== Opponents ========#")
+        if not opps:
+            L.append(f"{ANSI['dim']} 尚未收到對手封包...{ANSI['reset']}")
+        else:
+            for rid in sorted(opps):
+                t = opps[rid]
                 age = now - t['t']
                 fresh = ANSI['grn'] if age < 1.0 else ANSI['dim']
                 L.append(f" {fresh}id {rid:2d}{ANSI['reset']}  seq {t['seq']:5d}  "

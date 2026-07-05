@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # coding=utf-8
 """
-United Soccer 策略 v2 — find_ball + approach_ball + (find_pole/find_goal) + adjust_position + kick
+United Soccer 策略 v2 area-walk — find_ball + approach_ball + (find_pole/find_goal) + adjust_position + kick
 STRATEGY_MODE 決定 approach_ball 完成後走哪條分支，兩條分支共用 adjust_position/kick：
   'KICK_OBSTACLE' : find_pole → adjust_position → kick
   'SHOOT'         : find_goal → adjust_position → kick（共用，之後可拆出專屬射門動作）
@@ -10,7 +10,7 @@ STRATEGY_MODE 決定 approach_ball 完成後走哪條分支，兩條分支共用
   find_ball    : 頭部掃描搜尋球，對準中心連續 10 幀後進入下一狀態
   approach_ball:
     turn_to_ball : 身體旋轉對正球（頭 H 偏角歸零）
-    walk_to_ball : 直走靠近，小幅 theta 修正，head_v <= APPROACH_STOP_V 停止
+    walk_to_ball : 頭部追球，先用 head_h 修正身體角度，再用 ball.area 判斷腳前距離
   find_pole:
     scan         : 分層水平掃描搜尋藍色球門柱，記錄找到時的頭部刻度
     return_head  : 找到後頭部回到球的位置，等待 RETURN_HEAD_WAIT_FRAMES 幀
@@ -29,13 +29,10 @@ import rclpy
 from rclpy.executors import MultiThreadedExecutor
 from strategy.API import API
 
-import json
-from std_msgs.msg import String
-
 # ===========================================================================
 # 調參區
 # ===========================================================================
-USE_REFEREE_COMM = True
+
 # --- 策略開關 ---
 # 'KICK_OBSTACLE' : 踢向障礙物（find_pole → adjust_position → kick）
 # 'SHOOT'         : 射門（find_goal → ...，尚未實作）
@@ -56,9 +53,9 @@ HEAD_V_CENTER = 1600
 HEAD_H_MAX    = 3026   # 往左 90 度
 HEAD_H_MIN    = 1024   # 往右 90 度
 HEAD_V_MAX    = 2200   # find_goal 抬頭看橫桿需要更高，已實測機械限位可達
-HEAD_V_MIN    = 1150
-HEAD_V_FOOT   = 1230   # 球到腳邊的 V 刻度
-HEAD_SPEED    = 40
+HEAD_V_MIN    = 1200
+HEAD_V_FOOT   = 1250   # 球到腳邊的 V 刻度
+HEAD_SPEED    = 30
 
 # 1 度對應的刻度數：(3026-1024) / 180 ≈ 11.1
 HEAD_DEG_PER_TICK = (HEAD_H_MAX - HEAD_H_MIN) / 180.0   # ≈ 11.1
@@ -72,9 +69,8 @@ HEAD_TOL_X      = 8
 HEAD_TOL_Y      = 12
 
 # --- 搜尋 ---
-HEAD_SEARCH_STEP_H  = 70
-HEAD_SEARCH_V_LEVELS = [1300, 1450, 1600, 1750,1950]
-#HEAD_SEARCH_V_LEVELS = [1300, 1450, 1600, 1750,1950]
+HEAD_SEARCH_STEP_H  = 60
+HEAD_SEARCH_V_LEVELS = [1300, 1450, 1600, 1750]
 
 # --- find_pole 掃描 ---
 POLE_SEARCH_V_LEVELS   = [1450, 1600, 1750, 1900, 2020]
@@ -95,7 +91,7 @@ ORBIT_Y_RIGHT     = -800   # 往右繞（orbit_dir=-1）側向步長（可調）
 ORBIT_THETA_LEFT  = -4     # 往左繞旋轉步長（可調）
 ORBIT_THETA_RIGHT = 4     # 往右繞旋轉步長（可調）
 ORBIT_V_GAIN      = 60.0   # head_v 偏差 → x 步長係數（可調）
-ORBIT_X_MAX       = 500   # x 步長上限
+ORBIT_X_MAX       = 900   # x 步長上限
 ORBIT_TICK_GAIN   = 0.18  # pole_h 誤差刻度 → 目標幀數係數（可調，影響繞球總量）
 
 # --- kick: 踢球動作 ---
@@ -131,19 +127,29 @@ TURN_THETA_FAST = 5     # 偏角 > 20 度時
 TURN_THETA_MID  = 3     # 偏角 10~20 度時
 TURN_THETA_SLOW = 1     # 偏角 < 10 度時
 
-# --- approach_ball: walk_to_ball ---
-APPROACH_STOP_V  = 1200   # head_v 到達此值視為夠靠近（等於 HEAD_V_FOOT）
-WALK_X_NORMAL    = 1200    # 正常前進步長
-WALK_X_SLOW      = 200    # 靠近時慢速步長
-# 直走時小幅 theta 修正：頭 H 偏角換算後乘以此係數
+# --- approach_ball: walk_to_ball（area 版本，較穩定走到腳前） ---
+APPROACH_STOP_V  = 1250   # 保留給 debug / ball_head_v 初始值，實際停止改用 ball.area
+WALK_X_NORMAL    = 700    # 正常前進步長
+WALK_X_SLOW      = 220    # 靠近時慢速步長
+# 以下 theta-walk 參數保留給需要切回舊走法時使用；area-walk 目前不使用。
 WALK_THETA_GAIN  = 1.15   # 可調整，值越大修正越積極
 WALK_THETA_MAX   = 5      # theta 修正上限，避免走太斜
-# 直走時 theta 死區：head_h 偏離中心小於此刻度數時 theta=0，讓機器人安心前進
-# 建議從 150 開始（約 13 度），走太斜再調小
-WALK_THETA_DEAD_TICKS = 60
-# 球夠近後停止 theta 修正，直接直走到底
-# head_v 低於此值（球已很近）就強制 theta=0
+WALK_THETA_DEAD_TICKS = 80
 WALK_THETA_STOP_V = 1600
+
+# ball.area 到腳前判斷。若不同場地/光線下球大小變化大，優先調這兩個。
+BALL_SIZE_OK_MIN = 650
+BALL_SIZE_OK_MAX = 930
+BALL_SIZE_REACH_FRAMES = 5
+
+# walk_to_ball 時，頭部 H 偏太多代表身體還沒正對球，先側修/旋修再前進。
+WALK_HEAD_H_TOL = 60
+WALK_FORWARD_TOL = 80
+
+# 修正身體面向球的步態。若左右方向反了，對調 LEFT_CORRECT / RIGHT_CORRECT。
+LEFT_CORRECT = [-900, -800, 4]
+RIGHT_CORRECT = [-800, 700, -4]
+BACKWARD_MOVE = [-1000, 0, 0]
 
 # ===========================================================================
 # 視覺：球
@@ -273,6 +279,8 @@ class StatusPrinter(threading.Thread):
                     f" ball.cx / cy  : {n.ball.cx} / {n.ball.cy}\n"
                     f" ball.area     : {n.ball.area}\n"
                     f" centered_cnt  : {n.ball_centered_count}/{BALL_CENTERED_FRAMES}\n"
+                    f" reach_cnt     : {n.ball_reach_count}/{BALL_SIZE_REACH_FRAMES}"
+                    f"  area_ok={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}\n"
                     f" pole.visible  : {n.pole.visible}\n"
                     f" pole.cx / cy  : {n.pole.cx} / {n.pole.cy}\n"
                     f" pole.area/cnt : {n.pole.area} / {n.pole.candidate_count}\n"
@@ -295,14 +303,6 @@ class StatusPrinter(threading.Thread):
                     f" orbit_dir     : {n._orbit_dir}"
                     f"  ({'往左繞' if n._orbit_dir == 1 else '往右繞'})\n"
                     f" orbit_frames  : {n._orbit_frames}/{n._orbit_target_frames}\n"
-                    f"#=========== kick 判斷狀態 ============#\n"
-                    f" kick.ref_visible: {n.kick_ref_visible}\n"
-                    f" kick.ref_cx/cy : {n.kick_ref_cx} / {n.kick_ref_cy}\n"
-                    f" kick.ref_head  : h={n.kick_ref_head_h} v={n.kick_ref_head_v}\n"
-                    f" kick.visible   : {n.kick_debug_visible}\n"
-                    f" kick.cx        : {n.kick_debug_cx}  IMG_CX={IMG_CX}\n"
-                    f" kick.side      : {n.kick_debug_side}\n"
-                    f" kick.sector    : {n.kick_debug_sector}\n"
                     f"#=========== find_goal 狀態 ============#\n"
                     f" goal_found_h  : {n.goal_found_h}\n"
                     f" goal_found_v  : {n.goal_found_v}\n"
@@ -336,8 +336,7 @@ class UnitedSoccer(API):
 
         self.ball_lost_count     = 0
         self.ball_centered_count = 0   # 對準中心的連續幀計數
-
-        self.find_ball_walk_search = False
+        self.ball_reach_count    = 0   # ball.area + head_h 對正的連續幀計數
 
         # approach_ball 結束時的頭部位置（供 find_pole 用）
         self.ball_head_h = HEAD_H_CENTER
@@ -363,19 +362,6 @@ class UnitedSoccer(API):
         # kick 踢球
         self._kick_wait_frames    = 0
 
-        # adjust_position 最後看到球的位置，給 kick 判斷左右腳用
-        self.kick_ref_visible = False
-        self.kick_ref_cx = 0
-        self.kick_ref_cy = 0
-        self.kick_ref_head_h = HEAD_H_CENTER
-        self.kick_ref_head_v = HEAD_V_FOOT
-
-        # kick 判斷 debug 顯示
-        self.kick_debug_visible = False
-        self.kick_debug_cx = -1
-        self.kick_debug_side = 'none'
-        self.kick_debug_sector = 0
-
         # find_goal 掃描方向與層索引（SHOOT 策略）
         self.goal_search_dir   = 'right'
         self.goal_search_v_idx = 0
@@ -392,55 +378,11 @@ class UnitedSoccer(API):
         self.sub_state     = ''
         self.action_detail = '等待開始'
 
-        # referee comm 狀態
-        self.ref_state = 0
-        self.ref_state_name = 'NO_REF'
-        self.ref_play = False
-        self.ref_self_enabled = False
-        self.ref_time_left = 0
-
-        # 訂閱通訊節點送出的 referee 狀態
-        self.create_subscription(
-            String,
-            '/comm/game_state',
-            self._comm_game_state_cb,
-            10
-        )
-
         self._printer = StatusPrinter(self)
         self._printer.start()
 
         self._reset_head()
         self.create_timer(0.1, self.main)
-
-
-
-
-    def _comm_game_state_cb(self, msg):
-        """
-        接收 us_comm.py 發出的 /comm/game_state
-
-        msg.data 內容大概是：
-        {
-            "state": 5,
-            "state_name": "Play: Ball in play",
-            "time_left": xxx,
-            "self_enabled": true,
-            "play": true,
-            ...
-        }
-        """
-        try:
-            data = json.loads(msg.data)
-        except Exception as e:
-            self.action_detail = f'comm json 解析失敗: {e}'
-            return
-
-        self.ref_state = data.get('state', 0)
-        self.ref_state_name = data.get('state_name', 'UNKNOWN')
-        self.ref_play = bool(data.get('play', False))
-        self.ref_self_enabled = bool(data.get('self_enabled', False))
-        self.ref_time_left = data.get('time_left', 0)
 
     # -----------------------------------------------------------------------
     # 頭部控制
@@ -480,8 +422,6 @@ class UnitedSoccer(API):
 
     def _search_head(self):
         """分層水平掃描"""
-        scan_finished = False
-
         target_v = HEAD_SEARCH_V_LEVELS[self.search_v_idx]
         if self.head_v != target_v:
             self.head_v = target_v
@@ -500,11 +440,9 @@ class UnitedSoccer(API):
                 self.search_v_idx += 1
                 if self.search_v_idx >= len(HEAD_SEARCH_V_LEVELS):
                     self.search_v_idx = 0
-                    scan_finished = True
 
         self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
-        return scan_finished
-    
+
     def _head_offset_deg(self):
         """回傳頭部 H 偏離中心的角度，正值=偏左，負值=偏右"""
         return (HEAD_H_CENTER - self.head_h) / HEAD_DEG_PER_TICK
@@ -561,14 +499,6 @@ class UnitedSoccer(API):
 
     def _state_find_ball(self):
         if self.ball.visible:
-            # 有看到球，停止邊走邊找
-            if self.find_ball_walk_search:
-                self.sendContinuousValue(x=0, y=0, theta=0)
-               # self.sendbodyAuto(0)
-                self.find_ball_walk_search = False
-
-                self.search_v_idx = 0
-
             self.ball_lost_count = 0
             centered = self._track_object(self.ball.cx, self.ball.cy)
 
@@ -578,68 +508,32 @@ class UnitedSoccer(API):
                     f'球對準中心 ✅  '
                     f'確認中 {self.ball_centered_count}/{BALL_CENTERED_FRAMES}'
                 )
-
                 # 連續對準 N 幀 → 切換到 approach_ball
                 if self.ball_centered_count >= BALL_CENTERED_FRAMES:
                     self.ball_centered_count = 0
+                    self.ball_reach_count = 0
                     self.sub_state = 'turn_to_ball'
                     self.state = 'approach_ball'
-                    self.sendbodyAuto(1)
+                    self.sendbodyAuto(1)   # 先啟動步態原地踏步，之後用 sendContinuousValue 更新步長
                     self.action_detail = '進入 approach_ball → turn_to_ball'
-
             else:
+                # 偏離了，重置計數
                 self.ball_centered_count = 0
                 self.action_detail = (
                     f'追蹤球中 cx={self.ball.cx} cy={self.ball.cy}'
                 )
-
         else:
             self.ball_centered_count = 0
             self.ball_lost_count += 1
-
-            # --------------------------------------------------
-            # 已經進入「邊走邊找」模式
-            # --------------------------------------------------
-            if self.find_ball_walk_search:
-                #self.sendbodyAuto(1)
-                self.sendContinuousValue(x=200, y=0, theta=0)
-
-                scan_finished = self._search_head()
-
+            if self.ball_lost_count <= BALL_LOST_FRAMES:
                 self.action_detail = (
-                    f'邊走邊找球中 x=200  '
-                    f'dir={self.search_dir}  '
-                    f'層={self.search_v_idx}  '
-                    f'V={HEAD_SEARCH_V_LEVELS[self.search_v_idx]}  '
-                    f'head_h={self.head_h}'
-                )
-                return
-
-            # --------------------------------------------------
-            # 還沒進入邊走邊找：
-            # 先原地分層掃描
-            # --------------------------------------------------
-            self.sendContinuousValue(x=0, y=0, theta=0)
-            self.sendbodyAuto(0)
-
-            scan_finished = self._search_head()
-
-            if scan_finished:
-                # 掃完整輪都沒看到球 → 開始邊走邊找
-                self.find_ball_walk_search = True
-                self.ball_lost_count = 0
-
-                self.sendbodyAuto(1)
-                self.sendContinuousValue(x=200, y=0, theta=0)
-
-                self.action_detail = (
-                    f'分層掃描完整輪仍沒看到球 ✅ '
-                    f'→ 開始邊走邊找 x=200'
+                    f'球暫時消失 lost={self.ball_lost_count}/{BALL_LOST_FRAMES}'
                 )
             else:
+                self._search_head()
                 self.action_detail = (
-                    f'原地分層掃描中 dir={self.search_dir}  '
-                    f'層={self.search_v_idx}/{len(HEAD_SEARCH_V_LEVELS)-1}  '
+                    f'掃描中 dir={self.search_dir}  '
+                    f'層={self.search_v_idx}  '
                     f'V={HEAD_SEARCH_V_LEVELS[self.search_v_idx]}  '
                     f'head_h={self.head_h}'
                 )
@@ -651,7 +545,7 @@ class UnitedSoccer(API):
     def _state_approach_ball(self):
         """
         sub_state = 'turn_to_ball' : 身體旋轉對正球
-        sub_state = 'walk_to_ball' : 直走靠近，小幅 theta 修正
+        sub_state = 'walk_to_ball' : 先修正身體面向球，再用 ball.area 靠近腳前
         球消失超過容忍幀數 → 退回 find_ball
         """
         if not self.ball.visible:
@@ -671,6 +565,7 @@ class UnitedSoccer(API):
                 self.state = 'find_ball'
                 self.sub_state = ''
                 self.ball_centered_count = 0
+                self.ball_reach_count = 0
                 self.action_detail = '球消失太久，退回 find_ball'
                 return
 
@@ -699,6 +594,7 @@ class UnitedSoccer(API):
             # 已對正，步長歸零原地踏步，切換到直走
             self.sendContinuousValue(x=0, y=0, theta=0)
             self.sub_state = 'walk_to_ball'
+            self.ball_reach_count = 0
             self.action_detail = (
                 f'對正完成 head_h={self.head_h}（誤差={head_h_err}刻度）→ walk_to_ball'
             )
@@ -725,66 +621,101 @@ class UnitedSoccer(API):
 
     def _walk_to_ball(self):
         """
-        直走靠近球，途中用頭 H 偏角做小幅 theta 修正維持方向。
-        head_v <= APPROACH_STOP_V 時停步，完成 approach_ball。
+        area 版本靠近球：
+        - 頭部持續追球，head_h 偏差代表身體還沒正對球。
+        - 偏差太大時先左/右修正，不急著往前衝。
+        - ball.area 太小才前進，太大就後退。
+        - ball.area OK 且 head_h 對正連續穩定後，完成 approach_ball。
         """
-        # 到達條件
-        if self.head_v + 50 <= APPROACH_STOP_V:
+        head_error = self.head_h - HEAD_H_CENTER
+        ball_size_ok = BALL_SIZE_OK_MIN <= self.ball.area <= BALL_SIZE_OK_MAX
+        body_aligned = abs(head_error) <= WALK_HEAD_H_TOL
+
+        if ball_size_ok and body_aligned:
+            self.ball_reach_count += 1
             self.sendContinuousValue(x=0, y=0, theta=0)
+
+            if self.ball_reach_count < BALL_SIZE_REACH_FRAMES:
+                self.action_detail = (
+                    f'球到腳前確認中 {self.ball_reach_count}/{BALL_SIZE_REACH_FRAMES}  '
+                    f'area={self.ball.area} OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}  '
+                    f'head_error={head_error}'
+                )
+                return
+
             self.sendbodyAuto(0)
-            # 記錄抵達時的頭部位置，供下一狀態機回正用
             self.ball_head_h = self.head_h
             self.ball_head_v = self.head_v
+            self.ball_reach_count = 0
 
             if STRATEGY_MODE == 'SHOOT':
-                # 重置 find_goal 掃描狀態
                 self.goal_search_dir      = 'right'
                 self.goal_search_v_idx    = 0
                 self._goal_confirm_frames = 0
                 self.state     = 'find_goal'
                 self.sub_state = 'scan'
                 self.action_detail = (
-                    f'抵達球旁 head_v={self.head_v} ✅ → find_goal'
+                    f'球到腳前 area={self.ball.area} + 身體對正 ✅ → find_goal'
                 )
                 return
 
-            # 預設 / 'KICK_OBSTACLE'：重置 find_pole 掃描狀態
-            self.pole_search_dir    = 'right'
-            self.pole_search_v_idx  = 0
+            self.pole_search_dir      = 'right'
+            self.pole_search_v_idx    = 0
             self._pole_confirm_frames = 0
             self._return_head_frames  = 0
             self.state     = 'find_pole'
             self.sub_state = 'scan'
             self.action_detail = (
-                f'抵達球旁 head_v={self.head_v} ✅ → find_pole'
+                f'球到腳前 area={self.ball.area} + 身體對正 ✅ → find_pole'
             )
             return
 
-        # theta 修正邏輯：
-        # 1. 球夠近（head_v 低於 WALK_THETA_STOP_V）→ 強制 theta=0，直走到底
-        # 2. head_h 偏離中心在死區內 → theta=0，避免微震盪
-        # 3. 超出死區 → 計算修正量
-        offset_deg = self._head_offset_deg()   # 供 action_detail 顯示用
-        head_h_err = abs(self.head_h - HEAD_H_CENTER)
-        if self.head_v <= WALK_THETA_STOP_V:
-            theta = 0
-        elif head_h_err < WALK_THETA_DEAD_TICKS:
-            theta = 0
-        else:
-            theta = -(offset_deg * WALK_THETA_GAIN)
-            theta = max(-WALK_THETA_MAX, min(WALK_THETA_MAX, theta))
-            theta = int(round(theta))
+        self.ball_reach_count = 0
+        self.sendbodyAuto(1)
 
-        # 靠近時換慢速（head_v 再高 150 刻度以內）
-        if self.head_v <= APPROACH_STOP_V + 150:
-            x = WALK_X_SLOW
-        else:
-            x = WALK_X_NORMAL
+        if head_error > WALK_HEAD_H_TOL:
+            x, y, theta = LEFT_CORRECT
+            self.sendContinuousValue(x=x, y=y, theta=theta)
+            self.action_detail = (
+                f'靠近球：左修 head_error={head_error}  '
+                f'area={self.ball.area} OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}'
+            )
+            return
 
-        self.sendContinuousValue(x=x, y=0, theta=theta)
+        if head_error < -WALK_HEAD_H_TOL:
+            x, y, theta = RIGHT_CORRECT
+            self.sendContinuousValue(x=x, y=y, theta=theta)
+            self.action_detail = (
+                f'靠近球：右修 head_error={head_error}  '
+                f'area={self.ball.area} OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}'
+            )
+            return
+
+        if self.ball.area < BALL_SIZE_OK_MIN and abs(head_error) < WALK_FORWARD_TOL:
+            x = WALK_X_SLOW if self.ball.area > (BALL_SIZE_OK_MIN - 120) else WALK_X_NORMAL
+            self.sendContinuousValue(x=x, y=0, theta=0)
+            self.action_detail = (
+                f'靠近球：球太小，前進 x={x}  '
+                f'area={self.ball.area} OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}  '
+                f'head_error={head_error}'
+            )
+            return
+
+        if self.ball.area > BALL_SIZE_OK_MAX:
+            x, y, theta = BACKWARD_MOVE
+            self.sendContinuousValue(x=x, y=y, theta=theta)
+            self.action_detail = (
+                f'靠近球：球太大，後退  '
+                f'area={self.ball.area} OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}  '
+                f'head_error={head_error}'
+            )
+            return
+
+        self.sendContinuousValue(x=0, y=0, theta=0)
         self.action_detail = (
-            f'直走靠近 head_v={self.head_v}  '
-            f'偏角={offset_deg:+.1f}°  theta={theta}  x={x}'
+            f'靠近球：等待穩定  '
+            f'area={self.ball.area} OK={BALL_SIZE_OK_MIN}~{BALL_SIZE_OK_MAX}  '
+            f'head_error={head_error}'
         )
 
     # -----------------------------------------------------------------------
@@ -974,12 +905,7 @@ class UnitedSoccer(API):
           head_v > ball_head_v：頭抬起 → 球跑遠 → 前進
           head_v < ball_head_v：頭更下沉 → 球太近 → 後退
         - orbit_dir 決定 y + theta 方向，同時送出形成弧形
-        - 達到 _orbit_target_frames 後進入 kick
-
-        重點：
-        - adjust_position 過程中頭本來就在追球
-        - 所以每次看得到球，就把當下球的 cx/cy 和頭部 h/v 記錄起來
-        - kick 時直接用這個最後記錄的位置判斷左右腳，不再重新找球
+        - 達到 _orbit_target_frames 後停步進入下一狀態
         """
         # 到達目標幀數 → 完成修正
         if self._orbit_frames >= self._orbit_target_frames:
@@ -987,24 +913,12 @@ class UnitedSoccer(API):
             self.sendbodyAuto(0)
             self._kick_wait_frames = 0
             self.state = 'kick'
-            self.action_detail = (
-                f'軌道修正完成 ✅ → kick  '
-                f'最後球位置 visible={self.kick_ref_visible} '
-                f'cx={self.kick_ref_cx} cy={self.kick_ref_cy}'
-            )
+            self.action_detail = '軌道修正完成 ✅ → kick'
             return
 
         # 頭部追蹤球（H+V），同時用 head_v 判斷距離
         if self.ball.visible:
-            # 先記錄「這一幀」看到球的位置，給 kick 判斷左右腳用
-            self.kick_ref_visible = True
-            self.kick_ref_cx = self.ball.cx
-            self.kick_ref_cy = self.ball.cy
-            self.kick_ref_head_h = self.head_h
-            self.kick_ref_head_v = self.head_v
-
             self._track_object(self.ball.cx, self.ball.cy)
-
             v_err = self.head_v - self.ball_head_v
             x = int(v_err * ORBIT_V_GAIN)
             x = max(-ORBIT_X_MAX, min(ORBIT_X_MAX, x))
@@ -1024,81 +938,30 @@ class UnitedSoccer(API):
         self.action_detail = (
             f'繞球中 [{self._orbit_frames}/{self._orbit_target_frames}]  '
             f'dir={self._orbit_dir}  x={x}  y={y}  theta={theta}  '
-            f'head_v={self.head_v}  v_err={v_err}  '
-            f'kick_ref cx={self.kick_ref_cx} cy={self.kick_ref_cy}'
+            f'head_v={self.head_v}  v_err={v_err}'
         )
 
     def _state_kick(self):
         """
-        踢球：
-        不在 kick 裡重新 self.ball.update() 判斷，
-        直接沿用 adjust_position 最後一次看到球的位置 kick_ref_cx。
-
-        kick_ref_cx < IMG_CX → 左腳 sendBodySector(200)
-        kick_ref_cx >= IMG_CX → 右腳 sendBodySector(100)
+        踢球：依繞球方向選擇左/右腳，等待動作完成後回到 find_ball。
+        orbit_dir == -1（往右繞）→ 右腳踢 sendBodySector(100)
+        orbit_dir ==  1（往左繞）→ 左腳踢 sendBodySector(200)
         """
         if self._kick_wait_frames == 0:
-            self.sendContinuousValue(x=0, y=0, theta=0)
-            self.sendbodyAuto(0)
-
-            # 這裡不重新看球，直接使用 adjust_position 最後記錄的位置
-            self.kick_debug_visible = self.kick_ref_visible
-            self.kick_debug_cx = self.kick_ref_cx
-
-            if self.kick_ref_visible:
-                if self.kick_ref_cx < IMG_CX:
-                    self.kick_debug_side = 'left_ref'
-                    self.kick_debug_sector = 200
-                    self.action_detail = (
-                        f'KICK用adjust最後球位置：cx={self.kick_ref_cx} < {IMG_CX} '
-                        f'→ 左腳 sector=200'
-                    )
-
-                    # 球在畫面左半邊 → 左腳
-                    time.sleep(2)
-                    self.sendBodySector(999)
-                    time.sleep(2)
-                    self.sendBodySector(200)
-                    time.sleep(14)
-                    self.sendBodySector(29)
-                    time.sleep(1)
-
-                else:
-                    self.kick_debug_side = 'right_ref'
-                    self.kick_debug_sector = 100
-                    self.action_detail = (
-                        f'KICK用adjust最後球位置：cx={self.kick_ref_cx} >= {IMG_CX} '
-                        f'→ 右腳 sector=100'
-                    )
-
-                    # 球在畫面右半邊 → 右腳
-                    time.sleep(2)
-                    self.sendBodySector(999)
-                    time.sleep(2)
-                    self.sendBodySector(100)
-                    time.sleep(14)
-                    self.sendBodySector(29)
-                    time.sleep(1)
-
-            else:
-                # adjust_position 最後完全沒有留下球位置，才走保底
-                # 這裡不要一直重複踢，只會在 _kick_wait_frames == 0 時執行一次
-                self.kick_debug_side = 'no_ref'
-                self.kick_debug_sector = 100
-                self.action_detail = (
-                    'adjust_position 沒有留下球位置 → 預設右腳 sector=100'
-                )
-
-                time.sleep(2)
-                self.sendBodySector(999)
-                time.sleep(2)
+            if self._orbit_dir == -1:
                 self.sendBodySector(100)
                 time.sleep(14)
                 self.sendBodySector(29)
                 time.sleep(1)
+                self.action_detail = '右腳踢球 sector=100'
+            else:
+                self.sendBodySector(200)
+                time.sleep(14)
+                self.sendBodySector(29)
+                time.sleep(1)
+                self.action_detail = '左腳踢球 sector=200'
 
         self._kick_wait_frames += 1
-
         if self._kick_wait_frames >= KICK_WAIT_FRAMES:
             self._initialize()
             self.action_detail = '踢球完成 ✅ → 初始化 → find_ball'
@@ -1118,8 +981,7 @@ class UnitedSoccer(API):
 
         self.ball_lost_count = 0
         self.ball_centered_count = 0
-
-        self.find_ball_walk_search = False
+        self.ball_reach_count = 0
 
         self.search_dir = 'right'
         self.search_v_idx = 0
@@ -1139,17 +1001,6 @@ class UnitedSoccer(API):
         self._orbit_target_frames = 0
         self._kick_wait_frames = 0
 
-        self.kick_ref_visible = False
-        self.kick_ref_cx = 0
-        self.kick_ref_cy = 0
-        self.kick_ref_head_h = HEAD_H_CENTER
-        self.kick_ref_head_v = HEAD_V_FOOT
-
-        self.kick_debug_visible = False
-        self.kick_debug_cx = -1
-        self.kick_debug_side = 'none'
-        self.kick_debug_sector = 0
-
         self.goal_search_dir = 'right'
         self.goal_search_v_idx = 0
         self.goal_found_h = HEAD_H_CENTER
@@ -1165,33 +1016,13 @@ class UnitedSoccer(API):
     # -----------------------------------------------------------------------
 
     def main(self):
-        # ------------------------------------------------------------
-        # 啟動條件：
-        # USE_REFEREE_COMM = False → 用原本網頁 Start / Stop
-        # USE_REFEREE_COMM = True  → 網頁 Start + referee PLAY + self_enabled
-        # ------------------------------------------------------------
-        if USE_REFEREE_COMM:
-            allow_run = self.is_start and self.ref_play and self.ref_self_enabled
-        else:
-            allow_run = self.is_start
-
-        if not allow_run:
+        if not self.is_start:
             if self.initialized:
-                self.sendContinuousValue(x=0, y=0, theta=0)
                 self.sendbodyAuto(0)
-                self.initialized = False
-
-            if USE_REFEREE_COMM:
-                self.action_detail = (
-                    f'等待裁判指令 state={self.ref_state} '
-                    f'{self.ref_state_name} '
-                    f'play={self.ref_play} '
-                    f'enabled={self.ref_self_enabled}'
-                )
-            else:
+                self.initialized   = False
                 self.action_detail = '=== 停止 ==='
-
             return
+
         if not self.initialized:
             self._initialize()
             self.initialized = True

@@ -18,6 +18,11 @@ import struct
 HEADER = 0xADDE
 REFEREE_ID = 32
 
+# US-21.7: 左隊守左球門 ID 0-10,右隊守右球門 ID 16-26(兩組 ID 代表兩支不同隊伍,
+# 不是「隊友」跟「陌生 ID」的差別,而是 team_side 相同才算隊友,不同就是對手)。
+LEFT_TEAM_IDS  = range(0, 11)
+RIGHT_TEAM_IDS = range(16, 27)
+
 # 角度縮放。規則書本文 US-21.11 寫 RAD10000(例:-18023 = -1.8023 rad),
 # 但 State / Perception / Intention 物件表格欄位寫 "RAD1000",兩者矛盾。
 # 這裡採物件表格的值;若實機角度對不上,改成 10000 即可。
@@ -152,6 +157,15 @@ def unpack_message(data: bytes) -> dict:
 # ---------------------------------------------------------------------------
 # bitmask 工具
 # ---------------------------------------------------------------------------
+
+def team_side_of(robot_id: int) -> str | None:
+    """依 US-21.7 的 ID 範圍判斷該 robot_id 屬於哪一隊,不屬於任何範圍回傳 None。"""
+    if robot_id in LEFT_TEAM_IDS:
+        return "left"
+    if robot_id in RIGHT_TEAM_IDS:
+        return "right"
+    return None
+
 
 def player_bit_index(robot_id: int, side: str) -> int:
     """
