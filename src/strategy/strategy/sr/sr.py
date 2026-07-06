@@ -12,11 +12,11 @@ import time
 #前進量校正
 FORWARD_CORRECTION         = -600
 #平移校正
-TRANSLATION_CORRECTION     = -400
+TRANSLATION_CORRECTION     = 0  ####斜著走改這個
 #旋轉校正
-THETA_CORRECTION           = 0
+THETA_CORRECTION           = -0.5
 #基礎變化量(前進&平移)
-BASE_CHANGE                = 300
+BASE_CHANGE                = 150
 HEAD_CHANGE_H              = 5
 HEAD_CHANGE_V              = 100
 # ---微調站姿開關---#
@@ -60,7 +60,7 @@ CW_DIST_GAIN_Z = 4.0
 # ========= 手部抓點微調 =========
 # X：左右修正。左手抓太左/右手抓太左 -> 加大；抓太右 -> 減小
 LEFT_HAND_X_OFFSET = -50
-RIGHT_HAND_X_OFFSET = -150
+RIGHT_HAND_X_OFFSET = -250
 
 # Y：高低修正。手抓太高 -> 減小；手抓太低 -> 加大
 LEFT_HAND_Y_OFFSET = 750
@@ -78,7 +78,7 @@ HEAD_VERTICAL              = 2048              #頭垂直 #30cm2150
 HEAD_LEFT_HAND_H = 2550
 HEAD_LEFT_HAND_V = 2100  #2100
 
-HEAD_RIGHT_HAND_H = 1550
+HEAD_RIGHT_HAND_H = 1750   ####右手選點左右
 HEAD_RIGHT_HAND_V = 2100
  
 HEAD_LEFT_LEG_H = 1750
@@ -111,13 +111,13 @@ MY_SIZE = 1020
 
 # ========= 走到定點微調 =========
 # 直接調這個控制停下來距離：走太近 -> 改更負；走太遠 -> 改大
-READY_DISTANCE_ADJUST = 10
+READY_DISTANCE_ADJUST = 60
 
 # 保留原本參數但不再用它控制距離，避免搞混
 WALK_SIZE_OFFSET = 0
 
-# 左右：人站太左/太右時微調中心線；正負方向依現場測一次修
-WALK_X_OFFSET = 10
+# 左右：人站太左/太右時微調中心線；正負方向依現場測一次修 左邊正
+WALK_X_OFFSET = 7
 
 ROI_RADIUS = 120
 
@@ -136,15 +136,15 @@ HAND_SAFE_SCAN_VIEWS = [
 ]
 
 #前後值
-BACK_MIN                   = -600                #小退後
-FORWARD_MIN               = 100
+BACK_MIN                   = -300                #小退後
+FORWARD_MIN               = 150
 FORWARD_LOW               = 200             #小前進 300
-FORWARD_NORMAL             = 300                 #前進
-FORWARD_HIGH                = 500               #大前進
+FORWARD_NORMAL             = 250                 #前進
+FORWARD_HIGH                = 300               #大前進
 
 #平移值
-TRANSLATION_BIG            = 500                  #大平移
-TRANSLATION_NORMAL         = 300
+TRANSLATION_BIG            = 200                  #大平移
+TRANSLATION_NORMAL         = 150
 #旋轉值
 # THETA_MIN                  = 3                     #小旋轉
 # THETA_NORMAL               = 1                    #旋轉
@@ -489,7 +489,7 @@ class WallClimbing(API):
         
         # 前後距離控制 ---
         if not self.forward_ok :
-            if abs(error_size) <= 10:   #前進死區值
+            if abs(error_size) <= 6:   #停誤差
                 self.forward = 0.0 
                 time.sleep(2)
                 self.forward_ok = True 
@@ -741,15 +741,15 @@ class WallClimbing(API):
 
             if not self.allontarget:
                 if action == 'left_hand' or action == 'right_hand':
-                    time.sleep(1)
+                    time.sleep(3)
                     self.sendBodySector(cfg['climb_sector_1'])
-                    time.sleep(2)
+                    time.sleep(5)
                     self.sendBodySector(cfg['climb_sector_2'])
-                    time.sleep(2.5)
+                    time.sleep(3)
                     self.sendBodySector(cfg['climb_sector_3'])
-                    time.sleep(2)
+                    time.sleep(3)
                     self.sendBodySector(cfg['climb_sector_4'])
-                    time.sleep(2)
+                    time.sleep(3)
                     self.get_logger().info("動作中")
                 elif action == 'left_leg' or action == 'right_leg':
                     if action == 'right_leg':

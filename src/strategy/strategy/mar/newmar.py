@@ -19,15 +19,15 @@ from tku_msgs.msg import SensorPackage
 #步態校正
 CORRECT_x = -500
 CORRECT_y = 200
-CORRECT_theta = 0
+CORRECT_theta = -1
 
 # 頭部俯角（看地板標記）
 HEAD_DOWN_X = 2048   # 水平置中
 HEAD_DOWN_Y = 1450   # 俯角位置（看地板）
 
 # 行走速度
-WALK_SPEED_NORMAL  = 2000 + CORRECT_x  # 正常前進速度 #1500
-WALK_SPEED_SLOW    = 2000 +  CORRECT_x  # 接近標記 / 搜尋時的慢速 #1200
+WALK_SPEED_NORMAL  = 2000 + CORRECT_x  # 正常前進速度 #2500（小坡調快）
+WALK_SPEED_SLOW    = 2000 +  CORRECT_x  # 接近標記 / 搜尋時的慢速 #2500（小坡調快）
 
 # 轉彎參數（左右分開，邊走邊轉）
 LEFT_FORWARD_SPEED  = 1750 + CORRECT_x   # 左轉時的前進速度
@@ -59,38 +59,10 @@ INIT_COOLDOWN     = 2.0        # 初始化後冷卻時間（秒），避免殘�
 IMU_CORRECT_DEADBAND = 3       # yaw 在此範圍內不補正（度）
 IMU_CORRECT_SPEED    = 3      # IMU 補正角速度
 
-# ═══════════════════════════════════════════════
-#  坡道模式旗標（手動切換）
-# ═══════════════════════════════════════════════
-SLOPE_MODE = 'none'       # 'none' / 'up' / 'down'
-SECTOR_UPHILL   = 111      # 上坡站姿微調 sector 編號（實際編號依動作設計填入）
-SECTOR_DOWNHILL = 29      # 下坡站姿微調 sector 編號（實際編號依動作設計填入）
 SECTOR_STAND = 222
 
-# 平地步態參數
+# 步態參數
 WALK_PARAM_NORMAL = dict(
-    com_y_swing  = 0.0,
-    width_size   = 4.5,
-    period_t     = 300,
-    t_dsp        = 0.1,
-    lift_height  = 1.5,
-    stand_height = 23.5,
-    com_height   = 29.5,
-)
-
-# 上坡步態參數
-WALK_PARAM_UPHILL = dict(
-    com_y_swing  = 0.0,
-    width_size   = 4.5,
-    period_t     = 300,
-    t_dsp        = 0.1,
-    lift_height  = 1.5,
-    stand_height = 23.5,
-    com_height   = 29.5,
-)
-
-# 下坡步態參數
-WALK_PARAM_DOWNHILL = dict(
     com_y_swing  = 0.0,
     width_size   = 4.5,
     period_t     = 300,
@@ -192,16 +164,7 @@ class Mar(API):
     #  步態參數發送
     # ───────────────────────────────────────────
     def _send_walk_param(self):
-        """根據 SLOPE_MODE 發送對應步態參數"""
-        if SLOPE_MODE == 'up':
-            p = WALK_PARAM_UPHILL
-            self.get_logger().info("[WalkParam] 上坡模式", throttle_duration_sec=5.0)
-        elif SLOPE_MODE == 'down':
-            p = WALK_PARAM_DOWNHILL
-            self.get_logger().info("[WalkParam] 下坡模式", throttle_duration_sec=5.0)
-        else:
-            p = WALK_PARAM_NORMAL
-
+        p = WALK_PARAM_NORMAL
         self.sendWalkParameter(
             mode         = 0,
             com_y_swing  = p['com_y_swing'],
@@ -213,26 +176,17 @@ class Mar(API):
             com_height   = p['com_height'],
         )
 
-    def _send_slope_sector(self):
-        """坡道模式才呼叫站姿微調 sector，平地不動作"""
-        if SLOPE_MODE == 'up':
-            self.sendBodySector(SECTOR_UPHILL)
-            self.get_logger().info(f"[Slope] 上坡站姿微調 sector={SECTOR_UPHILL}")
-        elif SLOPE_MODE == 'down':
-            self.sendBodySector(SECTOR_DOWNHILL)
-            self.get_logger().info(f"[Slope] 下坡站姿微調 sector={SECTOR_DOWNHILL}")
-
     # ───────────────────────────────────────────
     #  IMU 補正計算
     # ───────────────────────────────────────────
     def _imu_correction(self):
-        """根據 yaw 計算補正角速度（假設已 reset，基準為 0）"""
+        """根據 yaw 計算補正角速度（假設已 reset，基準為 0），並疊加原地步態校正 CORRECT_theta"""
         yaw = self.imu_rpy[2]
         if yaw > IMU_CORRECT_DEADBAND:
-            return -IMU_CORRECT_SPEED
+            return -IMU_CORRECT_SPEED + CORRECT_theta
         elif yaw < -IMU_CORRECT_DEADBAND:
-            return IMU_CORRECT_SPEED
-        return 0
+            return IMU_CORRECT_SPEED + CORRECT_theta
+        return CORRECT_theta
 
     # ───────────────────────────────────────────
     #  初始化
@@ -241,7 +195,6 @@ class Mar(API):
         self.sendSensorReset(True)
         self._look_down()
         self._send_walk_param()
-        self._send_slope_sector()
         self.sub_state       = 'WALK'
         self.target_label    = 'none'
         self.last_sign_time  = time.time() - 999
@@ -273,13 +226,13 @@ class Mar(API):
         correction = self._imu_correction()
 
         if lost_duration < LOST_WAIT_TIME:
-            self.sendContinuousValue(WALK_SPEED_NORMAL, 0, correction)
+            self.sendContinuousValue(WALK_SPEED_NORMAL, CORRECT_y, correction)
             self.get_logger().info(
                 f"[WALK] 搜尋中... ({lost_duration:.1f}s) yaw={self.imu_rpy[2]:.1f}",
                 throttle_duration_sec=1.0
             )
         else:
-            self.sendContinuousValue(WALK_SPEED_SLOW, 0, correction)
+            self.sendContinuousValue(WALK_SPEED_SLOW, CORRECT_y, correction)
             self.get_logger().info(
                 "[WALK] 慢速搜尋中...",
                 throttle_duration_sec=1.0
@@ -314,7 +267,7 @@ class Mar(API):
         if self.sign_cy < SIGN_Y_THRESHOLD:
             self.approach_count = 0
             self.target_label   = 'none'
-            self.sendContinuousValue(WALK_SPEED_SLOW, 0, theta)
+            self.sendContinuousValue(WALK_SPEED_SLOW, CORRECT_y, theta)
             self.get_logger().info(
                 f"[ALIGN] 靠近中 label={self.sign_label} cx={self.sign_cx} cy={self.sign_cy} theta={theta}",
                 throttle_duration_sec=0.5
@@ -326,7 +279,7 @@ class Mar(API):
         if self.target_label == 'none':
             self.target_label = self.sign_label
 
-        self.sendContinuousValue(WALK_SPEED_SLOW, 0, theta)
+        self.sendContinuousValue(WALK_SPEED_SLOW, CORRECT_y, theta)
         self.get_logger().info(
             f"[ALIGN] 靠近計數 {self.approach_count}/{APPROACH_COUNT} "
             f"cy={self.sign_cy} label={self.target_label}"
@@ -354,7 +307,7 @@ class Mar(API):
                 self.get_logger().info(f"[ACTION] left 轉彎完成 yaw={current_yaw:.1f}")
                 self._initialize()
             else:
-                self.sendContinuousValue(LEFT_FORWARD_SPEED, 0, LEFT_TURN_SPEED)
+                self.sendContinuousValue(LEFT_FORWARD_SPEED, CORRECT_y, LEFT_TURN_SPEED)
                 self.get_logger().info(
                     f"[ACTION] 左轉中 yaw={current_yaw:.1f} / 目標={target_yaw}",
                     throttle_duration_sec=0.5
@@ -367,7 +320,7 @@ class Mar(API):
                 self.get_logger().info(f"[ACTION] right 轉彎完成 yaw={current_yaw:.1f}")
                 self._initialize()
             else:
-                self.sendContinuousValue(RIGHT_FORWARD_SPEED, 0, RIGHT_TURN_SPEED)
+                self.sendContinuousValue(RIGHT_FORWARD_SPEED, CORRECT_y, RIGHT_TURN_SPEED)
                 self.get_logger().info(
                     f"[ACTION] 右轉中 yaw={current_yaw:.1f} / 目標={target_yaw}",
                     throttle_duration_sec=0.5
@@ -394,7 +347,7 @@ class Mar(API):
 
         if not self.initialized:
             self._initialize()
-            self.sendBodySector(SECTOR_STAND) #站姿微調
+            # self.sendBodySector(SECTOR_STAND) #站姿微調
             self.sendbodyAuto(1)
             self.initialized = True
             self.get_logger().info("=== 比賽開始 ===")

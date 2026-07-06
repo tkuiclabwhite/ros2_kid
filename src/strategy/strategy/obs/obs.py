@@ -26,20 +26,20 @@ HEAD_HEIGHT_    = 2300
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
 STAY_X                          = -250
-STAY_Y                          = 100
+STAY_Y                          = 200
 STAY_THETA                      = -1
 #=========================================== 
 MAX_FORWARD_X                   = 2500                                                     
-MAX_FORWARD_Y                   = 0
+MAX_FORWARD_Y                   = 150
 MAX_FORWARD_THETA               = -1
 #=========================================== 
 SMALL_FORWARD_X                 = 1500                                                     
-SMALL_FORWARD_Y                 = 0
+SMALL_FORWARD_Y                 = 150
 SMALL_FORWARD_THETA             = -1   
 #=========================================== 
 SMALL_BACK_X                    = -1700                                                  
-SMALL_BACK_Y                    = 0
-SMALL_BACK_THETA                = 0   
+SMALL_BACK_Y                    = 400
+SMALL_BACK_THETA                = -1   
 #=========================================== 
 IMU_RIGHT_X                     = -400
 IMU_RIGHT_Y                     = 350        
@@ -48,20 +48,20 @@ TURN_RIGHT_X                    = -400
 TURN_RIGHT_Y                    = 350                                                 
 TURN_RIGHT_THETA                = -4       #3 
 #=========================================== 
-IMU_LEFT_X                      = -350
-IMU_LEFT_Y                      = -200
+IMU_LEFT_X                      = -400
+IMU_LEFT_Y                      = -100
 #===========================================                                         
-TURN_LEFT_X                     = -350                                          
-TURN_LEFT_Y                     = -200                                                
+TURN_LEFT_X                     = -400                                          
+TURN_LEFT_Y                     = -100                                                
 TURN_LEFT_THETA                 = 4       #3
 #===========================================
 SLOPE_RIGHT_TRANSLATE_X         = -300  
-SLOPE_RIGHT_TRANSLATE_Y         = -800
+SLOPE_RIGHT_TRANSLATE_Y         = -900
 SLOPE_RIGHT_TRANSLATE_THETA     = -2.5
 #===========================================
-SLOPE_LEFT_TRANSLATE_X          = -250
+SLOPE_LEFT_TRANSLATE_X          = -300
 SLOPE_LEFT_TRANSLATE_Y          = 900
-SLOPE_LEFT_TRANSLATE_THETA      = -0.5
+SLOPE_LEFT_TRANSLATE_THETA      = 0
 #===========================================
 YY_WALKWAY            =     100 #黃黃通道大小
 YY_ERRO               =     15 #黃黃通道中心與畫面中心誤差值
@@ -74,9 +74,9 @@ REDDOOR_IMU     = False
 REDDOOR_AFTER     = 'None' #紅門爬起後修正 'None' 'simp_turn_head' 'turn_head'
 
 #===========================================
-PRETURN_LEFT          = True
+PRETURN_LEFT          = False
 # PRETURN_LEFT          = True #預轉身左
-PRETURN_LEFT_ANGLE    = 70
+PRETURN_LEFT_ANGLE    = 45
 
 PRETURN_RIGHT         = False
 # PRETURN_RIGHT         = True #預轉身右
@@ -84,7 +84,7 @@ PRETURN_RIGHT_ANGLE   = 65
 #===========================================
 YELLOW_WALKWAY              = False #如果沒有黃黃通道就把它關了
 YELLOW_SMALL_TURNHEAD       = False #通道不夠大轉頭
-YELLOW_BLUE                 = True#黃線接藍牆
+YELLOW_BLUE                 = False  #黃線接藍牆
 YELLOW_IMU_LEFT        = False #黃色與藍牆夠近時 或 兩個藍色中有洞使用深度判斷 走完轉頭先imu_fix
 YELLOW_IMU_RIGHT       = False #黃色與藍牆夠近時 或 兩個藍色中有洞使用深度判斷 走完轉頭先imu_fix  
 SIMP_TURN_HEAD              = False #簡單轉頭 原本turn_for_wall的地方會先simp_turn_head再turn_for_wall
@@ -1043,6 +1043,8 @@ class Obs(Node): #各種避障動作
 
             send.sendbodyAuto(0)
             time.sleep(2)
+            send.sendBodySector(29)
+            time.sleep(1)
             send.sendBodySector(84)
             time.sleep(5)
             send.sendbodyAuto(1)
@@ -1082,7 +1084,7 @@ class Obs(Node): #各種避障動作
             time.sleep(1.5)
             print("123")
             if len(send.object_y_max[1]) > 0 and len(send.object_sizes[1]) > 0:
-                if send.object_y_max[1][0] > 220 and send.object_sizes[1][0] > 5000: #黃色夠近夠大
+                if send.object_y_max[1][0] > 220 and send.object_sizes[1][0] > 1000: #黃色夠近夠大
                     status.turnHead_state = "黃色夠近夠大 跳出"
                     self.line_at_right_single = True
                 # if send.object_y_max[5][0] > 220 and send.object_sizes[5][0] > 5000: #紅色夠近夠大
@@ -1105,7 +1107,7 @@ class Obs(Node): #各種避障動作
             time.sleep(1.5)
             print("跳出")
             if len(send.object_y_max[1]) > 0 and len(send.object_sizes[1]) > 0:
-                if send.object_y_max[1][0] > 220 and send.object_sizes[1][0] > 3000:
+                if send.object_y_max[1][0] > 220 and send.object_sizes[1][0] > 1000:
                     status.turnHead_state = "黃色夠近夠大 跳出"
                     self.line_at_left_single = True
                 # if send.object_y_max[5][0] > 220 and send.object_sizes[5][0] > 5000:
@@ -1134,7 +1136,6 @@ class Obs(Node): #各種避障動作
         print("456")
         if (self.right_deep_sum > self.left_deep_sum) or self.image.line_at_left or self.line_at_left_single or self.door_at_right or FORCE_TURN_RIGHT: #turn head 右轉            
             status.turnHead_state = "右轉判斷"
-            print("右轉判斷")
             if (self.image.center_deep) > 8 and (not self.yb):
                 while ( self.image.center_deep > 8) and status.running and (not self.yb):                  
                     print("距離牆太遠")
@@ -1308,15 +1309,11 @@ class Obs(Node): #各種避障動作
         if self.simp_turn == "left":
             while abs(send.imu_rpy[2]) < 20 and status.running:    
                 self.walk.move('turn_left_for_wall')
-                print("turn_left_for_wall")
-                # send.imu_rpy[2] = 51
             
             self.imu_ok = True
         elif self.simp_turn == "right":
             while abs(send.imu_rpy[2]) < 20 and status.running:    
                 self.walk.move('turn_right_for_wall')
-                print("turn_right_for_wall")
-                # send.imu_rpy[2] = 21
             
             self.imu_ok = True
 
@@ -1451,10 +1448,20 @@ class Obs(Node): #各種避障動作
                         
                         # 使用 max_yellow_x 並檢查是否有效
                         if max_yellow_x != -1:
-                            if max_yellow_x < 160:
-                                self.image.line_at_left = True
-                            elif max_yellow_x > 160:
-                                self.image.line_at_right = True
+                            if self.imu_ok:
+                                if max_yellow_x < 160:
+                                    self.image.line_at_left = True
+                                    status.turnHead_line_at = "線在左YB"
+
+                                elif max_yellow_x > 160:
+                                    self.image.line_at_right = True
+                                    status.turnHead_line_at = "線在右YB"
+                            else:
+                                status.turnHead_line_at = "等待回正"
+                                self.image.line_at_left = False
+                                self.image.line_at_right = False
+
+
 
                         while (abs(send.imu_rpy[2]) > 2) and (not self.imu_ok) and status.running:
                             self.walk.move('imu_fix')
@@ -1535,7 +1542,7 @@ class Obs(Node): #各種避障動作
                                         elif  self.image.deep_sum_l >= self.image.deep_sum_r and ( self.image.center_deep < 15 ) and (not SIMP_TURN_HEAD):
                                             while abs(send.imu_rpy[2]) < 39 and status.running and (not self.image.YY_2):    
                                                 self.walk.move('turn_left_for_wall')
-                                                status.obs_action = "turn_left_for_wall_1"
+                                                status.obs_action = "turn_left_for_wall"
                                                 # send.imu_rpy[2] = 39
                                                 
                                             self.imu_ok = True

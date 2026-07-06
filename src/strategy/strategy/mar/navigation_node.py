@@ -7,15 +7,15 @@ Navigation Node (ROS + TUI 版, v4 - YOLO only)
   USE_ROS_IMAGE = False → 從 /dev/video0 擷取
 
 模型類別對應 (best.engine / best(6).onnx):
-  0: F              → STRAIGHT  (AprilTag 代號,不算幾何角度)
-  1: L              → LEFT      (AprilTag 代號,不算幾何角度)
-  2: R              → RIGHT     (AprilTag 代號,不算幾何角度)
-  3: forward arrow  → STRAIGHT  (箭頭,要算幾何角度)
-  4: left arrow     → LEFT      (箭頭,要算幾何角度)
-  5: right arrow    → RIGHT     (箭頭,要算幾何角度)
+  0: F              → STRAIGHT
+  1: L              → LEFT
+  2: R              → RIGHT
+  3: forward arrow  → STRAIGHT
+  4: left arrow     → LEFT
+  5: right arrow    → RIGHT
 
 發布說明:
-  /class_id_topic (String)  : 投票確認後才發,格式 "action,x,y,area,angle"
+  /class_id_topic (String)  : 投票確認後才發,格式 "action,x,y,area"
   /sign_coordinates (Point) : 每 frame 發;無偵測時 x=y=NaN
 """
 import os
@@ -52,125 +52,6 @@ MIN_VOTES          = 3
 REPUBLISH_INTERVAL = 0.3
 YOLO_CONF_THRESH   = 0.5
 
-# ── 幾何驗證角度合理範圍 (含±30°旋轉裕度) ────────────────────────────────────
-GEO_ANGLE_RANGE = {
-    "STRAIGHT": (-35.0,  35.0),
-    "RIGHT":    ( 55.0, 125.0),
-    "LEFT":     (-125.0, -55.0),
-}
-
-# ── 不做幾何角度計算的類別 (AprilTag 類別沒有箭頭尖點) ───────────────────────
-NO_GEO_CLASSES = {"F", "L", "R"}
-
-
-# ════════════════════════════════════════════════════════════════════════════════
-# 幾何箭頭方向驗證
-# ════════════════════════════════════════════════════════════════════════════════
-
-def _extract_arrow_contour(roi_bgr):
-    gray = cv2.cvtColor(roi_bgr, cv2.COLOR_BGR2GRAY)
-    _, white = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY)
-    k = np.ones((3, 3), np.uint8)
-    white = cv2.morphologyEx(white, cv2.MORPH_OPEN,  k)
-    white = cv2.morphologyEx(white, cv2.MORPH_CLOSE, k)
-    cts, _ = cv2.findContours(white, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    if not cts:
-        return None, None
-
-    h_roi, w_roi = gray.shape
-    valid = []
-    for c in cts:
-        x, y, w, hh = cv2.boundingRect(c)
-        if x <= 1 or y <= 1 or x+w >= w_roi-1 or y+hh >= h_roi-1:
-            continue
-        valid.append(c)
-
-    candidates = valid if valid else cts
-    if not candidates:
-        return None, None
-
-    arrow = max(candidates, key=cv2.contourArea)
-    if cv2.contourArea(arrow) < 500:
-        return None, None
-
-    M = cv2.moments(arrow)
-    if M["m00"] < 1:
-        return None, None
-    cx = M["m10"] / M["m00"]
-    cy = M["m01"] / M["m00"]
-    return arrow, (cx, cy)
-
-
-def _find_key_line(contour, arrow_type):
-    if arrow_type == "STRAIGHT":
-        rect = cv2.minAreaRect(contour)
-        box = cv2.boxPoints(rect).astype(np.float32)
-        e1 = box[1] - box[0]
-        e2 = box[2] - box[1]
-        long_vec = e1 if np.linalg.norm(e1) >= np.linalg.norm(e2) else e2
-        if long_vec[1] > 0:
-            long_vec = -long_vec
-        return float(np.degrees(np.arctan2(long_vec[0], -long_vec[1])))
-
-    contour_pts = contour.reshape(-1, 2).astype(np.float32)
-
-    if arrow_type == "RIGHT":
-        tip = contour_pts[np.argmax(contour_pts[:, 0])]
-    else:
-        tip = contour_pts[np.argmin(contour_pts[:, 0])]
-
-    hi = cv2.convexHull(contour, returnPoints=False)
-    if hi is None or len(hi) < 3:
-        return None
-    try:
-        defects = cv2.convexityDefects(contour, hi)
-    except cv2.error:
-        return None
-    if defects is None or len(defects) < 2:
-        return None
-
-    area = cv2.contourArea(contour)
-    min_depth = max(4, int(np.sqrt(area) * 0.04)) * 256
-    deep_pts = [contour_pts[int(d[0, 2])]
-                for d in defects if d[0, 3] >= min_depth]
-    if len(deep_pts) < 2:
-        return None
-
-    deep_pts.sort(key=lambda p: np.linalg.norm(p - tip))
-    n0, n1 = deep_pts[0], deep_pts[1]
-    sm = (n0 + n1) / 2.0
-
-    av = tip - sm
-    if np.linalg.norm(av) < 1e-6:
-        return None
-
-    return float(np.degrees(np.arctan2(av[0], -av[1])))
-
-
-def find_arrow_direction(roi_bgr, yolo_action):
-    if yolo_action not in GEO_ANGLE_RANGE:
-        return None, None
-
-    MIN_SIDE = 200
-    h0, w0 = roi_bgr.shape[:2]
-    short = min(h0, w0)
-    if 0 < short < MIN_SIDE:
-        scale = MIN_SIDE / short
-        roi_bgr = cv2.resize(roi_bgr, None, fx=scale, fy=scale)
-
-    contour, _ = _extract_arrow_contour(roi_bgr)
-    if contour is None:
-        return None, None
-
-    angle = _find_key_line(contour, yolo_action)
-    if angle is None:
-        return None, None
-
-    lo, hi = GEO_ANGLE_RANGE[yolo_action]
-    confirmed = yolo_action if lo <= angle <= hi else None
-    return confirmed, round(angle, 1)
-
-
 # ════════════════════════════════════════════════════════════════════════════════
 # TUI 狀態
 # ════════════════════════════════════════════════════════════════════════════════
@@ -181,7 +62,7 @@ class TUIState:
         self.frame_count = 0; self.fps = 0.0; self.frame_size = (0, 0)
         self.yolo_action = None; self.yolo_name = None; self.yolo_conf = 0.0
         self.yolo_center = None; self.yolo_area = 0; self.yolo_num_candidates = 0
-        self.geo_action = None; self.geo_angle = None; self.final_action = None
+        self.final_action = None
         self.current_action = None; self.last_confirmed_action = None
         self.vote_counts = {}; self.vote_leader = None
         self.vote_leader_ratio = 0.0; self.window_votes = 0
@@ -219,14 +100,10 @@ def tui_loop(stdscr, state, stop_event):
             stdscr.addstr(r, 2, f"Frames: {s['frame_count']:>6}   FPS: {s['fps']:>5.1f}   "
                                 f"Size: {s['frame_size'][0]}x{s['frame_size'][1]}"); r += 2
 
-            stdscr.addstr(r, 2, "-- YOLO + GEO --", YELLOW | curses.A_BOLD); r += 1
+            stdscr.addstr(r, 2, "-- YOLO --", YELLOW | curses.A_BOLD); r += 1
             stdscr.addstr(r, 4, f"YOLO  : {s['yolo_action'] or '-'}  "
                                 f"({s['yolo_name'] or '-'} conf={s['yolo_conf']:.2f})",
                           GREEN if s['yolo_action'] else curses.A_DIM); r += 1
-            angle_str = f"{s['geo_angle']:+.1f}deg" if s['geo_angle'] is not None else '-'
-            geo_color = GREEN if s['geo_action'] else (YELLOW if s['geo_angle'] is not None else curses.A_DIM)
-            stdscr.addstr(r, 4, f"GEO   : {s['geo_action'] or 'SKIP/FAIL':<10} angle={angle_str}",
-                          geo_color); r += 1
             stdscr.addstr(r, 4, f"Final : {s['final_action'] or '-'}",
                           MAGENTA if s['final_action'] else curses.A_DIM); r += 1
             stdscr.addstr(r, 4, f"Center: {s['yolo_center'] or '-'}  area={s['yolo_area']}  "
@@ -371,8 +248,6 @@ class NavigationNode(Node):
         yolo_area   = 0
         yolo_bbox_bottom = None
         num_candidates   = 0
-        geo_action  = None
-        geo_angle   = None
         final_action = None
 
         results = self.yolo_model(frame, imgsz=320, verbose=False)
@@ -389,7 +264,6 @@ class NavigationNode(Node):
                 'center':      ((x1+x2)//2, (y1+y2)//2),
                 'area':        (x2-x1) * (y2-y1),
                 'bbox_bottom': y2,
-                'bbox':        (x1, y1, x2, y2),
             })
         num_candidates = len(candidates)
 
@@ -401,19 +275,7 @@ class NavigationNode(Node):
             yolo_center      = best['center']
             yolo_area        = best['area']
             yolo_bbox_bottom = best['bbox_bottom']
-
-            # 幾何角度計算 (只對箭頭類別做,AprilTag 類別 F/L/R 跳過)
-            if yolo_action is not None and best['name'] not in NO_GEO_CLASSES:
-                x1, y1, x2, y2 = best['bbox']
-                pad = 20
-                ax1 = max(0, x1 - pad); ay1 = max(0, y1 - pad)
-                ax2 = min(w, x2 + pad); ay2 = min(h, y2 + pad)
-                roi = frame[ay1:ay2, ax1:ax2]
-
-                if roi.size > 0:
-                    geo_action, geo_angle = find_arrow_direction(roi, yolo_action)
-
-            final_action = geo_action if geo_action is not None else yolo_action
+            final_action     = yolo_action
 
         current_action = final_action
 
@@ -457,17 +319,12 @@ class NavigationNode(Node):
             self.last_confirmed_action = confirmed
             self.last_publish_time     = now_t
 
-            if geo_action == confirmed:
-                source = "GEO"
-            else:
-                source = "YOLO"
-
-            pub_angle = geo_angle if geo_angle is not None else 0.0
+            source = "YOLO"
 
             if yolo_center and yolo_area:
-                data = f"{confirmed.lower()},{yolo_center[0]},{yolo_bbox_bottom},{yolo_area},{pub_angle:.1f}"
+                data = f"{confirmed.lower()},{yolo_center[0]},{yolo_bbox_bottom},{yolo_area}"
             else:
-                data = f"{confirmed.lower()},{cx_frame},{cy_frame},0,{pub_angle:.1f}"
+                data = f"{confirmed.lower()},{cx_frame},{cy_frame},0"
 
             ms = String(); ms.data = data
             self.class_id_pub.publish(ms)
@@ -478,11 +335,10 @@ class NavigationNode(Node):
         if yolo_center is not None:
             mp_live.x = float(yolo_center[0])
             mp_live.y = float(yolo_center[1])
-            mp_live.z = float(geo_angle) if geo_angle is not None else 0.0
         else:
             mp_live.x = float('nan')
             mp_live.y = float('nan')
-            mp_live.z = 0.0
+        mp_live.z = 0.0
         self.coord_pub.publish(mp_live)
 
         # ── TUI 狀態更新 ────────────────────────────────────────────────────
@@ -497,8 +353,6 @@ class NavigationNode(Node):
             self.state.yolo_center           = yolo_center
             self.state.yolo_area             = yolo_area
             self.state.yolo_num_candidates   = num_candidates
-            self.state.geo_action            = geo_action
-            self.state.geo_angle             = geo_angle
             self.state.final_action          = final_action
             self.state.current_action        = current_action
             self.state.vote_counts           = vote_counts

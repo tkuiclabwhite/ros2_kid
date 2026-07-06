@@ -17,9 +17,9 @@ from rclpy.node import Node
 # 2025.8.7
 #======================================================================================
 
-CORRECT       = [-600, 200, -1]        # 原地踏步修正
-LEFT_CORRECT  = [-650, 250, 4]        # 左旋修正
-RIGHT_CORRECT = [-600, -200, -5]       # 右旋修正
+CORRECT       = [-500, 300, -1]        # 原地踏步修正
+LEFT_CORRECT  = [-550, 200, 4]        # 左旋修正
+RIGHT_CORRECT = [-600, 300, -5]       # 右旋修正
 #                 x , y , theta
 
 #====================================================================================
@@ -33,7 +33,7 @@ CATCH_BALL_CORRECT = 1230        #1500   900
 #CATCH_BALL_LINE  = [1680, 1, 1580]            # slow_degree, stop_degree, backward_degree
 CATCH_BALL_LINE  = [1540, 1475, 1460]         #1535, 1525]   1590, 1580      1540, 1518, 1495    [1540, 1485, 1475]   
 TWO_POINT_LINE   = [1800, 1630, 1615]            # slow_degree, stop_degree, backward_degree 
-THREE_POINT_LINE = [77, 67, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
+THREE_POINT_LINE = [72, 67, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 FIVE_POINT_LINE  = [105, 101, 97, 88]           # srward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 #67 65 / 66 64
 #THREE_POINT_LINE = [75, 66, 64, 62] 
@@ -42,7 +42,7 @@ BASTET_LENGTH =  10  #增加以下全域變數
 FOCAL_LENGTH  = 330 # 333 
 TEST_DISTANCE = 60
 
-VALUEE = 33
+VALUEE = 55
 #VALUEE = 2  #框測試.  比賽時輸入的狀態決定投的策略  取代Diovalue
 #VALUEE = 22 #2分球
 #VALUEE = 33 #3分球
@@ -333,11 +333,14 @@ class MotorMove():
     
             self.api.get_logger().info(f"head_horizon = {self.head_horizon}")
             self.MoveW = self.head_horizon - turn_degree
-            if abs(self.MoveW) > 15:
-                self.MoveW = 15 if self.MoveW > 0 else -15
+            if abs(self.MoveW) > 55:
+                self.MoveW = 55 if self.MoveW > 0 else -55
 
-            elif abs(self.MoveW) > 5:
-                self.MoveW = 5 if self.MoveW > 0 else -5
+            elif abs(self.MoveW) > 35:
+                self.MoveW = 35 if self.MoveW > 0 else -35
+            
+            elif abs(self.MoveW) > 15:
+                self.MoveW = 15 if self.MoveW > 0 else -15
 
             else:
                 self.MoveW = 2 if self.MoveW > 0 else -2
