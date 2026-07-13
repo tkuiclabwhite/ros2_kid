@@ -10,13 +10,16 @@ import time
 
 #--校正量--#
 #前進量校正
-FORWARD_CORRECTION         = -600
+FORWARD_CORRECTION         = -350 ##往後補償 ＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠邊平移邊往後
+#____________________________________________________________________________________________________________________________________________________
 #平移校正
 TRANSLATION_CORRECTION     = 0  ####斜著走改這個
-#旋轉校正
-THETA_CORRECTION           = -0.5
+#旋轉校正     ####往右面負  往左面正
+THETA_CORRECTION           = 0
+TRANSLATION_THETA_CORRECTION = -1##  平移旋轉
+#____________________________________________________________________________________________________________________________________________________
 #基礎變化量(前進&平移)
-BASE_CHANGE                = 150
+BASE_CHANGE                = 80
 HEAD_CHANGE_H              = 5
 HEAD_CHANGE_V              = 100
 # ---微調站姿開關---#
@@ -58,13 +61,15 @@ CW_DIST_GAIN_Y = 1.5
 CW_DIST_GAIN_Z = 4.0
 #######################################################
 # ========= 手部抓點微調 =========
-# X：左右修正。左手抓太左/右手抓太左 -> 加大；抓太右 -> 減小
-LEFT_HAND_X_OFFSET = -50
-RIGHT_HAND_X_OFFSET = -250
+#____________________________________________________________________________________________________________________________________________________
+# X：左右修正。左手抓太左/右手抓太左 -> 加大；抓太右 -> 減小 右正左負
+LEFT_HAND_X_OFFSET = -35
+RIGHT_HAND_X_OFFSET = -220
 
-# Y：高低修正。手抓太高 -> 減小；手抓太低 -> 加大
-LEFT_HAND_Y_OFFSET = 750
-RIGHT_HAND_Y_OFFSET = -750
+# Y：高低修正。 加大往下
+LEFT_HAND_Y_OFFSET = 730
+RIGHT_HAND_Y_OFFSET = -730
+#____________________________________________________________________________________________________________________________________________________
 # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # 防止一次輸出太大，可依你的馬達安全範圍調整
@@ -74,13 +79,14 @@ CW_HAND_Y_LIMIT = 1000
 #------------------#
 HEAD_HORIZONTAL            = 2048               #頭水平
 HEAD_VERTICAL              = 2048              #頭垂直 #30cm2150
-
-HEAD_LEFT_HAND_H = 2550
+#____________________________________________________________________________________________________________________________________________________
+###左右手初始頭部選點 往右減少 往左加 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++換點調
+HEAD_LEFT_HAND_H = 2550    
 HEAD_LEFT_HAND_V = 2100  #2100
 
-HEAD_RIGHT_HAND_H = 1750   ####右手選點左右
-HEAD_RIGHT_HAND_V = 2100
- 
+HEAD_RIGHT_HAND_H = 1750   ####右手選點左右 
+HEAD_RIGHT_HAND_V = 2150
+#____________________________________________________________________________________________________________________________________________________
 HEAD_LEFT_LEG_H = 1750
 HEAD_LEFT_LEG_V = 1750
 
@@ -108,17 +114,17 @@ MOTOR_RIGHT_HEAP = 0
 MY_LINE_Y= 120 #攀岩基準線
 MY_LINE_X =160 #攀岩基準線
 MY_SIZE = 1020
-
+#____________________________________________________________________________________________________________________________________________________
 # ========= 走到定點微調 =========
 # 直接調這個控制停下來距離：走太近 -> 改更負；走太遠 -> 改大
-READY_DISTANCE_ADJUST = 60
-
+READY_DISTANCE_ADJUST = -10
+#____________________________________________________________________________________________________________________________________________________
 # 保留原本參數但不再用它控制距離，避免搞混
 WALK_SIZE_OFFSET = 0
-
+#____________________________________________________________________________________________________________________________________________________
 # 左右：人站太左/太右時微調中心線；正負方向依現場測一次修 左邊正
-WALK_X_OFFSET = 7
-
+WALK_X_OFFSET = 10
+#____________________________________________________________________________________________________________________________________________________
 ROI_RADIUS = 120
 
 #==================== 抓點高度微調 ====================
@@ -136,15 +142,15 @@ HAND_SAFE_SCAN_VIEWS = [
 ]
 
 #前後值
-BACK_MIN                   = -300                #小退後
+BACK_MIN                   = -150                #小退後
 FORWARD_MIN               = 150
-FORWARD_LOW               = 200             #小前進 300
+FORWARD_LOW               = 120             #小前進 300
 FORWARD_NORMAL             = 250                 #前進
 FORWARD_HIGH                = 300               #大前進
 
 #平移值
-TRANSLATION_BIG            = 200                  #大平移
-TRANSLATION_NORMAL         = 150
+TRANSLATION_BIG            = 100                  #大平移
+TRANSLATION_NORMAL         = 70
 #旋轉值
 # THETA_MIN                  = 3                     #小旋轉
 # THETA_NORMAL               = 1                    #旋轉
@@ -489,7 +495,7 @@ class WallClimbing(API):
         
         # 前後距離控制 ---
         if not self.forward_ok :
-            if abs(error_size) <= 6:   #停誤差
+            if abs(error_size) <= 4:   #停誤差 ——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
                 self.forward = 0.0 
                 time.sleep(2)
                 self.forward_ok = True 
@@ -506,7 +512,7 @@ class WallClimbing(API):
         else:
                 self.get_logger().info("前進對齊,準備平移")
                 if self.object_x > 0:            
-                    self.translation = max(min(error_x * 35, 1000), -1000) if abs(error_x) > 10.0 else 0.0
+                    self.translation = max(min(error_x * 15, 400), -400) if abs(error_x) > 6.0 else 0.0
                 else:
                     self.translation = 0.0
 
@@ -557,9 +563,12 @@ class WallClimbing(API):
             self.get_logger().info(f"t   :{t}")
             
             if not self.forward_ok:
-                self.sendContinuousValue(f, TRANSLATION_CORRECTION ,THETA_CORRECTION)
+                if f < 0:
+                    self.sendContinuousValue(f, TRANSLATION_CORRECTION, 0)   #######後退旋轉
+                else:
+                    self.sendContinuousValue(f, TRANSLATION_CORRECTION, THETA_CORRECTION)
             else:
-                self.sendContinuousValue(FORWARD_CORRECTION,t,THETA_CORRECTION)
+                self.sendContinuousValue(FORWARD_CORRECTION, t, TRANSLATION_THETA_CORRECTION)
 
 
     def ramp_speed(self, current, target, step):

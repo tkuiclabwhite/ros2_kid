@@ -25,43 +25,43 @@ HEAD_HEIGHT     = 1450 #頭高，位置為馬達目標刻度，2048為正朝前�
 HEAD_HEIGHT_    = 2300
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
-STAY_X                          = -250
-STAY_Y                          = 200
-STAY_THETA                      = -1
+STAY_X                          = -500
+STAY_Y                          = 150
+STAY_THETA                      = 0
 #=========================================== 
 MAX_FORWARD_X                   = 2500                                                     
 MAX_FORWARD_Y                   = 150
-MAX_FORWARD_THETA               = -1
+MAX_FORWARD_THETA               = -0.5
 #=========================================== 
 SMALL_FORWARD_X                 = 1500                                                     
 SMALL_FORWARD_Y                 = 150
-SMALL_FORWARD_THETA             = -1   
+SMALL_FORWARD_THETA             = -0.5   
 #=========================================== 
 SMALL_BACK_X                    = -1700                                                  
-SMALL_BACK_Y                    = 400
-SMALL_BACK_THETA                = -1   
+SMALL_BACK_Y                    = 300
+SMALL_BACK_THETA                = 0
 #=========================================== 
-IMU_RIGHT_X                     = -400
-IMU_RIGHT_Y                     = 350        
+IMU_RIGHT_X                     = -650
+IMU_RIGHT_Y                     = 400        
 #===========================================                 
-TURN_RIGHT_X                    = -400                                              
-TURN_RIGHT_Y                    = 350                                                 
+TURN_RIGHT_X                    = -650                                              
+TURN_RIGHT_Y                    = 400                                                 
 TURN_RIGHT_THETA                = -4       #3 
 #=========================================== 
-IMU_LEFT_X                      = -400
-IMU_LEFT_Y                      = -100
+IMU_LEFT_X                      = -500
+IMU_LEFT_Y                      = 200
 #===========================================                                         
-TURN_LEFT_X                     = -400                                          
-TURN_LEFT_Y                     = -100                                                
+TURN_LEFT_X                     = -500                                          
+TURN_LEFT_Y                     = 200                                                
 TURN_LEFT_THETA                 = 4       #3
 #===========================================
-SLOPE_RIGHT_TRANSLATE_X         = -300  
+SLOPE_RIGHT_TRANSLATE_X         = -600  
 SLOPE_RIGHT_TRANSLATE_Y         = -900
-SLOPE_RIGHT_TRANSLATE_THETA     = -2.5
+SLOPE_RIGHT_TRANSLATE_THETA     = -1.2
 #===========================================
-SLOPE_LEFT_TRANSLATE_X          = -300
+SLOPE_LEFT_TRANSLATE_X          = -550
 SLOPE_LEFT_TRANSLATE_Y          = 900
-SLOPE_LEFT_TRANSLATE_THETA      = 0
+SLOPE_LEFT_TRANSLATE_THETA      = -0.2
 #===========================================
 YY_WALKWAY            =     100 #黃黃通道大小
 YY_ERRO               =     15 #黃黃通道中心與畫面中心誤差值
@@ -76,15 +76,15 @@ REDDOOR_AFTER     = 'None' #紅門爬起後修正 'None' 'simp_turn_head' 'turn_
 #===========================================
 PRETURN_LEFT          = False
 # PRETURN_LEFT          = True #預轉身左
-PRETURN_LEFT_ANGLE    = 45
+PRETURN_LEFT_ANGLE    = 55
 
 PRETURN_RIGHT         = False
 # PRETURN_RIGHT         = True #預轉身右
-PRETURN_RIGHT_ANGLE   = 65
+PRETURN_RIGHT_ANGLE   = 50
 #===========================================
 YELLOW_WALKWAY              = False #如果沒有黃黃通道就把它關了
 YELLOW_SMALL_TURNHEAD       = False #通道不夠大轉頭
-YELLOW_BLUE                 = False  #黃線接藍牆
+YELLOW_BLUE                 = True  #黃線接藍牆
 YELLOW_IMU_LEFT        = False #黃色與藍牆夠近時 或 兩個藍色中有洞使用深度判斷 走完轉頭先imu_fix
 YELLOW_IMU_RIGHT       = False #黃色與藍牆夠近時 或 兩個藍色中有洞使用深度判斷 走完轉頭先imu_fix  
 SIMP_TURN_HEAD              = False #簡單轉頭 原本turn_for_wall的地方會先simp_turn_head再turn_for_wall
@@ -262,9 +262,14 @@ class Walk(): #步態、轉彎、直走速度、IMU
                 if deep.slope >= slopel_range[0]:
                     return slopel_range[1]
             return 0 
-        if send.object_sizes[5][0] < 5000 :
-            slope_angle = 0        
-        status.slope_angle = slope_angle
+
+        if len(send.object_sizes[5]) > 0:
+            if send.object_sizes[5][0] < 5000 :
+                slope_angle = 0        
+                
+            else:
+                send.object_sizes = 0
+            status.slope_angle = slope_angle
         return slope_angle
 
     def straight_speed(self):   #一般避障 前進速度        
@@ -408,14 +413,14 @@ class Normal_Obs_Parameter: #計算各種深度
         # ---------------- 黃色通道座標邏輯 ----------------
         Y_XMax1, Y_XMin1 = 0, 0
         Y_XMin2, Y_XMax2 = 0, 0
-        
-        yellow_count = len(send.object_x_max[1])
+        yyyy= send.object_x_max[1]
+        yellow_count = len(yyyy)
         if yellow_count >= 1:
-            Y_XMax1 = send.object_x_max[1][0]
-            Y_XMin1 = send.object_x_min[1][0]
+            Y_XMax1 = yyyy[0]
+            Y_XMin1 = yyyy[0]
         if yellow_count >= 2:
-            Y_XMin2 = send.object_x_min[1][1]
-            Y_XMax2 = send.object_x_max[1][1]
+            Y_XMin2 = yyyy[1]
+            Y_XMax2 = yyyy[1]
 
         self.yellow_rightside = max(Y_XMin1, Y_XMin2)
         self.yellow_leftside = min(Y_XMax1, Y_XMax2)
@@ -1084,7 +1089,7 @@ class Obs(Node): #各種避障動作
             time.sleep(1.5)
             print("123")
             if len(send.object_y_max[1]) > 0 and len(send.object_sizes[1]) > 0:
-                if send.object_y_max[1][0] > 220 and send.object_sizes[1][0] > 1000: #黃色夠近夠大
+                if send.object_y_max[1][0] > 220 and send.object_sizes[1][0] > 5000: #黃色夠近夠大
                     status.turnHead_state = "黃色夠近夠大 跳出"
                     self.line_at_right_single = True
                 # if send.object_y_max[5][0] > 220 and send.object_sizes[5][0] > 5000: #紅色夠近夠大
@@ -1107,7 +1112,7 @@ class Obs(Node): #各種避障動作
             time.sleep(1.5)
             print("跳出")
             if len(send.object_y_max[1]) > 0 and len(send.object_sizes[1]) > 0:
-                if send.object_y_max[1][0] > 220 and send.object_sizes[1][0] > 1000:
+                if send.object_y_max[1][0] > 220 and send.object_sizes[1][0] > 5000:
                     status.turnHead_state = "黃色夠近夠大 跳出"
                     self.line_at_left_single = True
                 # if send.object_y_max[5][0] > 220 and send.object_sizes[5][0] > 5000:
@@ -1138,7 +1143,6 @@ class Obs(Node): #各種避障動作
             status.turnHead_state = "右轉判斷"
             if (self.image.center_deep) > 8 and (not self.yb):
                 while ( self.image.center_deep > 8) and status.running and (not self.yb):                  
-                    print("距離牆太遠")
                     status.turnHead_state = "距離牆太遠"
                     self.walk.move('small_forward')                    
             elif ( self.image.center_deep < 5) and (not self.yb):
@@ -1168,14 +1172,14 @@ class Obs(Node): #各種避障動作
                 self.walk.move('face_right_forward')                
                 if len(send.object_y_max[5]) > 0 and len(send.object_sizes[5]) > 0:
 
-                    if send.object_x_min[5][0] <80 and send.color_counts[5] >= 1 and send.object_sizes[5][0] > 3000:
+                    if send.object_x_min[5][0] <80 and send.color_counts[5] >= 1 and send.object_sizes[5][0] > 5000:
                         break     
             while deep.aa[18] <= 11 and status.running and YELLOW_IMU_RIGHT:                              
                 status.turnHead_state = "頭面向牆"
                 self.walk.move('face_right_forward')          
                 if len(send.object_y_max[5]) > 0 and len(send.object_sizes[5]) > 0:
       
-                    if send.object_x_min[5][0] <80 and send.color_counts[5] >= 1 and send.object_sizes[5][0] > 3000:
+                    if send.object_x_min[5][0] <80 and send.color_counts[5] >= 1 and send.object_sizes[5][0] > 5000:
                         break
                 # if YELLOW_DX_BREAK_RIGHT:
                 #     if self.image.y_deep_y < 5:

@@ -9,11 +9,11 @@ import time
 # =========================
 # 走路速度 / 轉向相關參數
 # =========================
-FORWARD_START_SPEED = 2000     # 起步前進速度 2000
+FORWARD_START_SPEED = 1500     # 起步前進速度 2000
 BACK_START_SPEED = -500       # 起步後退速度（負值代表反方向) 
-FORWARD_MAX_SPEED = 7000       # 前進速度上限
+FORWARD_MAX_SPEED = 6000       # 前進速度上限
 FORWARD_MIN_SPEED = 1500       # 前進減速階段的下限（這裡設成 2000 => 等於不會真的降到更慢）
-BACK_MAX_SPEED = -6000         # 後退速度上限（越接近 0 越慢；-2000 是最快後退）
+BACK_MAX_SPEED = -5000         # 後退速度上限（越接近 0 越慢；-2000 是最快後退）
 
 # 每圈更新速度的變化量
 FORWARD_SPEED_ADD = 100        # 前進加速量
@@ -75,9 +75,9 @@ class SP():
         if not self.ball_found:
            return 'Forward'
         # note: 3200/5800 這兩個門檻非常吃解析度、鏡頭FOV、球在畫面上的大小 換相機/換高度 這裡通常要重調
-        if 5000 >= self.sp_ball.size >= 800:     # 到球前減速
+        if 4000 >= self.sp_ball.size >= 1200:     # 到球前減速
             return 'Decelerating'
-        elif self.sp_ball.size > 5000:            # 準備後退（代表球已很靠近）
+        elif self.sp_ball.size > 4000:            # 準備後退（代表球已很靠近）
             return 'Backward'
         return 'Forward'
 

@@ -2006,15 +2006,15 @@
 				<div id="CameraPresetButtons" style="display: inline; margin-top: 10px;">
 					<!-- 第一行：沒有標題 -->
 					<div style="margin-bottom: 8px;">
-						<button type="button" onclick="setHeadPreset(2048, 2048, 100, 100)" style="margin-top: 10px;">回正</button>
+						<button type="button" onclick="setHeadPreset(2048, 2048, 100, 100)" style="margin-top: 10px;">回正 2048</button>
 					</div>
 
 					<!-- 第二行：SR -->
 					<div style="margin-bottom: 8px;">
 						<div><strong>SR</strong></div>
-						<button type="button" onclick="setHeadPreset(2048, 1350, 100, 100)" style="margin-top: 10px;">SR 上板1350</button>
+						<button type="button" onclick="setHeadPreset(2579, 1330, 100, 100)" style="margin-top: 10px;">SR 左轉頭330</button>
 						<button type="button" onclick="setHeadPreset(2048, 1330, 100, 100)" style="margin-top: 10px;">SR 下板1330</button>
-						<button type="button" onclick="setHeadPreset(2048, 2450, 100, 100)" style="margin-top: 10px;">SR 攀岩2450</button>
+						<button type="button" onclick="setHeadPreset(1517, 1330, 100, 100)" style="margin-top: 10px;">SR 右轉頭1330</button>
 					</div>
 
 					<!-- 第三行：OBS -->
@@ -2023,8 +2023,6 @@
 						<button type="button" onclick="setHeadPreset(2579, 1700, 100, 100)" style="margin-top: 10px;">左轉頭2579</button>
 						<button type="button" onclick="setHeadPreset(2048, 1550, 100, 100)" style="margin-top: 10px;">OBS 正常1550</button>
 						<button type="button" onclick="setHeadPreset(1517, 1700, 100, 100)" style="margin-top: 10px;">右轉頭1517</button>
-						<button type="button" onclick="setHeadPreset(2048, 1700, 100, 100)" style="margin-top: 10px;">OBS 紅門前1700</button>
-						<button type="button" onclick="setHeadPreset(2048, 2400, 100, 100)" style="margin-top: 10px;">OBS 紅門下2400</button>
 					</div>
 				</div>
 
@@ -2174,16 +2172,16 @@
             <!-- <br> -->
             <div style="margin-left: 0px;margin-top: 10px;"id="motion"align="left">
                 <input type="button" id="executeButton" value="motion1" onclick="executeDRC(this.value);" style="width:70px; margin-left:0px;">
-				motion1: <input type="text" id="Sector1" value=21 style="width:40px;">
+				重心往後: <input type="text" id="Sector1" value=33 style="width:40px;">
 				<!-- <br> -->
 				<input type="button" id="executeButton" value="motion2" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
-				motion2: <input type="text" id="Sector2" value=208 style="width:40px;">
+				重心往前: <input type="text" id="Sector2" value=44 style="width:40px;">
 				<br>
 				<input type="button" id="executeButton" value="motion3" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
-				motion3: <input type="text" id="Sector3" value=111 style="width:40px;">
+				忍者跑: <input type="text" id="Sector3" value=67 style="width:40px;">
 				<!-- <br> -->
 				<input type="button" id="executeButton" value="motion4" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
-				motion4: <input type="text" id="Sector4" value=333 style="width:40px;">
+				慢回站姿: <input type="text" id="Sector4" value=76 style="width:40px;">
 				<br>
 
 				<input type="button" id="executeButton" value="motion5" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
@@ -2205,7 +2203,7 @@
 				motion10: <input type="text" id="Sector10" value=102 style="width:40px;">
 				<br>
 				<input type="button" id="executeButton" value="motion11" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">
-				motion11: <input type="text" id="Sector11" value=872 style="width:40px;">
+				站姿微調: <input type="text" id="Sector11" value=22 style="width:40px;">
 				<br>
 				<!-- <input type="button" id="executeButton" value="stand" onclick="standDRC();" style="width:50px; margin-left:0;">
 				<input type="button" id="executeButton" value="notice" onclick="executeDRC(this.value);" style="width:70px; margin-left:0;">

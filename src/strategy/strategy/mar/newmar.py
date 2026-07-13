@@ -18,7 +18,7 @@ from tku_msgs.msg import SensorPackage
 
 #步態校正
 CORRECT_x = -500
-CORRECT_y = 200
+CORRECT_y = 100
 CORRECT_theta = -1
 
 # 頭部俯角（看地板標記）
@@ -26,8 +26,8 @@ HEAD_DOWN_X = 2048   # 水平置中
 HEAD_DOWN_Y = 1450   # 俯角位置（看地板）
 
 # 行走速度
-WALK_SPEED_NORMAL  = 2000 + CORRECT_x  # 正常前進速度 #2500（小坡調快）
-WALK_SPEED_SLOW    = 2000 +  CORRECT_x  # 接近標記 / 搜尋時的慢速 #2500（小坡調快）
+WALK_SPEED_NORMAL  = 2000 + CORRECT_x  # 正常前進速度
+WALK_SPEED_SLOW    = 2000 +  CORRECT_x  # 接近標記 / 搜尋時的慢速
 
 # 轉彎參數（左右分開，邊走邊轉）
 LEFT_FORWARD_SPEED  = 1750 + CORRECT_x   # 左轉時的前進速度
