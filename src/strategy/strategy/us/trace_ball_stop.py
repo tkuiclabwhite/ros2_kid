@@ -41,7 +41,7 @@ USE_REFEREE_COMM = False   # 是否使用裁判通訊，False=不使用，直接
 # 'KICK_OBSTACLE' : 踢向障礙物（find_pole → adjust_position → kick）
 # 'SHOOT'         : 射門（find_goal）
 # 'PENALTY_KICK'  : 直接射門，不找球、不找柱、不繞球
-STRATEGY_MODE = 'PENALTY_KICK'
+STRATEGY_MODE = 'KICK_OBSTACLE'
 
 
 COLOR_BALL = 'yellow'
@@ -86,9 +86,9 @@ POLE_SEARCH_V_LEVELS   = [1450, 1600, 1750, 1900, 2020]
 POLE_SEARCH_STEP_H     = 60
 
 # --- 球門柱過濾條件 ---
-POLE_MIN_AREA    = 80
+POLE_MIN_AREA    = 60
 POLE_ASPECT_MIN  = 0.1   # 柱子是細長形，不限制比例
-POLE_ASPECT_MAX  = 5.0
+POLE_ASPECT_MAX  = 6.0
 
 # --- find_ball 邊走邊找時的白線避開 ---
 # 白線偵測不再只靠 area，而是看 bbox 形狀：
@@ -139,8 +139,8 @@ ORBIT_Y_LEFT      = 900   # 往左繞（orbit_dir= 1）側向步長（可調）
 ORBIT_Y_RIGHT     = -800   # 往右繞（orbit_dir=-1）側向步長（可調）
 ORBIT_THETA_LEFT  = -4     # 往左繞旋轉步長（可調）
 ORBIT_THETA_RIGHT = 4     # 往右繞旋轉步長（可調）
-ORBIT_V_GAIN      = 60.0   # head_v 偏差 → x 步長係數（可調）
-ORBIT_X_MAX       = 300   # x 步長上限
+ORBIT_V_GAIN      = 90.0   # head_v 偏差 → x 步長係數（可調）
+ORBIT_X_MAX       = 1000   # x 步長上限
 ORBIT_TICK_GAIN   = 0.18  # pole_h 誤差刻度 → 目標幀數係數（可調，影響繞球總量）
 
 # --- kick: 踢球動作 ---
@@ -177,7 +177,7 @@ GOAL_SEARCH_STEP_H   = 60
 GOAL_SEARCH_V_LEVELS = [1700, 1850, 2000, 2200]   # 偏高，因為要抬頭看橫桿
 
 # --- 球門過濾條件（形狀變化大，先只卡面積，不卡 aspect_ratio） ---
-GOAL_MIN_AREA = 80
+GOAL_MIN_AREA = 60
 
 # --- find_goal: 對準確認 ---
 GOAL_CONFIRM_FRAMES = 5   # 連續對準幾幀才算找到（可調）
@@ -211,7 +211,7 @@ WALK_THETA_GAIN  = 1.15   # 可調整，值越大修正越積極
 WALK_THETA_MAX   = 5      # theta 修正上限，避免走太斜
 # 直走時 theta 死區：head_h 偏離中心小於此刻度數時 theta=0，讓機器人安心前進
 # 建議從 150 開始（約 13 度），走太斜再調小
-WALK_THETA_DEAD_TICKS = 60
+WALK_THETA_DEAD_TICKS = 50
 # 球夠近後停止 theta 修正，直接直走到底
 # head_v 低於此值（球已很近）就強制 theta=0
 WALK_THETA_STOP_V = 1600
@@ -1436,7 +1436,7 @@ class UnitedSoccer(API):
             y     = ORBIT_Y_RIGHT
             theta = ORBIT_THETA_RIGHT
 
-        self.sendContinuousValue(x=x, y=y, theta=theta)
+        self.sendContinuousValue(x=x-500, y=y, theta=theta)
         self._orbit_frames += 1
         self.action_detail = (
             f'繞球中 [{self._orbit_frames}/{self._orbit_target_frames}]  '
@@ -1656,8 +1656,8 @@ class UnitedSoccer(API):
             self.sendContinuousValue(x=0, y=0, theta=0)
             self.sendbodyAuto(0)
 
-            time.sleep(2)
-            self.sendBodySector(999)
+            # time.sleep(2)
+            # self.sendBodySector(999)
 
             # 左腳你原本想等久一點，保留 4 秒；右腳維持 2 秒
             if sector == 200:
@@ -1666,12 +1666,12 @@ class UnitedSoccer(API):
                 time.sleep(2)
 
             self.sendBodySector(sector)
-            time.sleep(14)
+            time.sleep(15)
             self.sendBodySector(29)
             time.sleep(1)
 
-            self.sendBodySector(123)
-            time.sleep(1)
+            # self.sendBodySector(123)
+            # time.sleep(1)
 
 
             self._kick_wait_frames = 0
@@ -1700,8 +1700,8 @@ class UnitedSoccer(API):
 
         self.action_detail = 'PENALTY_KICK：左腳射門 sector={200}'
 
-        time.sleep(2)
-        self.sendBodySector(999)   # 踢球前預備
+        # time.sleep(2)
+        # self.sendBodySector(999)   # 踢球前預備
         time.sleep(2)
         self.sendBodySector(200)
         time.sleep(14)
@@ -1727,7 +1727,8 @@ class UnitedSoccer(API):
         time.sleep(1)
         self.sendBodySector(29)
         time.sleep(1)
-        self.sendBodySector(123)
+        self.sendBodySector(678)
+        time.sleep(1)
         self.sendContinuousValue(x=0, y=0, theta=0)
         self.sendbodyAuto(0)
         time.sleep(0.5)   # 等身體確實站穩，再校正 IMU 零點

@@ -25,49 +25,49 @@ HEAD_HEIGHT     = 1450 #頭高，位置為馬達目標刻度，2048為正朝前�
 HEAD_HEIGHT_    = 2300
 FOCUS_MATRIX    = [7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 10, 10, 11, 11, 10, 10, 9, 9, 9, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7]
 #===========================================
-STAY_X                          = -500
+STAY_X                          = -600
 STAY_Y                          = 150
-STAY_THETA                      = 0
+STAY_THETA                      = -1.5
 #=========================================== 
 MAX_FORWARD_X                   = 2500                                                     
-MAX_FORWARD_Y                   = 150
+MAX_FORWARD_Y                   = 200
 MAX_FORWARD_THETA               = -0.5
 #=========================================== 
 SMALL_FORWARD_X                 = 1500                                                     
-SMALL_FORWARD_Y                 = 150
+SMALL_FORWARD_Y                 = 200
 SMALL_FORWARD_THETA             = -0.5   
 #=========================================== 
 SMALL_BACK_X                    = -1700                                                  
-SMALL_BACK_Y                    = 300
-SMALL_BACK_THETA                = 0
+SMALL_BACK_Y                    = 200
+SMALL_BACK_THETA                = -1.5
 #=========================================== 
-IMU_RIGHT_X                     = -650
-IMU_RIGHT_Y                     = 400        
+IMU_RIGHT_X                     = -600
+IMU_RIGHT_Y                     = 350        
 #===========================================                 
-TURN_RIGHT_X                    = -650                                              
-TURN_RIGHT_Y                    = 400                                                 
+TURN_RIGHT_X                    = -600                                              
+TURN_RIGHT_Y                    = 350                                                 
 TURN_RIGHT_THETA                = -4       #3 
 #=========================================== 
 IMU_LEFT_X                      = -500
-IMU_LEFT_Y                      = 200
+IMU_LEFT_Y                      = -100
 #===========================================                                         
 TURN_LEFT_X                     = -500                                          
-TURN_LEFT_Y                     = 200                                                
+TURN_LEFT_Y                     = -100                                                
 TURN_LEFT_THETA                 = 4       #3
 #===========================================
-SLOPE_RIGHT_TRANSLATE_X         = -600  
+SLOPE_RIGHT_TRANSLATE_X         = -500  
 SLOPE_RIGHT_TRANSLATE_Y         = -900
-SLOPE_RIGHT_TRANSLATE_THETA     = -1.2
+SLOPE_RIGHT_TRANSLATE_THETA     = -2
 #===========================================
-SLOPE_LEFT_TRANSLATE_X          = -550
+SLOPE_LEFT_TRANSLATE_X          = -450
 SLOPE_LEFT_TRANSLATE_Y          = 900
-SLOPE_LEFT_TRANSLATE_THETA      = -0.2
+SLOPE_LEFT_TRANSLATE_THETA      = 0
 #===========================================
 YY_WALKWAY            =     100 #黃黃通道大小
 YY_ERRO               =     15 #黃黃通道中心與畫面中心誤差值
 #===========================================     
 CRMAX           = 120 # red door 前後修正3 值越大離門越近 #68
-CRMIN           = 70  # red door 前後修正3 值越大離門越近 #68  
+CRMIN           = 80  # red door 前後修正3 值越大離門越近 #68  
 
 REDDOOR_FIX     = "imu" #"slpoe" 平移修正方法選擇
 REDDOOR_IMU     = False
@@ -76,11 +76,11 @@ REDDOOR_AFTER     = 'None' #紅門爬起後修正 'None' 'simp_turn_head' 'turn_
 #===========================================
 PRETURN_LEFT          = False
 # PRETURN_LEFT          = True #預轉身左
-PRETURN_LEFT_ANGLE    = 55
+PRETURN_LEFT_ANGLE    = 50
 
-PRETURN_RIGHT         = False
+PRETURN_RIGHT         = True
 # PRETURN_RIGHT         = True #預轉身右
-PRETURN_RIGHT_ANGLE   = 50
+PRETURN_RIGHT_ANGLE   = 20
 #===========================================
 YELLOW_WALKWAY              = False #如果沒有黃黃通道就把它關了
 YELLOW_SMALL_TURNHEAD       = False #通道不夠大轉頭
@@ -787,14 +787,14 @@ class Obs(Node): #各種避障動作
                             self.crawl()
                             break
                 elif (send.color_counts[2] == 1):
-                    if (self.image.b_x_min < 2 and self.image.b_x_max > 40):                        
+                    if (self.image.b_x_min < 2 and self.image.b_x_max > 25):                        
                         self.translate = False
                         201# self.walk.move('slope_right_translate')    
                         # self.walk.move('imu_right_translate')   
                         self.walk.move(f"{REDDOOR_FIX}_right_translate")                                      
                         status.reddoor_state = "紅門右平移 1B"
                         
-                    elif (self.image.b_x_max > 315 and self.image.b_x_min < 275):                        
+                    elif (self.image.b_x_max > 315 and self.image.b_x_min < 295):                        
                         self.translate = False
                         # self.walk.move('slope_left_translate')
                         # self.walk.move('imu_left_translate')
@@ -917,14 +917,14 @@ class Obs(Node): #各種避障動作
                         break
 
             elif (send.color_counts[2] == 1):
-                if (self.image.b_x_min < 2 and self.image.b_x_max > 20):
+                if (self.image.b_x_min < 2 and self.image.b_x_max > 30):
                     self.translate = False
                     # self.walk.move('slope_right_translate')
                     # self.walk.move('imu_right_translate')
                     self.walk.move(f"{REDDOOR_FIX}_right_translate")                    
                     status.reddoor_state = "紅門右平移 1B"
 
-                elif (self.image.b_x_max > 315 and self.image.b_x_min < 245):                    
+                elif (self.image.b_x_max > 315 and self.image.b_x_min < 240):                    
                     self.translate = False
                     # self.walk.move('slope_left_translate')      
                     # self.walk.move('imu_left_translate')    
@@ -1009,7 +1009,7 @@ class Obs(Node): #各種避障動作
             send.sendHeadMotor(2,HEAD_HEIGHT_,120)  #抬頭看有沒有障礙物
             time.sleep(1)
             
-            while self.crawl_cnt < 9 and self.image.deep_y == 24:   #cnt3數到10(7次)            
+            while self.crawl_cnt < 11 and self.image.deep_y == 24:   #cnt3數到10(7次)            
                 send.sendBodySector(82)
                 time.sleep(4)
                 status.reddoor_state = "789888"
@@ -1031,7 +1031,7 @@ class Obs(Node): #各種避障動作
                     self.i += 5
                     time.sleep(0.05)
 
-            elif self.crawl_cnt >= 9:
+            elif self.crawl_cnt >= 11:
                 send.sendBodySector(82)
                 time.sleep(5)
                 send.sendHeadMotor(1,HEAD_HORIZONTAL,100)
@@ -1050,7 +1050,7 @@ class Obs(Node): #各種避障動作
             time.sleep(2)
             send.sendBodySector(29)
             time.sleep(1)
-            send.sendBodySector(84)
+            send.sendBodySector(201)
             time.sleep(5)
             send.sendbodyAuto(1)
             self.walk.move('stay')

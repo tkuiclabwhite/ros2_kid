@@ -17,9 +17,9 @@ from rclpy.node import Node
 # 2025.8.7
 #======================================================================================
 
-CORRECT       = [-450, 400, -1]        # 原地踏步修正 [-450, 0, 1] 
+CORRECT       = [-500, 300, -1]        # 原地踏步修正
 LEFT_CORRECT  = [-550, 200, 4]        # 左旋修正
-RIGHT_CORRECT = [-600, 100, -3]       # 右旋修正
+RIGHT_CORRECT = [-600, 300, -5]       # 右旋修正
 #                 x , y , theta
 
 #====================================================================================
@@ -30,10 +30,10 @@ FIVEPOINT_HEAD_Y_DEGREE = [2010]      #投出去偏向左邊＝>頭 往左轉（
 #=====================================================================================
 CATCH_BALL_CORRECT = 1230        #1500   900
 
-#CATCH_BALL_LINE  = [1680, 1, 1580]            # slow_degree, stop_degree, backward_degree [1540, 1475, 1460]  
-CATCH_BALL_LINE  = [1590, 1535, 1525]         #1535, 1525]   1590, 1580      1540, 1518, 1495    [1540, 1485, 1475]   
+#CATCH_BALL_LINE  = [1680, 1, 1580]            # slow_degree, stop_degree, backward_degree
+CATCH_BALL_LINE  = [1540, 1475, 1460]         #1535, 1525]   1590, 1580      1540, 1518, 1495    [1540, 1485, 1475]   
 TWO_POINT_LINE   = [1800, 1630, 1615]            # slow_degree, stop_degree, backward_degree 
-THREE_POINT_LINE = [72, 68, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
+THREE_POINT_LINE = [72, 67, 64, 57]           # forward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 FIVE_POINT_LINE  = [105, 101, 97, 88]           # srward_slow_distance > forward_stop_distance > backward_stop_distance > backward_slow_distance
 #67 65 / 66 64
 #THREE_POINT_LINE = [75, 66, 64, 62] 
@@ -42,7 +42,7 @@ BASTET_LENGTH =  10  #增加以下全域變數
 FOCAL_LENGTH  = 330 # 333 
 TEST_DISTANCE = 60
 
-VALUEE = 33
+VALUEE = 55
 #VALUEE = 2  #框測試.  比賽時輸入的狀態決定投的策略  取代Diovalue
 #VALUEE = 22 #2分球
 #VALUEE = 33 #3分球
@@ -650,8 +650,8 @@ class BasketBall(API):
         #time.sleep(0.05)
         #self.api.sendBodySector(8) 
         #time.sleep(0.05)
-        self.sendBodySector(999) 
-        time.sleep(0.1)   
+        # self.sendBodySector(1) 
+        time.sleep(0.05)   
 
 
         self.step = 'find_ball'
@@ -808,17 +808,10 @@ class BasketBall(API):
             self.sendBodySector(787) 
             time.sleep(2.2)
 
-            self.sendBodySector(999) 
-            time.sleep(0.1)   
-
-
         else:
             self.get_logger().info(f'回復站姿')
             self.sendBodySector(787) 
             time.sleep(2.2)
-
-            self.sendBodySector(999) 
-            time.sleep(0.1)   
 
         self.step = 'find_basket'  
 
@@ -1022,10 +1015,10 @@ class BasketBall(API):
                     # self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
                     time.sleep(0.1)
                 else: 
-                    if abs(self.motor.head_horizon-1935) > 8: #10
+                    if abs(self.motor.head_horizon-1945) > 8: #10
                         self.get_logger().info(f'匡不在視野中間->貓頭鷹修腰')
                         # self.get_logger().info(f"motor.head_horizon = {self.motor.head_horizon}")
-                        self.motor.Owl_Rotate(1935)
+                        self.motor.Owl_Rotate(1945)
                         
                     else:
                         time.sleep(0.5)

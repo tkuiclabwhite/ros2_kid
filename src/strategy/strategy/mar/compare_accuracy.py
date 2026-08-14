@@ -34,7 +34,7 @@ from cv_bridge import CvBridge
 BASE = "/home/iclab/ros2_kid/src/strategy/strategy/mar"
 MODELS = {
     "best":     f"{BASE}/best.engine",
-    "best(10)": f"{BASE}/best(10).engine",
+    "best(10)": f"{BASE}/best(11).engine",
 }
 IMGSZ = 320
 CONF  = 0.5

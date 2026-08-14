@@ -15,7 +15,7 @@ from tku_msgs.msg import SensorPackage
 # --- 全域參數 (對齊原始邏輯) ---
 WIGHT = 70
 HEAD_MOTOR_START = 1500    
-HEAD_MOTOR_FINISH = 1350    
+HEAD_MOTOR_FINISH = 1700    
 FLAG1 = False  
 THETA_FIX = -0.2
 PRETURN = 1  # 1:右 2:左
@@ -49,8 +49,8 @@ elif WIGHT == 80:
     FINAL = 805
 
 elif WIGHT == 70:
-    THIRD_LINE = 240
-    FOURTH_LINE =230
+    THIRD_LINE = 220 #外20
+    FOURTH_LINE = 220 #外10
     SPEED = 1300
     PICK_ONE = 701
     PICK_TWO = 702
@@ -60,8 +60,8 @@ elif WIGHT == 70:
 
 elif WIGHT == 60:
     SPEED = 1300
-    THIRD_LINE = 225
-    FOURTH_LINE = 225
+    THIRD_LINE = 35 #y.min
+    FOURTH_LINE = 55 #y.min
     PICK_ONE = 601
     PICK_TWO = 602
     PICK_THREE = 603
@@ -209,7 +209,7 @@ class WeightLift(API):
             #if self.speed < 1800: self.speed += 200
             self.sendContinuousValue(1800, 0, self.theta) #60:self.theta #70:self.theta #80:self.theta+1
         elif self.ctrl_status == 'second_line':
-            self.sendContinuousValue(1800, 0, self.theta) #60:self.theta #70:self.theta #80:self.theta+1
+            self.sendContinuousValue(1800, 0, self.theta-1) #60:self.theta #70:self.theta #80:self.theta+1
         else:
             self.sendContinuousValue(300, 0, self.theta) #60:self.theta #70:self.theta #80:self.theta+1
 
@@ -224,7 +224,6 @@ class WeightLift(API):
                 #self.sendBodySector(123)  #提右手拉左腳
                 #time.sleep(1)
                 # self.sendSensorReset(True)
-    
                 self.stop = False
                 time.sleep(0.5)
                 self.ctrl_status = 'preturn'
@@ -241,6 +240,7 @@ class WeightLift(API):
                     self.walk_parameter(0, 0)
                     self.walk_switch()
                     self.sendSensorReset(True)
+                    self.setZoomIn(1.0)
                     self.theta = self.imu_fix()
                     if PRETURN == 1: # 右
                         self.sendHeadMotor(2, HEAD_MOTOR_START, 100)
@@ -251,7 +251,7 @@ class WeightLift(API):
                             if 110 <= self.bar.center.x or self.bar.center.x > 260: break
                             self.bar.update(1)
                             self.line.update(2)
-                            self.sendContinuousValue(1000, 1000, self.theta)
+                            self.sendContinuousValue(1000, 800, self.theta-1)
                             self.get_logger().info(f"紅色preturn (R) = {self.bar.center.x}")               
                     elif PRETURN == 2: # 左
                         self.bar.update(1)
@@ -264,7 +264,7 @@ class WeightLift(API):
                             self.sendContinuousValue(1000, -1000, self.theta)
                             self.get_logger().info(f"紅色preturn (L) = {self.bar.center.x}")
                             if self.bar.center.x <= 188:
-                                self.sendContinuousValue(1000, -1000, self.theta)
+                                self.sendContinuousValue(1000, -1000, self.theta-1)
             
                 self.ctrl_status = 'start_line'
                 time.sleep(0.5)
@@ -282,20 +282,20 @@ class WeightLift(API):
                         #self.sendContinuousValue(800, 800, 1)
                         #print("左轉") 
                 if self.bar.center.x > 170:
-                    self.sendContinuousValue(1000, -800, self.theta) 
+                    self.sendContinuousValue(1000, -300, self.theta) 
                     print("右平移")
                 elif self.bar.center.x < 160 and self.bar.center.x > 0:
-                    self.sendContinuousValue(1000, 800, self.theta) 
+                    self.sendContinuousValue(1000, 300, self.theta) 
                     print("左平移")  
                 else:
                     self.walking(0, 0) # 直走
-                if self.bar.center.y >= 215:
+                if self.bar.center.y >= 208:
                     self.ctrl_status = 'turn_straight'
 
             elif self.ctrl_status == 'turn_straight':
                 print("turn_straight")
                 self.theta = self.imu_fix()
-                self.sendContinuousValue(-400, 100, self.theta) #1:self.theta-2 #2:self.theta+0.25
+                self.sendContinuousValue(-400, 100, self.theta-1) #1:self.theta-2 #2:self.theta+0.25
                 if abs(self.theta) <= 0.2:
                     time.sleep(0.5)
                     self.ctrl_status = 'pick_up'
@@ -319,9 +319,11 @@ class WeightLift(API):
                 print("PICK_THREE")
                 time.sleep(5)
                 self.bar.update(1)
-                self.sendHeadMotor(2, HEAD_MOTOR_START, 100)
+                self.sendHeadMotor(2, 1350, 100) #內1700
                 time.sleep(1)
-                #self.sendBodySector(234)
+                self.setZoomIn(2.0)
+                self.sendBodySector(123)
+                
                 # time.sleep(1)
                 
                 self.real_bar_center = self.bar.center.x
@@ -331,15 +333,15 @@ class WeightLift(API):
                 print("second_line")
                 self.line.update(2)
                 self.walking(-1, 0)                                    #一舉
-                if self.line.edge_min.y < 150 and self.line.edge_min.y > 75:   #白線
+                if self.line.edge_min.y < 150 and self.line.edge_min.y >= 0:   #白線
                     self.third_line = True 
                 print(self.third_line)
                 self.get_logger().info(f"white_Y_min = {self.line.edge_min.y}")
                 self.get_logger().info(f"white_Y_max = {self.line.edge_max.y}")
-                self.sendHeadMotor(2,1450, 100)
+                self.sendHeadMotor(2,1350, 100)
                 if self.line.edge_max.y >= THIRD_LINE and self.third_line :
                     self.ctrl_status = 'rise_up'
-                    time.sleep(5.5)
+                    time.sleep(7) #外6 ＃內5 
 
             elif self.ctrl_status == 'rise_up':
                 print("rise_up")
@@ -348,7 +350,7 @@ class WeightLift(API):
                 time.sleep(2)
                 self.sendBodySector(int(LIFT))
                 # 根據重量決定舉起後的等待時間
-                wait_time = 23.5 if WIGHT == 90 else 21 if WIGHT == 80 else 21 if WIGHT == 70 else 17
+                wait_time = 25 if WIGHT == 90 else 21 if WIGHT == 80 else 21 if WIGHT == 70 else 17
                 time.sleep(wait_time)
                 # 根據舉起時的中心偏移進行位移修正
                 if 165 < self.real_bar_center < 210:
@@ -359,7 +361,7 @@ class WeightLift(API):
                     for _ in range(min(int((165 - self.real_bar_center) // 7), 4)):
                         self.sendBodySector(607)
                     time.sleep(1.5)
-                #self.sendBodySector(234)   #60迴圈外 ＃70迴圈內
+                #self.sendBodySector(123)   #60迴圈外 ＃70迴圈內
                 #time.sleep(0.5)
                 if FLAG1:
                     sector_fix = 3336 if WIGHT == 90 else 3335 if WIGHT == 80 else 3334 if WIGHT == 70 else 3333 if WIGHT == 60 else None
@@ -369,16 +371,16 @@ class WeightLift(API):
             elif self.ctrl_status == 'fourth_line':
                 print("fourth_line")
                 self.line.update(2)
-                self.walking(0, -2)
-                if self.line.edge_min.y < 95 and self.line.edge_min.y > 75:   #白線
+                self.walking(0, -1)
+                if self.line.edge_min.y < 95 and self.line.edge_min.y >= 0:   #白線
                     self.fourth_line = True 
                 print(self.fourth_line)
                 self.get_logger().info(f"white_Y_min = {self.line.edge_min.y}")
                 self.get_logger().info(f"white_Y_max = {self.line.edge_max.y}")
-                self.sendHeadMotor(2,1400, 100)
+                self.sendHeadMotor(2,1350, 100)
                 if self.line.edge_max.y >= FOURTH_LINE and self.fourth_line :
                     self.ctrl_status = 'final'
-                    time.sleep(3)
+                    time.sleep(14) #外10 ＃內8
             elif self.ctrl_status == 'final':
                 print("final")
                 if self.body_auto: 

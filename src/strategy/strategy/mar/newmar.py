@@ -17,23 +17,23 @@ from tku_msgs.msg import SensorPackage
 # ═══════════════════════════════════════════════
 
 #步態校正
-CORRECT_x = -500
+CORRECT_x = 0
 CORRECT_y = 100
-CORRECT_theta = -1
+CORRECT_theta = 0
 
 # 頭部俯角（看地板標記）
 HEAD_DOWN_X = 2048   # 水平置中
 HEAD_DOWN_Y = 1450   # 俯角位置（看地板）
 
 # 行走速度
-WALK_SPEED_NORMAL  = 2000 + CORRECT_x  # 正常前進速度
-WALK_SPEED_SLOW    = 2000 +  CORRECT_x  # 接近標記 / 搜尋時的慢速
+WALK_SPEED_NORMAL  = 2500 + CORRECT_x  # 正常前進速度
+WALK_SPEED_SLOW    = 2200 +  CORRECT_x  # 接近標記 / 搜尋時的慢速
 
 # 轉彎參數（左右分開，邊走邊轉）
 LEFT_FORWARD_SPEED  = 1750 + CORRECT_x   # 左轉時的前進速度
-LEFT_TURN_SPEED     = 7 + CORRECT_theta    # 左轉時的旋轉速度（正值）
-RIGHT_FORWARD_SPEED = 1750 + CORRECT_x  # 右轉時的前進速度
-RIGHT_TURN_SPEED    = -6 + CORRECT_theta   # 右轉時的旋轉速度（負值）
+LEFT_TURN_SPEED     = 8 + CORRECT_theta    # 左轉時的旋轉速度（正值）
+RIGHT_FORWARD_SPEED = 1700 + CORRECT_x  # 右轉時的前進速度
+RIGHT_TURN_SPEED    = -7 + CORRECT_theta   # 右轉時的旋轉速度（負值）
 
 # 畫面參數
 FRAME_W       = 320
@@ -42,10 +42,10 @@ FRAME_CX      = FRAME_W // 2   # 160
 ALIGN_DEADBAND = 40            # X 軸對準死區（像素）
 
 # 標記 Y 座標閾值（畫面高度 240，Y 越大越靠近底部）
-SIGN_Y_THRESHOLD = 210         # 標記 Y 座標超過此值視為「夠靠近」
+SIGN_Y_THRESHOLD = 180         # 標記 Y 座標超過此值視為「夠靠近」
 
 # 靠近累積幀數（Y 座標連續超過閾值幾幀才觸發）
-APPROACH_COUNT = 15           # 累積幀數（實測後調整）
+APPROACH_COUNT = 10           # 累積幀數（實測後調整）
 
 # 動作參數
 TURN_TARGET_ANGLE = 85         # 轉彎目標角度（度）
@@ -307,7 +307,7 @@ class Mar(API):
                 self.get_logger().info(f"[ACTION] left 轉彎完成 yaw={current_yaw:.1f}")
                 self._initialize()
             else:
-                self.sendContinuousValue(LEFT_FORWARD_SPEED, CORRECT_y, LEFT_TURN_SPEED)
+                self.sendContinuousValue(LEFT_FORWARD_SPEED, CORRECT_y+350, LEFT_TURN_SPEED)
                 self.get_logger().info(
                     f"[ACTION] 左轉中 yaw={current_yaw:.1f} / 目標={target_yaw}",
                     throttle_duration_sec=0.5
@@ -320,7 +320,7 @@ class Mar(API):
                 self.get_logger().info(f"[ACTION] right 轉彎完成 yaw={current_yaw:.1f}")
                 self._initialize()
             else:
-                self.sendContinuousValue(RIGHT_FORWARD_SPEED, CORRECT_y, RIGHT_TURN_SPEED)
+                self.sendContinuousValue(RIGHT_FORWARD_SPEED, CORRECT_y-400, RIGHT_TURN_SPEED)
                 self.get_logger().info(
                     f"[ACTION] 右轉中 yaw={current_yaw:.1f} / 目標={target_yaw}",
                     throttle_duration_sec=0.5

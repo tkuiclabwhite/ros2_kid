@@ -27,6 +27,7 @@ from tku_msgs.msg import (
     SingleMotorData,
     Parameter,
     Dio,
+    Zoom,
 )
 
 # -------------------- Strategy Process Manager (Plan B-1) --------------------
@@ -130,6 +131,7 @@ class API(Node):
 
         self.walking_json_pub = self.create_publisher(String, '/walking_params_update', 10)
 
+        self.zoomin_pub = self.create_publisher(Zoom,'/Zoom_In_Topic',10)
         # Head scale control
         self.HEAD_PAN_ID = 1
         self.HEAD_TILT_ID = 2
@@ -1248,6 +1250,11 @@ class API(Node):
         self.xx = msg.x
         self.yy = msg.y
         self.tt = msg.theta
+
+    def setZoomIn(self,value:float = 1.0)->None:
+        n = Zoom()
+        n.zoomin = value
+        self.zoomin_pub.publish(n)
 
 
 def main():

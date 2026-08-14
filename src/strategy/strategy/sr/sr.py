@@ -13,10 +13,10 @@ import time
 FORWARD_CORRECTION         = -350 ##往後補償 ＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠邊平移邊往後
 #____________________________________________________________________________________________________________________________________________________
 #平移校正
-TRANSLATION_CORRECTION     = 0  ####斜著走改這個
+TRANSLATION_CORRECTION     = -0.5  ####斜著走改這個
 #旋轉校正     ####往右面負  往左面正
-THETA_CORRECTION           = 0
-TRANSLATION_THETA_CORRECTION = -1##  平移旋轉
+THETA_CORRECTION           = -0.5
+TRANSLATION_THETA_CORRECTION = -0.5##  平移旋轉
 #____________________________________________________________________________________________________________________________________________________
 #基礎變化量(前進&平移)
 BASE_CHANGE                = 80
@@ -26,7 +26,7 @@ HEAD_CHANGE_V              = 100
 STAND_CORRECT_CW           = False                 #sector(33) CW_stand微調站姿 測就知道
 DRAW_FUNCTION_FLAG         = True                  #影像繪圖開關
 TARGET_COLOAR_1              = 'Red'                  #'Orange' 'Yellow' 'Blue' 'Green' 'Black' 'Red' 'White'       
-TARGET_COLOAR_2              = 'Blue'
+TARGET_COLOAR_2              = 'Red'
 
 W_CENTER = 30  # 距離中心點的權重 
 W_ALIGN = 70  # 水平對齊的權重 
@@ -63,12 +63,12 @@ CW_DIST_GAIN_Z = 4.0
 # ========= 手部抓點微調 =========
 #____________________________________________________________________________________________________________________________________________________
 # X：左右修正。左手抓太左/右手抓太左 -> 加大；抓太右 -> 減小 右正左負
-LEFT_HAND_X_OFFSET = -35
-RIGHT_HAND_X_OFFSET = -220
+LEFT_HAND_X_OFFSET = -200
+RIGHT_HAND_X_OFFSET = -215
 
 # Y：高低修正。 加大往下
-LEFT_HAND_Y_OFFSET = 730
-RIGHT_HAND_Y_OFFSET = -730
+LEFT_HAND_Y_OFFSET = 630
+RIGHT_HAND_Y_OFFSET = -630
 #____________________________________________________________________________________________________________________________________________________
 # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
@@ -81,11 +81,11 @@ HEAD_HORIZONTAL            = 2048               #頭水平
 HEAD_VERTICAL              = 2048              #頭垂直 #30cm2150
 #____________________________________________________________________________________________________________________________________________________
 ###左右手初始頭部選點 往右減少 往左加 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++換點調
-HEAD_LEFT_HAND_H = 2550    
-HEAD_LEFT_HAND_V = 2100  #2100
+HEAD_LEFT_HAND_H = 2730    
+HEAD_LEFT_HAND_V = 2360  #2100
 
-HEAD_RIGHT_HAND_H = 1750   ####右手選點左右 
-HEAD_RIGHT_HAND_V = 2150
+HEAD_RIGHT_HAND_H = 1948   ####右手選點左右 
+HEAD_RIGHT_HAND_V = 2360
 #____________________________________________________________________________________________________________________________________________________
 HEAD_LEFT_LEG_H = 1750
 HEAD_LEFT_LEG_V = 1750
@@ -113,17 +113,17 @@ MOTOR_RIGHT_HEAP = 0
 # FOOTLADDER_LINE            = 215                   #上梯基準線
 MY_LINE_Y= 120 #攀岩基準線
 MY_LINE_X =160 #攀岩基準線
-MY_SIZE = 1020
+MY_SIZE = 950
 #____________________________________________________________________________________________________________________________________________________
 # ========= 走到定點微調 =========
 # 直接調這個控制停下來距離：走太近 -> 改更負；走太遠 -> 改大
-READY_DISTANCE_ADJUST = -10
+READY_DISTANCE_ADJUST = -22
 #____________________________________________________________________________________________________________________________________________________
 # 保留原本參數但不再用它控制距離，避免搞混
 WALK_SIZE_OFFSET = 0
 #____________________________________________________________________________________________________________________________________________________
 # 左右：人站太左/太右時微調中心線；正負方向依現場測一次修 左邊正
-WALK_X_OFFSET = 10
+WALK_X_OFFSET = 5
 #____________________________________________________________________________________________________________________________________________________
 ROI_RADIUS = 120
 
@@ -404,66 +404,115 @@ class WallClimbing(API):
     def find_ladder(self):
         sys.stdout.write("\033[K")
 
-        # 1. 確保變數存在，初始化以預防 AttributeError
+        # 現在全部攀岩點都是紅色，只抓 Red
+        red_color = self.target.color1
+        candidates = []
 
-        color_1 = self.target.color1
-        color_2 = self.target.color2
+        obj_count = self.color_counts[red_color]
+        actual_list_len = len(self.object_sizes[red_color])
 
+        self.get_logger().info(
+            f"Red subject cnts: {obj_count}\033[K"
+        )
 
-        target_colors = [color_1, color_2]
-        candidates_y_max = []
+        # 收集畫面內所有紅色點
+        for i in range(min(obj_count, actual_list_len)):
+            size = self.object_sizes[red_color][i]
 
-        for color in target_colors:
-            obj_count = self.color_counts[color]
-            self.get_logger().info(f"color {color} subject cnts: {obj_count}\033[K")
-            actual_list_len = len(self.object_sizes[color])
-            for i in range(min(obj_count, actual_list_len+1)):
-                if self.object_sizes[color][i] > 100:
-                    cx = (self.object_x_max[color][i] + self.object_x_min[color][i]) // 2
-                    cy = (self.object_y_max[color][i] + self.object_y_min[color][i]) // 2
-                    if cx is not None:
-                        candidates_y_max.append({
-                            'y_max':self.object_y_max[color][i],
-                            'color': color,
-                            'cx':cx,
-                            'cy':cy,
-                            'size':self.object_sizes[color][i],
-                            'idx': i
-                        })
-            
-            # 修正 2: 修正 key 名稱 (y_max 而非 ymax)
-        candidates_y_max.sort(key=lambda x: x['y_max'], reverse=True) 
+            if size <= 100:
+                continue
 
-        if len(candidates_y_max) >= 1:
-            c1 = candidates_y_max[0]
-            self.target_1_cy = c1['cy']
-            self.target_1_cx = c1['cx']
-            self.target_1_size =c1['size']
+            cx = (
+                self.object_x_max[red_color][i]
+                + self.object_x_min[red_color][i]
+            ) // 2
 
-            if len(candidates_y_max) >= 2:
-                c2 = candidates_y_max[1]
-                if abs(c1['cx'] - c2['cx']) > 30 :
-                    self.target_2_cy = c2['cy']
-                    self.target_2_cx = c2['cx']
-                    self.target_2_size = c2['size']
-                else:
-                    if len(candidates_y_max) >= 3:
-                        c2 = candidates_y_max[2]
-                        self.target_2_cy = c2['cy']
-                        self.target_2_cx = c2['cx']
-                        self.target_2_size =c2['size']
-                    else:
-                        self.target_2_cx = self.target_1_cx
+            cy = (
+                self.object_y_max[red_color][i]
+                + self.object_y_min[red_color][i]
+            ) // 2
 
-                self.object_x = abs(self.target_1_cx + self.target_2_cx)//2
-                self.size = self.target_1_size + self.target_2_size             #面積
-            else:
-                self.object_x = 0
-            self.get_logger().info(f"鎖定目標 - Y1:cx,cy:{self.target_1_cx},{self.target_1_cy}, X_Dist:{self.object_x}")
-            self.get_logger().info(f"鎖定目標 - Y2:cx,cy:{self.target_2_cx},{self.target_2_cy}")
-            self.get_logger().info(f"鎖定目標 - Y1:size:{self.target_1_size},鎖定目標 - Y2:size:{self.target_2_size}")
+            candidates.append({
+                'y_max': self.object_y_max[red_color][i],
+                'cx': cx,
+                'cy': cy,
+                'size': size,
+                'idx': i
+            })
+
+        # 先找畫面最下面的三顆
+        candidates.sort(
+            key=lambda p: p['y_max'],
+            reverse=True
+        )
+
+        # 少於兩顆才是真的看不到目標
+        if len(candidates) < 2:
+            self.object_x = 0
+            self.size = 0
+
+            self.get_logger().info(
+                f"紅色點不足2顆，目前只有 {len(candidates)} 顆"
+            )
+            return
+
+        
+
+        if len(candidates) >= 3:
+            # 看得到三顆：先拿最下面三顆
+            bottom_points = candidates[:3]
+
+            # 左到右排序
+            bottom_points.sort(key=lambda p: p['cx'])
+
+            # 選第2顆和第3顆
+            c1 = bottom_points[1]
+            c2 = bottom_points[2]
+
+            self.get_logger().info("看見3顆，鎖定第2、3顆")
+
         else:
-            self.get_logger().info("丟失目標...\033[K")
+            # 靠近後只看到兩顆：直接使用這兩顆
+            bottom_points = candidates[:2]
+            bottom_points.sort(key=lambda p: p['cx'])
+
+            c1 = bottom_points[0]
+            c2 = bottom_points[1]
+
+            self.get_logger().info("靠近後只剩2顆，繼續鎖定兩顆中間")
+
+        self.target_1_cx = c1['cx']
+        self.target_1_cy = c1['cy']
+        self.target_1_size = c1['size']
+
+        self.target_2_cx = c2['cx']
+        self.target_2_cy = c2['cy']
+        self.target_2_size = c2['size']
+
+        # 走到第2顆與第3顆的中間
+        self.object_x = (
+            self.target_1_cx + self.target_2_cx
+        ) // 2
+
+        # 距離判斷仍使用第2顆與第3顆的面積總和
+        self.size = (
+            self.target_1_size + self.target_2_size
+        )
+
+        self.get_logger().info(
+            f"最下面第2顆: cx={self.target_1_cx}, "
+            f"cy={self.target_1_cy}, size={self.target_1_size}"
+        )
+
+        self.get_logger().info(
+            f"最下面第3顆: cx={self.target_2_cx}, "
+            f"cy={self.target_2_cy}, size={self.target_2_size}"
+        )
+
+        self.get_logger().info(
+            f"第2、3顆中間 object_x={self.object_x}, "
+            f"總面積={self.size}"
+        )
             
         
     def new_edge_judge(self):
@@ -495,7 +544,7 @@ class WallClimbing(API):
         
         # 前後距離控制 ---
         if not self.forward_ok :
-            if abs(error_size) <= 4:   #停誤差 ——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+            if abs(error_size) <= 10:   #停誤差 ——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
                 self.forward = 0.0 
                 time.sleep(2)
                 self.forward_ok = True 
@@ -512,11 +561,11 @@ class WallClimbing(API):
         else:
                 self.get_logger().info("前進對齊,準備平移")
                 if self.object_x > 0:            
-                    self.translation = max(min(error_x * 15, 400), -400) if abs(error_x) > 6.0 else 0.0
+                    self.translation = max(min(error_x * 10, 400), -400) if abs(error_x) > 6.0 else 0.0
                 else:
                     self.translation = 0.0
 
-                self.pos_x_ok = abs(error_x) <= 15 or self.object_x == 0      #平移死區值
+                self.pos_x_ok = abs(error_x) <= 10 or self.object_x == 0      #平移死區值
 
         if self.forward_ok  and self.pos_x_ok : 
             if not hasattr(self, 'ready_count'): self.ready_count = 0

@@ -10,10 +10,10 @@ import time
 # 走路速度 / 轉向相關參數
 # =========================
 FORWARD_START_SPEED = 1500     # 起步前進速度 2000
-BACK_START_SPEED = -500       # 起步後退速度（負值代表反方向) 
-FORWARD_MAX_SPEED = 6000       # 前進速度上限
+BACK_START_SPEED = 0        # 起步後退速度（負值代表反方向) 
+FORWARD_MAX_SPEED = 7000       # 前進速度上限
 FORWARD_MIN_SPEED = 1500       # 前進減速階段的下限（這裡設成 2000 => 等於不會真的降到更慢）
-BACK_MAX_SPEED = -5000         # 後退速度上限（越接近 0 越慢；-2000 是最快後退）
+BACK_MAX_SPEED = -2000         # 後退速度上限（越接近 0 越慢；-2000 是最快後退）
 
 # 每圈更新速度的變化量
 FORWARD_SPEED_ADD = 100        # 前進加速量
@@ -21,8 +21,8 @@ FORWARD_SPEED_SUB = -300       # 減速量（負值代表速度往小變）
 BACK_SPEED_ADD = -100          # 後退加速量（更負 => 更快後退）
 
 # theta(轉向)的基準偏移
-FORWARD_ORIGIN_THETA = -1   # 前進的基準修正 1/0/-1
-BACK_ORIGIN_THETA = -1   # 後退的基準修正（通常後退要稍微修方向）
+FORWARD_ORIGIN_THETA = 0   # 前進的基準修正 1/0/-1
+BACK_ORIGIN_THETA = -1  # 後退的基準修正（通常後退要稍微修方向）
 
 # =========================
 # 頭部馬達上下限
@@ -75,7 +75,7 @@ class SP():
         if not self.ball_found:
            return 'Forward'
         # note: 3200/5800 這兩個門檻非常吃解析度、鏡頭FOV、球在畫面上的大小 換相機/換高度 這裡通常要重調
-        if 4000 >= self.sp_ball.size >= 1200:     # 到球前減速
+        if 4000 >= self.sp_ball.size >= 1500:     # 到球前減速
             return 'Decelerating'
         elif self.sp_ball.size > 4000:            # 準備後退（代表球已很靠近）
             return 'Backward'
@@ -318,64 +318,24 @@ class Coordinate:
 
 
 class SprintBall:
-    
-    #SprintBall 的找球方式：
-    #- 同時抓到藍球(左) + 紅球(右)
-    #- 並且兩球中心 y 高度差很小（同一水平）
-    #- 且藍球在左、紅球在右
-    # 符合才算找到「有效球」
-    
     def __init__(self, tku_ros_api):
         self.tku_ros_api = tku_ros_api
-
-        # 兩種顏色的球
-        self.left_side = ObjectInfo('Blue', tku_ros_api)
-        self.right_side = ObjectInfo('Red', tku_ros_api)
-
+        self.ball = ObjectInfo('Blue', tku_ros_api)   # 只留一颗蓝球
         self.size = 0
         self.center = Coordinate(0, 0)
 
     def find(self):
-        
-        #同時偵測到藍球和紅球，且兩者高度差很小、位置順序合理，才算找到有效目標。
-        #回傳 True/False。
-        
-        find_left = self.left_side.update()
-        find_right = self.right_side.update()
-        print("left :", find_left)
-        print("right :", find_right)
+        if not self.ball.update():        # 抓蓝色
+            print("blue : False")
+            return False
 
-        if find_left and find_right:
-            # 兩球中心的差（取 abs）
-            center_diff = abs(self.left_side.center - self.right_side.center)
-            print("center_diff_y = ", center_diff.y)
+        print("blue : True, size =", self.ball.size)
+        # 画框（蓝色）
+        self.tku_ros_api.drawImageFunction(1, 1, *self.ball.boundary_box, 0, 0, 255)
 
-            # 你這裡的條件：
-            # 1) 兩邊 y 差 < 5（同高度）
-            # 2) 左球的 edge_min < 右球 edge_min（左球在左）
-            # 3) 左球的 edge_max < 右球 edge_max（左球整個都在右球左邊）
-            if center_diff.y <= 5 and (self.left_side.edge_min < self.right_side.edge_min) \
-               and (self.left_side.edge_max < self.right_side.edge_max):
-
-                # 畫框：藍色框、紅色框
-                self.tku_ros_api.drawImageFunction(1, 1, *self.left_side.boundary_box, 0, 0, 255)
-                self.tku_ros_api.drawImageFunction(2, 1, *self.right_side.boundary_box, 255, 0, 0)
-
-                # 紀錄 size 與 center
-                self.tku_ros_api.get_logger().info(
-                    f'left_ball_size = {self.left_side.size}, right_ball_size = {self.right_side.size}'
-                )
-                # size 用兩邊面積相加
-                self.size = self.left_side.size + self.right_side.size
-                # center 用兩邊中心平均
-                self.center = (self.left_side.center + self.right_side.center) / 2
-
-                return True
-
-            
-            center_diff = 0
-
-        return False
+        self.size = self.ball.size
+        self.center = self.ball.center
+        return True
 
 
 class ObjectInfo:
@@ -409,44 +369,45 @@ class ObjectInfo:
         return (self.edge_min.x, self.edge_max.x, self.edge_min.y, self.edge_max.y)
 
     def update(self):
-    
+
         #從影像偵測結果中找指定顏色的物件：
         #- 如果找不到回 False
-        #- 找到符合 size 範圍的第一個物件就更新資訊並回 True
-        
-        # 對應 API 需要的 color_name 字串
+        #- 找到「面積最大」的那顆才更新資訊並回 True（避免抓到反光切出的小塊）
+
         color_name = ['orange', 'yellow', 'blue', 'green', 'black', 'red', 'white', 'others'][self.color]
 
-        # 取得所有該顏色物件（list of dict）
         objs = self.tku_ros_api.get_objects(color_name)
-        
-        # 沒物件直接 False
+
         if not objs:
             return False
 
+        best = None
         for o in objs:
             try:
-                # bbox = (x, y, w, h)
                 x, y, w, h = o['bbox']
-                # area 若有提供就用 area，沒有就用 w*h
                 size = float(o.get('area', w * h))
             except Exception:
-                # 當資料格式不正確就跳過
                 continue
 
-            # 篩選：只接受某個大小範圍的物件，避免雜訊
+            # 篩選大小範圍，並保留面積最大的那顆
             if 10 < size < 8000:
-                self.edge_min.x = int(x)
-                self.edge_max.x = int(x + w)
-                self.edge_min.y = int(y)
-                self.edge_max.y = int(y + h)
+                if best is None or size > best['size']:
+                    best = {'x': x, 'y': y, 'w': w, 'h': h, 'size': size}
 
-                self.center.x = int(x + w / 2)
-                self.center.y = int(y + h / 2)
-                self.size = size
-                return True
+        # 都沒有符合的
+        if best is None:
+            return False
 
-        return False
+        x, y, w, h = best['x'], best['y'], best['w'], best['h']
+        self.edge_min.x = int(x)
+        self.edge_max.x = int(x + w)
+        self.edge_min.y = int(y)
+        self.edge_max.y = int(y + h)
+
+        self.center.x = int(x + w / 2)
+        self.center.y = int(y + h / 2)
+        self.size = best['size']
+        return True
 
 
 if __name__ == '__main__':

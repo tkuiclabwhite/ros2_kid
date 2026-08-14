@@ -17,11 +17,11 @@ HORIZON_HEAD = 3096
 HEAD_CHECK = 2080
 HAND_BACK = 222
 LEG_BACK = 1812                                                   
-VERTICAL_HEAD = 2038                                             #tight:[243, 245, 240, 243, 241]
-X_BENCHMARK = [235, 237, 237, 238, 238] # [最左,中左,中間,中右,最右] loose:[220, 228, 224, 226, 224]  tight = loose +15~20(17)
-Y_BENCHMARK = 180                                                 #one step distance +10 (initial 170) x-10
-SHOOT_DELAY = 0.72       # +1s -0.151s   9.68  7.70  6.37  5     4       3.36    2.67       
-                         #shoot_delay:  0.60  0.63  0.68  0.70    0.72    0.80    0.76     
+VERTICAL_HEAD = 2038                                             #hight:[228, 231, 226, 230, 228+]
+X_BENCHMARK = [243, 241, 238, 240, 238] # [最左,中左,中間,中右,最右] low:[243, 241, 238, 240, 238]  tight = loose +15~20(17)
+Y_BENCHMARK = 165                                                 #one step distance +10 (initial 160 High 180) x-10  -15
+SHOOT_DELAY = 0.72       # +1s -0.151s  9.68  7.70  6.37  5       4       3.36    2.67       
+                         #shoot_delay:  0.60  0.63  0.68   0.70    0.72    0.80    0.76     
 # motion sector
 PREPARE = 9999                              
 SHOOT = 456       
@@ -298,10 +298,10 @@ class Archery(Node):
 
                 elif self.ctrl_status == 'archery_action':
                     # 決定要轉多少
-                    if 0 < self.lowest_x <= 140: self.x_benchmark_type = 4
-                    elif 140 < self.lowest_x <= 165: self.x_benchmark_type = 3
+                    if 0 < self.lowest_x <= 130: self.x_benchmark_type = 4
+                    elif 130 < self.lowest_x <= 165: self.x_benchmark_type = 3
                     elif self.lowest_x >= 218: self.x_benchmark_type = 0
-                    elif 218 > self.lowest_x >= 190: self.x_benchmark_type = 1
+                    elif 218 > self.lowest_x >= 200: self.x_benchmark_type = 1
                     else: self.x_benchmark_type = 2 
                     
                     self.get_logger().info(f'Action Type: {self.x_benchmark_type}')
