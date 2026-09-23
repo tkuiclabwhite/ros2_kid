@@ -35,11 +35,14 @@ from std_msgs.msg import String
 # ===========================================================================
 # 調參區
 # ===========================================================================
-USE_REFEREE_COMM = True
+
+USE_REFEREE_COMM = False   # 是否使用裁判通訊，False=不使用，直接進行策略測試
 # --- 策略開關 ---
 # 'KICK_OBSTACLE' : 踢向障礙物（find_pole → adjust_position → kick）
-# 'SHOOT'         : 射門（find_goal → ...，尚未實作）
+# 'SHOOT'         : 射門（find_goal）
+# 'PENALTY_KICK'  : 直接射門，不找球、不找柱、不繞球
 STRATEGY_MODE = 'KICK_OBSTACLE'
+
 
 COLOR_BALL = 'yellow'
 COLOR_POLE = 'blue'
@@ -75,6 +78,7 @@ HEAD_TOL_Y      = 12
 HEAD_SEARCH_STEP_H  = 70
 HEAD_SEARCH_V_LEVELS = [1300, 1450, 1600, 1750,1950]
 #HEAD_SEARCH_V_LEVELS = [1300, 1450, 1600, 1750,1950]
+FIND_BALL_STOP_SETTLE_FRAMES = 3
 
 # --- find_pole 掃描 ---
 POLE_SEARCH_V_LEVELS   = [1450, 1600, 1750, 1900, 2020]
@@ -95,11 +99,37 @@ ORBIT_Y_RIGHT     = -800   # 往右繞（orbit_dir=-1）側向步長（可調）
 ORBIT_THETA_LEFT  = -4     # 往左繞旋轉步長（可調）
 ORBIT_THETA_RIGHT = 4     # 往右繞旋轉步長（可調）
 ORBIT_V_GAIN      = 60.0   # head_v 偏差 → x 步長係數（可調）
-ORBIT_X_MAX       = 500   # x 步長上限
+ORBIT_X_MAX       = 300   # x 步長上限
 ORBIT_TICK_GAIN   = 0.18  # pole_h 誤差刻度 → 目標幀數係數（可調，影響繞球總量）
 
 # --- kick: 踢球動作 ---
 KICK_WAIT_FRAMES  = 30   # 等待踢球動作完成的幀數（0.1s × 30 = 3s，可調）
+
+# --- kick: 固定頭部重新判斷左右腳 ---
+# --- kick: 慢速掃描判斷左右腳 ---
+KICK_SCAN_H = 2048
+
+# kick 前球通常在腳邊，所以 V 不建議掃太高
+KICK_SCAN_V_LEVELS = [1150, 1200, 1250, 1300, 1350, 1450]
+
+# 每一層 V 停幾個 main frame；main 是 0.1s，所以 4 = 0.4 秒
+KICK_SCAN_WAIT_FRAMES = 4
+
+# [新增] kick 進入掃描前，先等 H=2048 到位；main 是 0.1s，所以 10 = 1 秒
+KICK_SCAN_SETTLE_FRAMES = 10
+
+# [新增] kick 掃描用的頭部速度；只在 prepare 送 H，scan 只動 V
+KICK_SCAN_HEAD_SPEED = 30
+
+# 至少要看到幾次球，才相信掃描結果
+# 建議先用 1，因為球在腳邊不一定每個 V 層都看得到。
+KICK_SCAN_MIN_SAMPLES = 1
+
+# 左右腳判斷死區，避免 cx 靠近中心時亂跳
+KICK_SIDE_DEADZONE = 2
+
+# 看不到球或太靠中心時的預設腳
+KICK_DEFAULT_SECTOR = 200
 
 # --- find_goal 掃描（SHOOT 策略） ---
 GOAL_SEARCH_STEP_H   = 60
@@ -125,7 +155,7 @@ BALL_CENTERED_FRAMES = 10   # 對準中心連續幾幀才切換
 
 # --- approach_ball: turn_to_ball ---
 # 身體旋轉時，頭部 H 偏角小於此值視為「已對正」
-TURN_DONE_DEG  = 5.0    # 度，可調整
+TURN_DONE_DEG  = 3.0    # 度，可調整
 # 旋轉速度：偏角大時快轉，偏角小時慢轉
 TURN_THETA_FAST = 5     # 偏角 > 20 度時
 TURN_THETA_MID  = 3     # 偏角 10~20 度時
@@ -338,6 +368,7 @@ class UnitedSoccer(API):
         self.ball_centered_count = 0   # 對準中心的連續幀計數
 
         self.find_ball_walk_search = False
+        self.find_ball_stop_settle_frames = 0
 
         # approach_ball 結束時的頭部位置（供 find_pole 用）
         self.ball_head_h = HEAD_H_CENTER
@@ -362,6 +393,15 @@ class UnitedSoccer(API):
 
         # kick 踢球
         self._kick_wait_frames    = 0
+
+        # [新增] kick 前慢速掃描判斷左右腳
+        self._kick_phase = 'prepare'
+        self._kick_scan_idx = 0
+        self._kick_scan_wait = 0
+        self._kick_scan_samples = []
+        self._kick_selected_cx = -1
+        self._kick_selected_area = 0
+        self._kick_prepare_from_h = HEAD_H_CENTER
 
         # adjust_position 最後看到球的位置，給 kick 判斷左右腳用
         self.kick_ref_visible = False
@@ -388,7 +428,7 @@ class UnitedSoccer(API):
         self._goal_confirm_frames = 0
 
         self.initialized   = False
-        self.state         = 'find_ball'
+        self.state = 'penalty_kick' if STRATEGY_MODE == 'PENALTY_KICK' else 'find_ball'
         self.sub_state     = ''
         self.action_detail = '等待開始'
 
@@ -564,10 +604,22 @@ class UnitedSoccer(API):
             # 有看到球，停止邊走邊找
             if self.find_ball_walk_search:
                 self.sendContinuousValue(x=0, y=0, theta=0)
-               # self.sendbodyAuto(0)
+                self.sendbodyAuto(0)
                 self.find_ball_walk_search = False
 
                 self.search_v_idx = 0
+                self.ball_centered_count = 0
+                self.find_ball_stop_settle_frames = FIND_BALL_STOP_SETTLE_FRAMES
+
+            if self.find_ball_stop_settle_frames > 0:
+                self.sendContinuousValue(x=0, y=0, theta=0)
+                self.sendbodyAuto(0)
+                self.find_ball_stop_settle_frames -= 1
+                self.action_detail = (
+                    f'找到球，停步穩定中 '
+                    f'{self.find_ball_stop_settle_frames}/{FIND_BALL_STOP_SETTLE_FRAMES}'
+                )
+                return
 
             self.ball_lost_count = 0
             centered = self._track_object(self.ball.cx, self.ball.cy)
@@ -986,6 +1038,13 @@ class UnitedSoccer(API):
             self.sendContinuousValue(x=0, y=0, theta=0)
             self.sendbodyAuto(0)
             self._kick_wait_frames = 0
+            # [新增] 每次進入 kick 都從 prepare 開始，避免沿用上一次掃描狀態
+            self._kick_phase = 'prepare'
+            self._kick_scan_idx = 0
+            self._kick_scan_wait = 0
+            self._kick_scan_samples = []
+            self._kick_selected_cx = -1
+            self._kick_selected_area = 0
             self.state = 'kick'
             self.action_detail = (
                 f'軌道修正完成 ✅ → kick  '
@@ -1031,95 +1090,292 @@ class UnitedSoccer(API):
     def _state_kick(self):
         """
         踢球：
-        不在 kick 裡重新 self.ball.update() 判斷，
-        直接沿用 adjust_position 最後一次看到球的位置 kick_ref_cx。
+        [只掃 Vertical 的慢速掃描版]
 
-        kick_ref_cx < IMG_CX → 左腳 sendBodySector(200)
-        kick_ref_cx >= IMG_CX → 右腳 sendBodySector(100)
+        流程：
+        1. 停止走路
+        2. 先把 Horizontal 固定到 KICK_SCAN_H = 2048
+        3. 等 KICK_SCAN_SETTLE_FRAMES 幀，讓水平頭部真的到位
+        4. 掃描時 Horizontal 不再動，只掃 Vertical
+        5. 每個 V 層等待 KICK_SCAN_WAIT_FRAMES 幀，再讀一次球的位置
+        6. 收集看到的 ball.cx / area
+        7. 用 area 最大的那筆判斷左腳或右腳
         """
-        if self._kick_wait_frames == 0:
+
+        # ------------------------------------------------------------
+        # phase 1：準備，停止走路，H 拉到 2048，V 到第一層
+        # ------------------------------------------------------------
+        if self._kick_phase == 'prepare':
             self.sendContinuousValue(x=0, y=0, theta=0)
             self.sendbodyAuto(0)
 
-            # 這裡不重新看球，直接使用 adjust_position 最後記錄的位置
-            self.kick_debug_visible = self.kick_ref_visible
-            self.kick_debug_cx = self.kick_ref_cx
+            self._kick_scan_idx = 0
+            self._kick_scan_wait = 0
+            self._kick_scan_samples = []
+            self._kick_selected_cx = -1
+            self._kick_selected_area = 0
+            self._kick_prepare_from_h = self.head_h
 
-            if self.kick_ref_visible:
-                if self.kick_ref_cx < IMG_CX:
-                    self.kick_debug_side = 'left_ref'
+            # [重點] 只在 prepare 先把 Horizontal 拉回 2048。
+            # settle/scan 會持續補送同一個 H 目標，避免實體頭部還停在上一狀態。
+            self.head_h = KICK_SCAN_H
+            self.head_v = KICK_SCAN_V_LEVELS[self._kick_scan_idx]
+            self.sendHeadMotor(1, self.head_h, KICK_SCAN_HEAD_SPEED)
+            self.sendHeadMotor(2, self.head_v, KICK_SCAN_HEAD_SPEED)
+
+            self.kick_debug_visible = False
+            self.kick_debug_cx = -1
+            self.kick_debug_side = 'settle_head'
+            self.kick_debug_sector = 0
+            self.kick_ref_head_h = self.head_h
+            self.kick_ref_head_v = self.head_v
+
+            self.action_detail = (
+                f'kick準備：H from {self._kick_prepare_from_h} → {self.head_h}，'
+                f'Vertical 從 V={self.head_v} 開始，等待頭部到位'
+            )
+
+            self._kick_phase = 'settle'
+            return
+
+        # ------------------------------------------------------------
+        # phase 1.5：等待 H=2048 到位
+        # ------------------------------------------------------------
+        if self._kick_phase == 'settle':
+            # 這裡不掃描，只是等頭部穩定。每幀補送 H=2048，
+            # 避免上一個狀態留下的 H 實體位置或延遲指令影響 kick。
+            self.head_h = KICK_SCAN_H
+            self.head_v = KICK_SCAN_V_LEVELS[0]
+            self.sendHeadMotor(1, self.head_h, KICK_SCAN_HEAD_SPEED)
+            self.sendHeadMotor(2, self.head_v, KICK_SCAN_HEAD_SPEED)
+
+            self._kick_scan_wait += 1
+
+            self.kick_ref_head_h = self.head_h
+            self.kick_ref_head_v = self.head_v
+
+            self.action_detail = (
+                f'kick等待頭部到位：H={self.head_h} '
+                f'from={self._kick_prepare_from_h} V={self.head_v} '
+                f'等待 {self._kick_scan_wait}/{KICK_SCAN_SETTLE_FRAMES}'
+            )
+
+            if self._kick_scan_wait < KICK_SCAN_SETTLE_FRAMES:
+                return
+
+            self._kick_scan_wait = 0
+            self._kick_phase = 'scan'
+            return
+
+        # ------------------------------------------------------------
+        # phase 2：只掃 Vertical，慢慢收集球的位置
+        # ------------------------------------------------------------
+        if self._kick_phase == 'scan':
+            # scan 只改 Vertical，但仍固定補送 H=2048，避免頭部被上一狀態或動作包帶走。
+            self.head_h = KICK_SCAN_H
+            self.sendHeadMotor(1, self.head_h, KICK_SCAN_HEAD_SPEED)
+
+            target_v = KICK_SCAN_V_LEVELS[self._kick_scan_idx]
+
+            # [重點] scan 階段 Horizontal 固定在 KICK_SCAN_H，只掃 Vertical。
+            if self.head_v != target_v:
+                self.head_v = target_v
+                self.sendHeadMotor(2, self.head_v, KICK_SCAN_HEAD_SPEED)
+                self._kick_scan_wait = 0
+                return
+
+            self._kick_scan_wait += 1
+
+            self.action_detail = (
+                f'kick慢速掃描中：H固定={self.head_h}  '
+                f'V層 {self._kick_scan_idx + 1}/{len(KICK_SCAN_V_LEVELS)} '
+                f'V={target_v}  '
+                f'等待 {self._kick_scan_wait}/{KICK_SCAN_WAIT_FRAMES}'
+            )
+
+            if self._kick_scan_wait < KICK_SCAN_WAIT_FRAMES:
+                return
+
+            # 等夠後，讀一次球的位置。
+            self.ball.update()
+
+            if self.ball.visible:
+                self._kick_scan_samples.append({
+                    'cx': self.ball.cx,
+                    'cy': self.ball.cy,
+                    'area': self.ball.area,
+                    'head_h': self.head_h,
+                    'head_v': self.head_v,
+                })
+
+                self.kick_debug_visible = True
+                self.kick_debug_cx = self.ball.cx
+                self.kick_ref_head_h = self.head_h
+                self.kick_ref_head_v = self.head_v
+
+                self.action_detail = (
+                    f'kick掃描看到球：H固定={self.head_h} V={self.head_v} '
+                    f'cx={self.ball.cx} cy={self.ball.cy} area={self.ball.area}'
+                )
+
+            # 換下一層 V
+            self._kick_scan_idx += 1
+            self._kick_scan_wait = 0
+
+            if self._kick_scan_idx >= len(KICK_SCAN_V_LEVELS):
+                self._kick_phase = 'decide'
+                return
+
+            # 只改 Vertical
+            self.head_v = KICK_SCAN_V_LEVELS[self._kick_scan_idx]
+            self.sendHeadMotor(2, self.head_v, KICK_SCAN_HEAD_SPEED)
+            return
+
+        # ------------------------------------------------------------
+        # phase 3：根據掃描結果決定左右腳
+        # ------------------------------------------------------------
+        if self._kick_phase == 'decide':
+            if len(self._kick_scan_samples) >= KICK_SCAN_MIN_SAMPLES:
+                # 選 area 最大的那筆，通常代表球看得最清楚 / 最近
+                best = max(self._kick_scan_samples, key=lambda s: s['area'])
+
+                self._kick_selected_cx = best['cx']
+                self._kick_selected_area = best['area']
+
+                self.kick_debug_visible = True
+                self.kick_debug_cx = best['cx']
+                self.kick_ref_cx = best['cx']
+                self.kick_ref_cy = best['cy']
+                self.kick_ref_head_h = best['head_h']
+                self.kick_ref_head_v = best['head_v']
+
+                if best['cx'] < IMG_CX - KICK_SIDE_DEADZONE:
+                    self.kick_debug_side = 'left_scan_v_only'
                     self.kick_debug_sector = 200
                     self.action_detail = (
-                        f'KICK用adjust最後球位置：cx={self.kick_ref_cx} < {IMG_CX} '
+                        f'kick掃描判斷：best H={best["head_h"]} V={best["head_v"]} '
+                        f'cx={best["cx"]} < {IMG_CX - KICK_SIDE_DEADZONE} '
                         f'→ 左腳 sector=200'
                     )
 
-                    # 球在畫面左半邊 → 左腳
-                    time.sleep(2)
-                    self.sendBodySector(999)
-                    time.sleep(2)
-                    self.sendBodySector(200)
-                    time.sleep(14)
-                    self.sendBodySector(29)
-                    time.sleep(1)
-
-                else:
-                    self.kick_debug_side = 'right_ref'
+                elif best['cx'] > IMG_CX + KICK_SIDE_DEADZONE:
+                    self.kick_debug_side = 'right_scan_v_only'
                     self.kick_debug_sector = 100
                     self.action_detail = (
-                        f'KICK用adjust最後球位置：cx={self.kick_ref_cx} >= {IMG_CX} '
+                        f'kick掃描判斷：best H={best["head_h"]} V={best["head_v"]} '
+                        f'cx={best["cx"]} > {IMG_CX + KICK_SIDE_DEADZONE} '
                         f'→ 右腳 sector=100'
                     )
 
-                    # 球在畫面右半邊 → 右腳
-                    time.sleep(2)
-                    self.sendBodySector(999)
-                    time.sleep(2)
-                    self.sendBodySector(100)
-                    time.sleep(14)
-                    self.sendBodySector(29)
-                    time.sleep(1)
+                else:
+                    self.kick_debug_side = 'center_default_scan_v_only'
+                    self.kick_debug_sector = KICK_DEFAULT_SECTOR
+                    self.action_detail = (
+                        f'kick掃描判斷：best H={best["head_h"]} V={best["head_v"]} '
+                        f'cx={best["cx"]} 接近中心 IMG_CX={IMG_CX} '
+                        f'→ 預設 sector={KICK_DEFAULT_SECTOR}'
+                    )
 
             else:
-                # adjust_position 最後完全沒有留下球位置，才走保底
-                # 這裡不要一直重複踢，只會在 _kick_wait_frames == 0 時執行一次
-                self.kick_debug_side = 'no_ref'
-                self.kick_debug_sector = 100
+                self.kick_debug_visible = False
+                self.kick_debug_cx = -1
+                self.kick_debug_side = 'no_ball_scan_v_only'
+                self.kick_debug_sector = KICK_DEFAULT_SECTOR
                 self.action_detail = (
-                    'adjust_position 沒有留下球位置 → 預設右腳 sector=100'
+                    f'kick掃描全部沒看到球，samples={len(self._kick_scan_samples)} '
+                    f'→ 預設 sector={KICK_DEFAULT_SECTOR}'
                 )
 
-                time.sleep(2)
-                self.sendBodySector(999)
-                time.sleep(2)
-                self.sendBodySector(100)
-                time.sleep(14)
-                self.sendBodySector(29)
-                time.sleep(1)
+            self._kick_phase = 'execute'
+            return
 
-        self._kick_wait_frames += 1
+        # ------------------------------------------------------------
+        # phase 4：執行踢球動作，只執行一次
+        # ------------------------------------------------------------
+        if self._kick_phase == 'execute':
+            sector = self.kick_debug_sector
 
-        if self._kick_wait_frames >= KICK_WAIT_FRAMES:
-            self._initialize()
-            self.action_detail = '踢球完成 ✅ → 初始化 → find_ball'
+            self.sendContinuousValue(x=0, y=0, theta=0)
+            self.sendbodyAuto(0)
+
+            time.sleep(2)
+            self.sendBodySector(999)
+
+            # 左腳你原本想等久一點，保留 4 秒；右腳維持 2 秒
+            if sector == 200:
+                time.sleep(4)
+            else:
+                time.sleep(2)
+
+            self.sendBodySector(sector)
+            time.sleep(14)
+            self.sendBodySector(29)
+            time.sleep(1)
+
+            self._kick_wait_frames = 0
+            self._kick_phase = 'wait_done'
+            return
+
+        # ------------------------------------------------------------
+        # phase 5：踢完後初始化
+        # ------------------------------------------------------------
+        if self._kick_phase == 'wait_done':
+            self._kick_wait_frames += 1
+
+            if self._kick_wait_frames >= KICK_WAIT_FRAMES:
+                self._initialize()
+                self.action_detail = '踢球完成 ✅ → 初始化 → find_ball'
+
+
+    def _state_penalty_kick(self):
+        """
+        PENALTY_KICK 策略：
+        只做射門動作，不找球、不找柱、不繞球。
+        執行一次後停在 penalty_done，避免一直重複踢。
+        """
+        self.sendContinuousValue(x=0, y=0, theta=0)
+        self.sendbodyAuto(0)
+
+        self.action_detail = 'PENALTY_KICK：左腳射門 sector={200}'
+
+        time.sleep(2)
+        self.sendBodySector(999)   # 踢球前預備
+        time.sleep(2)
+        self.sendBodySector(200)
+        time.sleep(14)
+        self.sendBodySector(29)    # 回初始站姿
+        time.sleep(1)
+
+        self.state = 'penalty_done'
+        self.action_detail = 'PENALTY_KICK 完成 ✅ 停在 penalty_done'
+
 
     def _initialize(self):
         """每次撥開關啟動或踢球完成後執行：頭部歸中、停走、站穩後重新校正 IMU、重置狀態。"""
+        self.sendContinuousValue(x=0, y=0, theta=0)
+        self.sendbodyAuto(0)
+
         self.head_h = HEAD_H_CENTER
         self.head_v = HEAD_V_CENTER
-        self.sendHeadMotor(1, self.head_h, HEAD_SPEED)
-        self.sendHeadMotor(2, self.head_v, HEAD_SPEED)
-        self.sendbodyAuto(0)
+        self.sendHeadMotor(1, HEAD_H_CENTER, HEAD_SPEED)
+        self.sendHeadMotor(2, HEAD_V_CENTER, HEAD_SPEED)
         time.sleep(1)
         self.sendBodySector(29)
+        self.sendContinuousValue(x=0, y=0, theta=0)
+        self.sendbodyAuto(0)
         time.sleep(0.5)   # 等身體確實站穩，再校正 IMU 零點
         self.sendSensorReset(True)   # 踢球後姿態可能偏移，重新校正 Yaw/Roll/Pitch
         time.sleep(0.05)
+
+        self.ball.visible = False
+        self.pole.visible = False
+        self.goal.visible = False
 
         self.ball_lost_count = 0
         self.ball_centered_count = 0
 
         self.find_ball_walk_search = False
+        self.find_ball_stop_settle_frames = 0
 
         self.search_dir = 'right'
         self.search_v_idx = 0
@@ -1139,6 +1395,16 @@ class UnitedSoccer(API):
         self._orbit_target_frames = 0
         self._kick_wait_frames = 0
 
+        self._kick_phase = 'prepare'
+        self._kick_scan_idx = 0
+        self._kick_scan_wait = 0
+        self._kick_scan_samples = []
+        self._kick_selected_cx = -1
+        self._kick_selected_area = 0
+        self._kick_prepare_from_h = HEAD_H_CENTER
+
+
+
         self.kick_ref_visible = False
         self.kick_ref_cx = 0
         self.kick_ref_cy = 0
@@ -1156,9 +1422,14 @@ class UnitedSoccer(API):
         self.goal_found_v = HEAD_V_CENTER
         self._goal_confirm_frames = 0
 
-        self.state         = 'find_ball'
-        self.sub_state     = ''
-        self.action_detail = '初始化完成 → find_ball'
+        if STRATEGY_MODE == 'PENALTY_KICK':
+            self.state = 'penalty_kick'
+            self.action_detail = '初始化完成 → penalty_kick'
+        else:
+            self.state = 'find_ball'
+            self.action_detail = '初始化完成 → find_ball'
+
+        self.sub_state = ''
 
     # -----------------------------------------------------------------------
     # 主迴圈
@@ -1211,6 +1482,12 @@ class UnitedSoccer(API):
             self._state_kick()
         elif self.state == 'find_goal':
             self._state_find_goal()
+        elif self.state == 'penalty_kick':
+            self._state_penalty_kick()
+
+        elif self.state == 'penalty_done':
+            self.sendContinuousValue(x=0, y=0, theta=0)
+            self.sendbodyAuto(0)
 
 # ===========================================================================
 # 進入點

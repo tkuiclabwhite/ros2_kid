@@ -48,7 +48,11 @@ setup(
             'wl_tui  = strategy.wl.wl_new:main',
             'us_new = strategy.us.us_new:main',
             'trace = strategy.us.trace_ball_stop:main',
+            'trace_comm = strategy.us.trace_comm:main',
             'us_comm = strategy.us.comm_node:main',
+            'test_find_goal = strategy.us.test_find_goal:main',
+            'gk = strategy.us.goalkeeper:main',
+
             ],
     },
 )

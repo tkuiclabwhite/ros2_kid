@@ -14,9 +14,9 @@ FORWARD_CORRECTION         = -600
 #平移校正
 TRANSLATION_CORRECTION     = -400
 #旋轉校正
-THETA_CORRECTION           = -2
+THETA_CORRECTION           = 0
 #基礎變化量(前進&平移)
-BASE_CHANGE                = 300
+BASE_CHANGE                = 200
 HEAD_CHANGE_H              = 5
 HEAD_CHANGE_V              = 100
 # ---微調站姿開關---#
@@ -39,54 +39,37 @@ RATIO_NEAR = -1.35 #(2251-2363)/100
 
 # ========= 距離抓點參數：參考籃球 distance = FOCAL * REAL / pixel_length =========
 # 攀岩點實際高度，單位自己統一即可，先用 10 當基準
-CW_REAL_POINT_LENGTH = 23
+CW_REAL_POINT_LENGTH = 10
 # 相機焦距參數，先沿用籃球的 330，現場再校正
-CW_FOCAL_LENGTH = 44
+CW_FOCAL_LENGTH = 330
 
 # # # # # # # # 距離抓點# # # # # # # # # # # # # # # # 
 # 理想抓點距離，越大代表希望站/抓得更遠 抓太前面 → 調大 / 抓太後面 → 調小
-CW_DIST_TARGET = 24
+CW_DIST_TARGET = 60
 # 左右像素偏移轉手馬達量 左右抓歪
 CW_DIST_GAIN_X = 3.0
 # 上下像素偏移轉手馬達量 上下抓歪
 CW_DIST_GAIN_Y = 1.5
 # 遠近距離誤差轉手伸出去的量 如果：距離變很多手只動一點調大
 CW_DIST_GAIN_Z = 4.0
-
+CW_DIST_TARGET = 60
+CW_DIST_GAIN_X = 3.0
+CW_DIST_GAIN_Y = 1.5
+CW_DIST_GAIN_Z = 4.0
 #######################################################
 # ========= 手部抓點微調 =========
-# X：左右修正。左手抓太左/右手抓太左 -> 加大；抓太右 -> 減小
-LEFT_HAND_X_OFFSET = -180
-RIGHT_HAND_X_OFFSET = -300
+# X：左右修正。左手抓太左/右手抓太左 -> 加大；抓太右 -> 減小  往右都是加 往左都是減
+LEFT_HAND_X_OFFSET = -80
+RIGHT_HAND_X_OFFSET = -260
 
 # Y：高低修正。手抓太高 -> 減小；手抓太低 -> 加大
-LEFT_HAND_Y_OFFSET = 730
+LEFT_HAND_Y_OFFSET = 750
 RIGHT_HAND_Y_OFFSET = -750
 # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 # 防止一次輸出太大，可依你的馬達安全範圍調整
 CW_HAND_X_LIMIT = 1000
 CW_HAND_Y_LIMIT = 1000
-
-# ========= 動態距離抓點參數（只影響抓點，不影響走路） =========
-# 現場校正方式：把單一攀岩點放在 17cm，讀 log 的 hold_area，填到 CW_GRIP_CALIB_AREA
-CW_DYNAMIC_GRIP_ENABLE = True
-CW_GRIP_CALIB_DISTANCE_CM = 24.0 #---------------------------------------------------------------------------------------------------------------------站在24cm
-CW_GRIP_CALIB_AREA = 1204.0  #-------------------------------------------------------------------------------------------------------------------------在24cm終端印出的面積
-# 希望手去抓點時的理想距離；抓太深/壓太多 -> 調大，抓不到/伸不夠 -> 調小
-CW_GRIP_TARGET_DISTANCE_CM = 17.0
-# 攀岩點實際寬度，拿來把像素 dx/dy 換成大概公分，選點會用
-CW_REAL_HOLD_WIDTH_CM = 4.0
-# 手臂可抓最大直線距離；常常找不到點 -> 調大，常選太遠抓不到 -> 調小＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃
-CW_ARM_MAX_LENGTH_CM = 50.0
-#######################################################################################################################
-# 距離補償變平滑，避免每次面積跳動造成手抖；0.0 不更新，1.0 完全跟最新值
-CW_DISTANCE_SMOOTH_ALPHA = 0.35
-# 動態距離轉手部 X 補償；抓太前面/壓太多通常調小，伸不夠調大
-CW_DIST_CM_GAIN_X = 35.0
-# 面積異常保護
-CW_MIN_HOLD_AREA = 300
-CW_MAX_VALID_DISTANCE_CM = 60.0
 
 #------------------#
 HEAD_HORIZONTAL            = 2048               #頭水平
@@ -95,8 +78,8 @@ HEAD_VERTICAL              = 2048              #頭垂直 #30cm2150
 HEAD_LEFT_HAND_H = 2550
 HEAD_LEFT_HAND_V = 2100  #2100
 
-HEAD_RIGHT_HAND_H = 1550
-HEAD_RIGHT_HAND_V = 2200
+HEAD_RIGHT_HAND_H = 1750
+HEAD_RIGHT_HAND_V = 2300  #往上看調小 挑點
  
 HEAD_LEFT_LEG_H = 1750
 HEAD_LEFT_LEG_V = 1750
@@ -126,15 +109,28 @@ MY_LINE_Y= 120 #攀岩基準線
 MY_LINE_X =160 #攀岩基準線
 MY_SIZE = 1020
 
-# ========= 走到定點微調 =========
-# 直接調這個控制停下來距離：走太近 -> 改更負；走太遠 -> 改大＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃＃
-READY_DISTANCE_ADJUST = 0
-###################################################################################################################
+# ========= 走路/停止位置微調 =========
+# 停止距離：只改這個就好
+# 走太近 -> 改更負，例如 -20、-50
+# 走太遠 -> 改更大，例如 +20、+50
+READY_DISTANCE_ADJUST = -150    
+
 # 保留原本參數但不再用它控制距離，避免搞混
 WALK_SIZE_OFFSET = 0
 
-# 左右：人站太左/太右時微調中心線；正負方向依現場測一次修
+# 站位左右中心線微調：
+# 最後站太左/太右才調這個；正負方向依現場測一次修
 WALK_X_OFFSET = 10
+
+# 走路本身斜走微調：
+# 前進時如果往右前方斜走，就先調這個
+# 建議一次改 30~50 測；方向不對就改相反號
+WALK_Y_ADJUST = -20
+
+# 走路旋轉微調：
+# 如果是邊走邊轉，不是單純斜移，才調這個
+# 建議先用 0 測；需要時一次改 1
+WALK_THETA_ADJUST = 0
 
 ROI_RADIUS = 120
 
@@ -144,7 +140,19 @@ LEFT_HAND_TARGET_Y_OFFSET  = 55
 RIGHT_HAND_TARGET_Y_OFFSET = 55
 # 允許高度範圍；數字越小越不容易跳到別顆
 LEFT_HAND_Y_RANGE  = 25
-RIGHT_HAND_Y_RANGE = 25
+RIGHT_HAND_Y_RANGE = 20
+# ===== 右手上下選點範圍 =====
+RIGHT_HAND_MIN_Y = 30   # 右手最上面允許高度，越小越往上
+RIGHT_HAND_MAX_Y = 90   # 右手最下面允許高度，越小越不會抓下面那顆
+
+# 右手左右選點範圍：越小越不會抓太左/太右；建議先 60，太窄找不到點就改 70/80
+RIGHT_HAND_X_RANGE = 100
+
+# 右手只在右上區域小範圍掃描，不會往右下掃
+RIGHT_HAND_SCAN_H_STEP = 20
+RIGHT_HAND_SCAN_V_STEP = 20
+RIGHT_HAND_SCAN_H_RANGE = 120
+RIGHT_HAND_SCAN_V_RANGE = 80
 
 # 參照 0422：只掃左上、右上安全角度，避免頭亂掃卡到
 HAND_SAFE_SCAN_VIEWS = [
@@ -153,15 +161,15 @@ HAND_SAFE_SCAN_VIEWS = [
 ]
 
 #前後值
-BACK_MIN                   = -600                #小退後
+BACK_MIN                   = -400                #小退後
 FORWARD_MIN               = 100
-FORWARD_LOW               = 200             #小前進 300
-FORWARD_NORMAL             = 300                 #前進
-FORWARD_HIGH                = 500               #大前進
+FORWARD_LOW               = 150             #小前進 300
+FORWARD_NORMAL             = 200                 #前進
+FORWARD_HIGH                = 300               #大前進
 
 #平移值
-TRANSLATION_BIG            = 500                  #大平移
-TRANSLATION_NORMAL         = 300
+TRANSLATION_BIG            = 200                  #大平移
+TRANSLATION_NORMAL         = 150
 #旋轉值
 # THETA_MIN                  = 3                     #小旋轉
 # THETA_NORMAL               = 1                    #旋轉
@@ -303,6 +311,29 @@ class WallClimbing(API):
                             self.okcnt = 0
                             self.climb_step += 1
                             self.been_done = False
+
+                            # ===== 左手抓完後，直接看右上角準備抓右手 =====
+                            # 這裡會在 climb_step 從 1 變成 2 的瞬間生效。
+                            # 目的：不要沿用左手追蹤後的頭部角度，也不要先往下掃。
+                            if self.climb_step == 2:
+                                self.get_logger().info("左手完成：直接固定看右上角找右手點")
+
+                                self.action = 'right_hand'
+                                self.beseen_lamb = True
+                                self.lookok = False
+                                self.search_stage = 0
+                                self.scan_count = 0
+                                self.cnt = 0
+                                self.right_scan_dir_h = 1
+                                self.right_scan_dir_v = 1
+
+                                self.now_head_Horizontal = HEAD_RIGHT_HAND_H
+                                self.now_head_Vertical = HEAD_RIGHT_HAND_V
+
+                                self.sendHeadMotor(1, HEAD_RIGHT_HAND_H, 40)
+                                self.sendHeadMotor(2, HEAD_RIGHT_HAND_V, 40)
+
+                                time.sleep(1)
                         else:
                             self.state = "視覺追蹤與姿態準備中"
                             self.climbmode(self.action, self.value)
@@ -407,6 +438,8 @@ class WallClimbing(API):
         self.p_y2 = linear_solution[1]
 
         self.search_stage = 0
+        self.right_scan_dir_h = 1
+        self.right_scan_dir_v = 1
         # self.p_height = HEAP_HEIGHT / TARGET_SIZE 
 
     def clamp_value(self, value, min_value, max_value):
@@ -523,7 +556,7 @@ class WallClimbing(API):
         else:
                 self.get_logger().info("前進對齊,準備平移")
                 if self.object_x > 0:            
-                    self.translation = max(min(error_x * 35, 1000), -1000) if abs(error_x) > 10.0 else 0.0
+                    self.translation = max(min(error_x * 20, 1000), -1000) if abs(error_x) > 10.0 else 0.0
                 else:
                     self.translation = 0.0
 
@@ -572,11 +605,20 @@ class WallClimbing(API):
             
             self.get_logger().info(f"f   :{f}")
             self.get_logger().info(f"t   :{t}")
+            self.get_logger().info(f"WALK_Y_ADJUST:{WALK_Y_ADJUST}, WALK_THETA_ADJUST:{WALK_THETA_ADJUST}")
             
+            # ========= 新增：走路微調 =========
+            # 1. 還在前進找停止距離時：
+            #    用 WALK_Y_ADJUST 修正斜走，用 WALK_THETA_ADJUST 修正邊走邊轉
+            # 2. 前進完成、開始平移對中心時：
+            #    保留原本 t 的視覺平移量，再疊加 WALK_Y_ADJUST
+            walk_y = TRANSLATION_CORRECTION + WALK_Y_ADJUST
+            walk_theta = THETA_CORRECTION + WALK_THETA_ADJUST
+
             if not self.forward_ok:
-                self.sendContinuousValue(f, TRANSLATION_CORRECTION ,THETA_CORRECTION)
+                self.sendContinuousValue(f, walk_y, walk_theta)
             else:
-                self.sendContinuousValue(FORWARD_CORRECTION,t,THETA_CORRECTION)
+                self.sendContinuousValue(FORWARD_CORRECTION, t + WALK_Y_ADJUST, walk_theta)
 
 
     def ramp_speed(self, current, target, step):
@@ -589,66 +631,34 @@ class WallClimbing(API):
         return target
 
 
-    def calculate_hold_distance_cm(self, current_target):
-        """
-        用面積估距離：distance = K / sqrt(area)
-        K = 校正距離 * sqrt(校正面積)
-        這裡只給抓點用，不會影響走路的 size 判斷。
-        """
-        area = float(current_target.get('size', 0) or 0)
-        xmin, ymin, xmax, ymax = current_target['bbox']
-        bbox_w = max(1, xmax - xmin)
-        bbox_h = max(1, ymax - ymin)
-
-        if area <= 0:
-            area = float(bbox_w * bbox_h)
-
-        if area < CW_MIN_HOLD_AREA:
-            self.get_logger().info(f"攀岩點面積太小 area={area:.1f}，不做距離抓點")
-            return None
-
-        k = CW_GRIP_CALIB_DISTANCE_CM * math.sqrt(CW_GRIP_CALIB_AREA)
-        distance_cm = k / math.sqrt(area)
-        distance_cm = self.clamp_value(distance_cm, 1.0, CW_MAX_VALID_DISTANCE_CM)
-
-        # 做一點濾波，不然面積跳動時手部補償會跟著跳
-        last = getattr(self, 'last_hold_distance_cm', None)
-        if last is None:
-            smooth_distance = distance_cm
-        else:
-            smooth_distance = (last * (1.0 - CW_DISTANCE_SMOOTH_ALPHA)) + (distance_cm * CW_DISTANCE_SMOOTH_ALPHA)
-        self.last_hold_distance_cm = smooth_distance
-
-        self.get_logger().info(
-            f"距離估測: hold_area={area:.1f}, bbox={bbox_w}x{bbox_h}, "
-            f"raw={distance_cm:.1f}cm, smooth={smooth_distance:.1f}cm"
-        )
-        return smooth_distance
-
     def calculate_hand_motor_by_distance(self, action, current_target):
         """
-        動態抓點：
-        1. 用攀岩點面積換算距離
-        2. 用距離誤差自動補 X 方向伸手量
-        3. 保留 LEFT/RIGHT_HAND_X/Y_OFFSET，方便現場最後微調
+        參考籃球 basket_distance()：
+        distance = FOCAL_LENGTH * REAL_LENGTH / pixel_length
+        這裡 pixel_length 用攀岩點 bbox 高度 ymax-ymin。
         """
         target_cx, target_cy = current_target['center']
+        xmin, ymin, xmax, ymax = current_target['bbox']
 
-        target_dx = target_cx - MY_LINE_X
-        target_dy = target_cy - MY_LINE_Y
-
-        distance_cm = self.calculate_hold_distance_cm(current_target)
-        if distance_cm is None:
+        point_length = ymax - ymin
+        if point_length <= 0:
+            self.get_logger().info("攀岩點高度錯誤，停止抓點")
             return None, None
 
-        distance_error_cm = distance_cm - CW_GRIP_TARGET_DISTANCE_CM
+        target_distance = CW_FOCAL_LENGTH * CW_REAL_POINT_LENGTH / point_length
+        target_dx = target_cx - MY_LINE_X
+        target_dy = target_cy - MY_LINE_Y
+        distance_error = target_distance - CW_DIST_TARGET
 
+        # 左右偏移 + 遠近補償
+        # 左手、右手分開算，因為右手遠近方向相反
         if action == 'left_hand':
             motor_value_x = (
                 target_dx * CW_DIST_GAIN_X
-                + distance_error_cm * CW_DIST_CM_GAIN_X
+                + distance_error * CW_DIST_GAIN_Z
                 + LEFT_HAND_X_OFFSET
             )
+
             motor_value_y = (
                 target_dy * CW_DIST_GAIN_Y
                 + LEFT_HAND_Y_OFFSET
@@ -656,23 +666,33 @@ class WallClimbing(API):
 
         elif action == 'right_hand':
             motor_value_x = (
-                -(target_dx * CW_DIST_GAIN_X)
-                + distance_error_cm * CW_DIST_CM_GAIN_X
+                -(target_dx * CW_DIST_GAIN_X
+                - distance_error * CW_DIST_GAIN_Z)
                 + RIGHT_HAND_X_OFFSET
             )
+
             motor_value_y = (
                 target_dy * CW_DIST_GAIN_Y
                 + RIGHT_HAND_Y_OFFSET
             )
+
         else:
             return None, None
 
-        motor_value_x = self.clamp_value(motor_value_x, -CW_HAND_X_LIMIT, CW_HAND_X_LIMIT)
-        motor_value_y = self.clamp_value(motor_value_y, -CW_HAND_Y_LIMIT, CW_HAND_Y_LIMIT)
+        motor_value_x = self.clamp_value(
+            motor_value_x,
+            -CW_HAND_X_LIMIT,
+            CW_HAND_X_LIMIT
+        )
 
+        motor_value_y = self.clamp_value(
+            motor_value_y,
+            -CW_HAND_Y_LIMIT,
+            CW_HAND_Y_LIMIT
+        )
         self.get_logger().info(
-            f"{action} 動態抓點: dist={distance_cm:.1f}cm, "
-            f"target={CW_GRIP_TARGET_DISTANCE_CM:.1f}cm, err={distance_error_cm:.1f}cm, "
+            f"{action} 距離抓點: point_length={point_length}, "
+            f"distance={target_distance:.1f}, error={distance_error:.1f}, "
             f"dx={target_dx}, dy={target_dy}"
         )
         self.get_logger().info(
@@ -685,6 +705,37 @@ class WallClimbing(API):
 
         if current_target == 'no_object' or current_target is None:
             self.get_logger().info(f"目標丟失！當前追蹤側: {action}，啟動分段搜尋...")
+            if action == 'right_hand':
+                self.get_logger().info("右手追蹤丟點：回右上小範圍掃描，不往下面看")
+
+                if not hasattr(self, 'right_scan_dir_h'):
+                    self.right_scan_dir_h = 1
+                if not hasattr(self, 'right_scan_dir_v'):
+                    self.right_scan_dir_v = 1
+
+                self.now_head_Horizontal += RIGHT_HAND_SCAN_H_STEP * self.right_scan_dir_h
+
+                if self.now_head_Horizontal > HEAD_RIGHT_HAND_H + RIGHT_HAND_SCAN_H_RANGE:
+                    self.now_head_Horizontal = HEAD_RIGHT_HAND_H + RIGHT_HAND_SCAN_H_RANGE
+                    self.right_scan_dir_h = -1
+                    self.now_head_Vertical += RIGHT_HAND_SCAN_V_STEP * self.right_scan_dir_v
+
+                elif self.now_head_Horizontal < HEAD_RIGHT_HAND_H - RIGHT_HAND_SCAN_H_RANGE:
+                    self.now_head_Horizontal = HEAD_RIGHT_HAND_H - RIGHT_HAND_SCAN_H_RANGE
+                    self.right_scan_dir_h = 1
+                    self.now_head_Vertical += RIGHT_HAND_SCAN_V_STEP * self.right_scan_dir_v
+
+                if self.now_head_Vertical > HEAD_RIGHT_HAND_V + RIGHT_HAND_SCAN_V_RANGE:
+                    self.now_head_Vertical = HEAD_RIGHT_HAND_V + RIGHT_HAND_SCAN_V_RANGE
+                    self.right_scan_dir_v = -1
+
+                elif self.now_head_Vertical < HEAD_RIGHT_HAND_V - RIGHT_HAND_SCAN_V_RANGE:
+                    self.now_head_Vertical = HEAD_RIGHT_HAND_V - RIGHT_HAND_SCAN_V_RANGE
+                    self.right_scan_dir_v = 1
+
+                self.sendHeadMotor(1, int(self.now_head_Horizontal), 40)
+                self.sendHeadMotor(2, int(self.now_head_Vertical), 40)
+                return
 
             if self.search_stage == 0:
                 self.search_stage = 1
@@ -780,15 +831,15 @@ class WallClimbing(API):
 
             if not self.allontarget:
                 if action == 'left_hand' or action == 'right_hand':
-                    time.sleep(1)
+                    time.sleep(3)
                     self.sendBodySector(cfg['climb_sector_1'])
-                    time.sleep(2)
+                    time.sleep(3)
                     self.sendBodySector(cfg['climb_sector_2'])
-                    time.sleep(2.5)
+                    time.sleep(5)
                     self.sendBodySector(cfg['climb_sector_3'])
-                    time.sleep(2)
+                    time.sleep(3)
                     self.sendBodySector(cfg['climb_sector_4'])
-                    time.sleep(2)
+                    time.sleep(3)
                     self.get_logger().info("動作中")
                 elif action == 'left_leg' or action == 'right_leg':
                     if action == 'right_leg':
@@ -904,6 +955,7 @@ class WallClimbing(API):
         color_1 = self.target.color1
         color_2 = self.target.color2
         target_colors = [color_1, color_2]
+
         point_r = 10
 
         for color in target_colors:
@@ -911,13 +963,35 @@ class WallClimbing(API):
 
             for i in range(min(cnts, len(self.object_sizes[color]) + 1)):
                 size = self.object_sizes[color][i]
-                if size < CW_MIN_HOLD_AREA:
+                if size < 300:
                     continue
 
                 cx = (self.object_x_max[color][i] + self.object_x_min[color][i]) // 2
                 cy = (self.object_y_max[color][i] + self.object_y_min[color][i]) // 2
+                
                 if cx is None or cy is None:
                     continue
+
+                # ===== 右手左右、上下選點範圍 =====
+                if getattr(self, 'action', '') == 'right_hand':
+                    if cy > 80:
+                        continue
+
+                    # 只抓頭上方的點：畫面 y 越小越上面
+                    if cy >= MY_LINE_Y - RIGHT_HAND_TARGET_Y_OFFSET:
+                        continue
+
+                    # 右手只抓右半邊，不要抓到左邊
+                    if cx <= MY_LINE_X:
+                        continue
+
+                    # 不要太偏右，避免亂抓
+                    if cx > MY_LINE_X + RIGHT_HAND_X_RANGE:
+                        continue
+
+                    # 上下限制，只保留右手上方安全區
+                    if cy < RIGHT_HAND_MIN_Y or cy > RIGHT_HAND_MAX_Y:
+                        continue
 
                 xmax = self.object_x_max[color][i]
                 xmin = self.object_x_min[color][i]
@@ -927,71 +1001,60 @@ class WallClimbing(API):
                 if xmin <= 0 or xmax >= 320 or ymin <= 0 or ymax >= 240:
                     continue
 
-                dist_px = math.sqrt((cx - self.ROI_cx) ** 2 + (cy - self.ROI_cy) ** 2)
-                if (dist_px + point_r) > (ROI_RADIUS + 60):
+                dist = math.sqrt((cx - self.ROI_cx) ** 2 + (cy - self.ROI_cy) ** 2)
+                if (dist + point_r) > (ROI_RADIUS + 60):
                     continue
 
-                bbox_w = max(1, xmax - xmin)
-                pixel_to_cm = CW_REAL_HOLD_WIDTH_CM / bbox_w
-                z_cm = self.calculate_hold_distance_cm({
-                    'center': (cx, cy),
-                    'size': size,
-                    'bbox': (xmin, ymin, xmax, ymax),
-                })
-                if z_cm is None:
-                    continue
-
-                x_cm = abs(cx - MY_LINE_X) * pixel_to_cm
-                y_cm = abs(cy - MY_LINE_Y) * pixel_to_cm
-                reach_cm = math.sqrt(z_cm ** 2 + x_cm ** 2 + y_cm ** 2)
-
-                # 超出手臂範圍就不要選，避免選到看得到但抓不到的點
-                if CW_DYNAMIC_GRIP_ENABLE and reach_cm > CW_ARM_MAX_LENGTH_CM:
-                    self.get_logger().info(
-                        f"略過太遠點 cx={cx}, cy={cy}, reach={reach_cm:.1f}cm > {CW_ARM_MAX_LENGTH_CM:.1f}cm"
-                    )
-                    continue
-
-                center_score = int((1.0 - (dist_px / ROI_RADIUS)) * W_CENTER)
-                alignment_score = int((1 - abs(cx - self.ROI_cx) / ROI_RADIUS) * W_ALIGN)
-                reach_score = int((CW_ARM_MAX_LENGTH_CM - reach_cm) * 10)
-
-                # 保留你原本「右手不要選太高」的邏輯，但變成參數化
-                if getattr(self, 'action', '') == 'right_hand':
-                    target_y = MY_LINE_Y - RIGHT_HAND_TARGET_Y_OFFSET
-                    height_score = -abs(cy - target_y) * 6
-                elif getattr(self, 'action', '') == 'left_hand':
-                    target_y = MY_LINE_Y - LEFT_HAND_TARGET_Y_OFFSET
-                    height_score = -abs(cy - target_y) * 5
+                center_ratio = 1.0 - (dist / ROI_RADIUS)
+                center_score = center_ratio * W_CENTER
+#####################右手選點排序太高減 
+                if hasattr(self, 'action') and self.action == 'right_hand':
+                    height_score = int((240 - cy) * 8)
                 else:
-                    height_score = int((240 - cy) * 3)
+                    height_score = int((240 - cy) * 5)
+###########################
+                alignment_score = int((1 - abs(cx - self.ROI_cx) / ROI_RADIUS) * 55)
 
-                total_score = int(center_score + alignment_score + reach_score + height_score)
+                total_score = int(center_score + alignment_score + height_score)
 
                 best_candidate.append({
                     'center': (cx, cy),
                     'score': total_score,
                     'size': size,
                     'bbox': (xmin, ymin, xmax, ymax),
-                    'distance_cm': z_cm,
-                    'reach_cm': reach_cm,
-                    'id': i
+                    'id': {i}
                 })
 
         if len(best_candidate) == 0:
-            self.get_logger().info("畫面中沒有符合距離/臂長條件的攀爬點...")
+            self.get_logger().info("畫面中沒有符合條件的攀爬點...")
             return 'no_object'
-
-        best_candidate.sort(key=lambda x: x['score'], reverse=True)
+##################右手抓點太高減 太矮加
+        if getattr(self, 'action', '') == 'right_hand':
+            best_candidate.sort(
+                key=lambda x: (
+                    x['center'][1],                         # 右手優先選最上面的點，避免抓到下面那顆
+                    abs(x['center'][0] - MY_LINE_X),        # 再看左右不要偏太多
+                    -x['score']                             # 最後才看原本分數
+                )
+            )
+        else:
+            best_candidate.sort(key=lambda x: x['score'], reverse=True)
+##########################            
         best = best_candidate[0]
 
-        self.get_logger().info(f"total_score:{best['score']}")
-        self.get_logger().info(f"size:{best['size']}")
-        self.get_logger().info(f"distance:{best['distance_cm']:.1f}cm, reach:{best['reach_cm']:.1f}cm")
-        self.get_logger().info(f"cx:{best['center'][0]},cy:{best['center'][1]}")
-        self.get_logger().info(
-            f"xmin,{best['bbox'][0]},ymin,{best['bbox'][1]},xmax,{best['bbox'][2]},ymax,{best['bbox'][3]},"
-        )
+        best_score = best['score']
+        best_size = best['size']
+        best_cx = best['center'][0]
+        best_cy = best['center'][1]
+        best_xmin = best['bbox'][0]
+        best_xmax = best['bbox'][2]
+        best_ymin = best['bbox'][1]
+        best_ymax = best['bbox'][3]
+
+        self.get_logger().info(f"total_score,{best_score}")
+        self.get_logger().info(f"size:{best_size}")
+        self.get_logger().info(f"cx:{best_cx},cy:{best_cy}")
+        self.get_logger().info(f"xmin,{best_xmin},ymin,{best_ymin},xmax,{best_xmax},ymax,{best_ymax},")
 
         return best
 
@@ -1027,7 +1090,7 @@ class WallClimbing(API):
         if now_limb != 'any':
             if not self.beseen_lamb:
                 self.get_logger().info(f"頭部轉向 {now_limb} 尋找點位")
-                current_v = int(v_pos - (self.scan_count * HEAD_CHANGE_V))
+                current_v = int(v_pos)
                 self.sendHeadMotor(1, int(h_pos), 40)
                 self.sendHeadMotor(2, current_v, 40)
 
@@ -1042,12 +1105,42 @@ class WallClimbing(API):
             if target_info == 'no_object' or target_info is None:
                 self.lookok = False
 
+                if now_limb == 'right_hand':
+                    # 右手找不到點時，不回右下、不大範圍亂掃，只在右上區域小範圍掃描
+                    if not hasattr(self, 'right_scan_dir_h'):
+                        self.right_scan_dir_h = 1
+                    if not hasattr(self, 'right_scan_dir_v'):
+                        self.right_scan_dir_v = 1
+
+                    self.now_head_Horizontal += RIGHT_HAND_SCAN_H_STEP * self.right_scan_dir_h
+
+                    if self.now_head_Horizontal > HEAD_RIGHT_HAND_H + RIGHT_HAND_SCAN_H_RANGE:
+                        self.now_head_Horizontal = HEAD_RIGHT_HAND_H + RIGHT_HAND_SCAN_H_RANGE
+                        self.right_scan_dir_h = -1
+                        self.now_head_Vertical += RIGHT_HAND_SCAN_V_STEP * self.right_scan_dir_v
+
+                    elif self.now_head_Horizontal < HEAD_RIGHT_HAND_H - RIGHT_HAND_SCAN_H_RANGE:
+                        self.now_head_Horizontal = HEAD_RIGHT_HAND_H - RIGHT_HAND_SCAN_H_RANGE
+                        self.right_scan_dir_h = 1
+                        self.now_head_Vertical += RIGHT_HAND_SCAN_V_STEP * self.right_scan_dir_v
+
+                    if self.now_head_Vertical > HEAD_RIGHT_HAND_V + RIGHT_HAND_SCAN_V_RANGE:
+                        self.now_head_Vertical = HEAD_RIGHT_HAND_V + RIGHT_HAND_SCAN_V_RANGE
+                        self.right_scan_dir_v = -1
+
+                    elif self.now_head_Vertical < HEAD_RIGHT_HAND_V - RIGHT_HAND_SCAN_V_RANGE:
+                        self.now_head_Vertical = HEAD_RIGHT_HAND_V - RIGHT_HAND_SCAN_V_RANGE
+                        self.right_scan_dir_v = 1
+
+                    self.sendHeadMotor(1, int(self.now_head_Horizontal), 40)
+                    self.sendHeadMotor(2, int(self.now_head_Vertical), 40)
+
+                    self.beseen_lamb = True
+                    return ('searching', 'no_object')
+
                 if now_limb == 'left_leg' or now_limb == "right_leg":
                     return ('searching', 'no_object')
 
-                self.scan_count += 1
-                if (self.now_head_Vertical - (self.scan_count * HEAD_CHANGE_V)) <= 2000:
-                    self.scan_count = 0
                 self.beseen_lamb = False
                 return ('searching', 'no_object')
             else:

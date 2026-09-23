@@ -200,6 +200,11 @@ class API(Node):
         # -------------------- state / stats --------------------
         self.roll = self.pitch = self.yaw = 0.0
         self.imu_rpy : List[float] = [self.roll, self.pitch, self.yaw]
+        self.imu_quat : List[float] = [1.0, 0.0, 0.0, 0.0]  # w, x, y, z
+        self.imu_acc  : List[float] = [0.0, 0.0, 0.0]       # g
+        self.imu_gyr  : List[float] = [0.0, 0.0, 0.0]       # deg/s
+        self.imu_mag  : List[float] = [0.0, 0.0, 0.0]       # uT
+        self.imu_temp : float = 0.0                         # 度C
         """
         IMU數值：
         
@@ -819,11 +824,24 @@ class API(Node):
         Note:
             * **座標系統**：數據通常以弧度或角度表示，具體取決於底層驅動的定義。
             * **資料同步**：函式同時更新獨立的 `roll/pitch/yaw` 變數與整合後的 `imu_rpy` 清單。
+        
+        self.imu_quat   # [w, x, y, z]
+        self.imu_acc    # [x, y, z]  g
+        self.imu_gyr    # [x, y, z]  deg/s
+        self.imu_mag    # [x, y, z]  uT
+        self.imu_temp   # 度C
+
         """
         self.roll = msg.roll
         self.pitch = msg.pitch
         self.yaw = msg.yaw
         self.imu_rpy = [self.roll, self.pitch, self.yaw]
+
+        self.imu_quat = [msg.quat_w, msg.quat_x, msg.quat_y, msg.quat_z]
+        self.imu_acc = [msg.acc_x, msg.acc_y, msg.acc_z]
+        self.imu_gyr = [msg.gyr_x, msg.gyr_y, msg.gyr_z]
+        self.imu_mag = [msg.mag_x, msg.mag_y, msg.mag_z]
+        self.imu_temp = msg.temperature
 
     def Yolo_Zed(self, msg: Point) -> None:
         """
