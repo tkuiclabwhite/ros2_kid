@@ -11,7 +11,7 @@ import time
 # =========================
 FORWARD_START_SPEED = 1500     # 起步前進速度 2000
 BACK_START_SPEED = 0        # 起步後退速度（負值代表反方向) 
-FORWARD_MAX_SPEED = 7000       # 前進速度上限
+FORWARD_MAX_SPEED = 5000       # 前進速度上限
 FORWARD_MIN_SPEED = 1500       # 前進減速階段的下限（這裡設成 2000 => 等於不會真的降到更慢）
 BACK_MAX_SPEED = -2000         # 後退速度上限（越接近 0 越慢；-2000 是最快後退）
 

@@ -51,6 +51,7 @@ setup(
             'us_comm = strategy.us.comm_node:main',
             'compare_accuracy = strategy.mar.compare_accuracy:main',
             'goalkeeper = strategy.us.goalkeeper:main',
+            'us_yolo =  strategy.us.yolo_detector_node:main',
 
             ],
     },

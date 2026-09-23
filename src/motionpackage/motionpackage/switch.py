@@ -13,6 +13,15 @@ from typing import Optional, Tuple
 # 匯入訊息型別
 from tku_msgs.msg import SensorPackage, SensorSet, Dio
 
+# latest_imudata() 回傳的欄位順序（共 14 個），發布時再填進 SensorPackage 的具名欄位：
+#   [0:4]   QUAT  w, x, y, z        (相對於歸零姿態)
+#   [4:7]   ACC   x, y, z           (g)
+#   [7:10]  GYR   x, y, z           (deg/s)
+#   [10:13] MAG   x, y, z           (uT)
+#   [13]    TMP   t                 (度C)
+# 尚未收到的欄位以 0 填入
+IMUDATA_LAYOUT = [('QUAT', 4), ('ACC', 3), ('GYR', 3), ('MAG', 3), ('TMP', 1)]
+
 # ==========================================
 # 1. 保留 imu.py 的 IMUService 類別
 # ==========================================
@@ -33,9 +42,10 @@ class IMUService:
         self._lock = threading.Lock()
 
         self._latest_abs: Optional[Tuple[float, float, float]] = None
-        self._has_data = False
+        self._has_data = True
         self.zero = [0.0, 0.0, 0.0]
-        
+        self._extra = {}  # 'QUAT'/'ACC'/'GYR'/'MAG'/'TMP' -> tuple of float
+
         # 新增：用於接收開關字串的回呼
         self.on_switch_callback = None
 
@@ -57,6 +67,15 @@ class IMUService:
             if self.rel_mode:
                 return (y - self.zero[0], p - self.zero[1], r - self.zero[2])
             return (y, p, r)
+
+    def latest_imudata(self) -> list:
+        """ 依 IMUDATA_LAYOUT 攤平成一維陣列 """
+        with self._lock:
+            out = []
+            for tag, n in IMUDATA_LAYOUT:
+                vals = self._extra.get(tag)
+                out.extend(vals if vals is not None and len(vals) == n else [0.0] * n)
+            return out
 
     def zero_here(self):
         with self._lock:
@@ -91,6 +110,8 @@ class IMUService:
             r'^\s*#?\s*ypr\s*[:=]\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)\s*$',
             re.IGNORECASE
         )
+        # 其他數值行：#QUAT=... / #ACC=... / #GYR=... / #MAG=... / #TMP=...
+        extra_regex = re.compile(r'^\s*#?\s*(QUAT|ACC|GYR|MAG|TMP)\s*[:=]\s*(.+)$', re.IGNORECASE)
 
         while not self._stop.is_set():
             try:
@@ -121,6 +142,16 @@ class IMUService:
                             with self._lock:
                                 self._latest_abs = (y, p, r)
                                 self._has_data = True
+                            continue
+
+                        m = extra_regex.match(s)
+                        if m:
+                            try:
+                                vals = tuple(float(v) for v in m.group(2).split(','))
+                            except ValueError:
+                                continue
+                            with self._lock:
+                                self._extra[m.group(1).upper()] = vals
                 time.sleep(0.001)
             except Exception:
                 time.sleep(0.1)
@@ -137,11 +168,16 @@ class UnifiedSensorNode(Node):
         self.declare_parameter('baud', 115200)
         self.declare_parameter('pub_hz', 20.0)
         self.declare_parameter('open_wait_sec', 2.0)
+        self.declare_parameter('print_imu', False)       # true 時每秒在終端機印出帶標籤的 IMU 數值
+        self.declare_parameter('print_hz', 1.0)
 
         port = self.get_parameter('port').value
         baud = self.get_parameter('baud').value
         pub_hz = self.get_parameter('pub_hz').value
         open_wait_sec = self.get_parameter('open_wait_sec').value
+        self.print_imu = self.get_parameter('print_imu').value
+        self.print_period = 1.0 / max(float(self.get_parameter('print_hz').value), 0.1)
+        self._last_print = 0.0
 
         # 初始化 IMU 服務並綁定開關回呼
         self.imu = IMUService(port=port, baud=baud, open_wait_sec=open_wait_sec)
@@ -192,7 +228,26 @@ class UnifiedSensorNode(Node):
             for f in [field, field.capitalize()]:
                 if hasattr(msg, f):
                     setattr(msg, f, float(round(val, 2)))
-        
+
+        d = self.imu.latest_imudata()
+        (msg.quat_w, msg.quat_x, msg.quat_y, msg.quat_z,
+         msg.acc_x, msg.acc_y, msg.acc_z,
+         msg.gyr_x, msg.gyr_y, msg.gyr_z,
+         msg.mag_x, msg.mag_y, msg.mag_z,
+         msg.temperature) = [float(v) for v in d]
+
+        now = time.time()
+        if self.print_imu and now - self._last_print >= self.print_period:
+            self._last_print = now
+            self.get_logger().info(
+                f"\n  YPR  (deg)  : yaw={y:8.2f}  pitch={p:8.2f}  roll={r:8.2f}"
+                f"\n  QUAT        : w={d[0]:7.4f}  x={d[1]:7.4f}  y={d[2]:7.4f}  z={d[3]:7.4f}"
+                f"\n  ACC  (g)    : x={d[4]:8.3f}  y={d[5]:8.3f}  z={d[6]:8.3f}"
+                f"\n  GYR  (deg/s): x={d[7]:8.2f}  y={d[8]:8.2f}  z={d[9]:8.2f}"
+                f"\n  MAG  (uT)   : x={d[10]:8.2f}  y={d[11]:8.2f}  z={d[12]:8.2f}"
+                f"\n  TMP  (C)    : {d[13]:.2f}"
+            )
+
         self.pub_pkg.publish(msg)
 
     def destroy_node(self):

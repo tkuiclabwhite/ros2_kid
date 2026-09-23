@@ -43,6 +43,7 @@ USE_REFEREE_COMM = False   # 是否使用裁判通訊，False=不使用，直接
 # 'PENALTY_KICK'  : 直接射門，不找球、不找柱、不繞球
 STRATEGY_MODE = 'KICK_OBSTACLE'
 
+
 COLOR_BALL = 'yellow'
 COLOR_POLE = 'blue'
 COLOR_GOAL = 'red'
@@ -85,9 +86,9 @@ POLE_SEARCH_V_LEVELS   = [1450, 1600, 1750, 1900, 2020]
 POLE_SEARCH_STEP_H     = 60
 
 # --- 球門柱過濾條件 ---
-POLE_MIN_AREA    = 80
+POLE_MIN_AREA    = 60
 POLE_ASPECT_MIN  = 0.1   # 柱子是細長形，不限制比例
-POLE_ASPECT_MAX  = 5.0
+POLE_ASPECT_MAX  = 6.0
 
 # --- find_ball 邊走邊找時的白線避開 ---
 # 白線偵測不再只靠 area，而是看 bbox 形狀：
@@ -138,8 +139,8 @@ ORBIT_Y_LEFT      = 900   # 往左繞（orbit_dir= 1）側向步長（可調）
 ORBIT_Y_RIGHT     = -800   # 往右繞（orbit_dir=-1）側向步長（可調）
 ORBIT_THETA_LEFT  = -4     # 往左繞旋轉步長（可調）
 ORBIT_THETA_RIGHT = 4     # 往右繞旋轉步長（可調）
-ORBIT_V_GAIN      = 60.0   # head_v 偏差 → x 步長係數（可調）
-ORBIT_X_MAX       = 300   # x 步長上限
+ORBIT_V_GAIN      = 90.0   # head_v 偏差 → x 步長係數（可調）
+ORBIT_X_MAX       = 1000   # x 步長上限
 ORBIT_TICK_GAIN   = 0.18  # pole_h 誤差刻度 → 目標幀數係數（可調，影響繞球總量）
 
 # --- kick: 踢球動作 ---
@@ -176,7 +177,7 @@ GOAL_SEARCH_STEP_H   = 60
 GOAL_SEARCH_V_LEVELS = [1700, 1850, 2000, 2200]   # 偏高，因為要抬頭看橫桿
 
 # --- 球門過濾條件（形狀變化大，先只卡面積，不卡 aspect_ratio） ---
-GOAL_MIN_AREA = 80
+GOAL_MIN_AREA = 60
 
 # --- find_goal: 對準確認 ---
 GOAL_CONFIRM_FRAMES = 5   # 連續對準幾幀才算找到（可調）
@@ -210,74 +211,10 @@ WALK_THETA_GAIN  = 1.15   # 可調整，值越大修正越積極
 WALK_THETA_MAX   = 5      # theta 修正上限，避免走太斜
 # 直走時 theta 死區：head_h 偏離中心小於此刻度數時 theta=0，讓機器人安心前進
 # 建議從 150 開始（約 13 度），走太斜再調小
-WALK_THETA_DEAD_TICKS = 60
+WALK_THETA_DEAD_TICKS = 50
 # 球夠近後停止 theta 修正，直接直走到底
 # head_v 低於此值（球已很近）就強制 theta=0
 WALK_THETA_STOP_V = 1600
-
-
-# ===========================================================================
-# 【FAILURE_DIAG】失敗診斷參數（專題）
-# ===========================================================================
-# 這一版先只做「診斷與紀錄」，不直接改變原本策略流程
-FAIL_NONE = 'NONE'
-FAIL_BALL_LOST = 'BALL_LOST'
-FAIL_TARGET_LOST = 'TARGET_LOST'
-FAIL_KICK_NO_BALL = 'KICK_NO_BALL'
-FAIL_YAW_ERROR_BEFORE_KICK = 'YAW_ERROR_BEFORE_KICK'
-FAIL_TOO_CLOSE = 'TOO_CLOSE'
-FAIL_TOO_FAR = 'TOO_FAR'
-
-# [新增] kick 前位置與繞球品質診斷
-FAIL_BALL_SIDE_OFFSET = 'BALL_SIDE_OFFSET' # 踢球前球位置偏移 需要左右 平移修正
-FAIL_ORBIT_NOT_ENOUGH = 'ORBIT_NOT_ENOUGH' # 繞球不足，球門柱誤差太大
-FAIL_ORBIT_OVER = 'ORBIT_OVER'             # 繞球過度，球門柱誤差太大
-
-FAILURE_HISTORY_MAX = 20
-
-# [新增] kick 前位置判斷門檻
-# 只做診斷，不做前進 / 後退 / 平移修正。
-KICK_TOO_CLOSE_V = 1150
-KICK_TOO_FAR_V = 1350
-KICK_SIDE_OFFSET_TOL = 45
-
-# [新增] 繞球品質判斷門檻
-# 第一版先用 _orbit_target_frames 粗略判斷，不額外重新找球門。
-ORBIT_MIN_FRAMES = 8
-ORBIT_MAX_FRAMES = 45
-
-# ===========================================================================
-# 【RECOVERY】kick 前位置修正參數（專題）
-# ===========================================================================
-# 這一版先只針對 kick 前位置問題做一次小修正：
-# KICK_NO_BALL / TOO_CLOSE  → 後退重掃
-# TOO_FAR                  → 前進重掃
-# BALL_SIDE_OFFSET          → 左右平移重掃
-#
-# 注意：最多先修正 1 次，避免機器人一直修正越走越亂。
-KICK_RECOVERY_RETRY_MAX = 1
-
-# 修正完後停幾個 main frame，讓身體穩定再重新掃球。
-KICK_RECOVERY_SETTLE_FRAMES = 10
-
-# KICK_NO_BALL / TOO_CLOSE：後退一小步
-KICK_RECOVERY_BACK_X = -800
-KICK_RECOVERY_BACK_FRAMES = 40
-
-# TOO_FAR：前進一小步
-KICK_RECOVERY_FORWARD_X = 300
-KICK_RECOVERY_FORWARD_FRAMES = 35
-
-# BALL_SIDE_OFFSET：左右平移一小步
-# y 正負方向要真機測：
-#   如果球越修越偏，把 SIDE_LEFT / SIDE_RIGHT 的 y 正負方向對調即可。
-KICK_RECOVERY_SIDE_Y = 800
-KICK_RECOVERY_SIDE_FRAMES = 30
-
-# kick 前若 yaw 和進入 kick 當下差太多，先記錄成姿態異常。
-# 注意：這一版只診斷，不在 kick 前強制旋轉，避免球已經在腳邊時被碰走。
-PRE_KICK_YAW_CHECK = True
-PRE_KICK_YAW_MAX_ERROR = 2
 
 # ===========================================================================
 # 視覺：球
@@ -289,12 +226,21 @@ class BallInfo:
         self.visible = False
         self.cx = self.cy = self.area = 0
         self.aspect = 0.0
+        self.confidence = 0.0
 
     def update(self):
-        objs = self.api.get_objects(COLOR_BALL)
+        # YOLO node 會把 ball 轉成 yellow。
+        # 若沒有 YOLO receiver，保留原本 get_objects 當 fallback。
+        if hasattr(self.api, 'get_yolo_objects'):
+            objs = self.api.get_yolo_objects(COLOR_BALL)
+        else:
+            objs = self.api.get_objects(COLOR_BALL)
+
         if not objs:
             self.visible = False
+            self.confidence = 0.0
             return
+
         candidates = [
             o for o in objs
             if o['area'] > BALL_MIN_AREA
@@ -303,13 +249,17 @@ class BallInfo:
         ]
         if not candidates:
             self.visible = False
+            self.confidence = 0.0
             return
+
         best = max(candidates, key=lambda o: o['area'])
         self.visible = True
         self.cx     = best['centroid'][0]
         self.cy     = best['centroid'][1]
         self.area   = best['area']
         self.aspect = best['aspect_ratio']
+        self.confidence = best.get('confidence', 0.0)
+
 
 # ===========================================================================
 # 視覺：球門柱
@@ -322,12 +272,20 @@ class PoleInfo:
         self.cx = self.cy = self.area = 0
         self.aspect = 0.0
         self.candidate_count = 0
+        self.confidence = 0.0
 
     def update(self):
-        objs = self.api.get_objects(COLOR_POLE)
+        # YOLO node 會把 blue-pole / obstacle 轉成 blue。
+        # 若沒有 YOLO receiver，保留原本 get_objects 當 fallback。
+        if hasattr(self.api, 'get_yolo_objects'):
+            objs = self.api.get_yolo_objects(COLOR_POLE)
+        else:
+            objs = self.api.get_objects(COLOR_POLE)
+
         if not objs:
             self.visible = False
             self.candidate_count = 0
+            self.confidence = 0.0
             return
         candidates = [
             o for o in objs
@@ -337,6 +295,7 @@ class PoleInfo:
         if not candidates:
             self.visible = False
             self.candidate_count = 0
+            self.confidence = 0.0
             return
 
         # 場上同時看到多個藍色障礙物時，優先鎖定畫面中面積最大的目標。
@@ -347,6 +306,8 @@ class PoleInfo:
         self.cy     = best['centroid'][1]
         self.area   = best['area']
         self.aspect = best['aspect_ratio']
+        self.confidence = best.get('confidence', 0.0)
+
 
 # ===========================================================================
 # 視覺：球門（SHOOT 策略）
@@ -402,14 +363,19 @@ class StatusPrinter(threading.Thread):
                     f" sub_state     : {n.sub_state}\n"
                     f" action_detail : {n.action_detail}\n"
                     f"#============== 視覺狀態 ===============#\n"
+                    f" yolo.frame_id : {n.yolo_frame_id}\n"
+                    f" yolo.fps      : {n.yolo_fps}\n"
+                    f" yolo.objects  : {n.yolo_object_count}\n"
                     f" ball.visible  : {n.ball.visible}"
                     f"  lost={n.ball_lost_count}/{BALL_LOST_FRAMES}\n"
                     f" ball.cx / cy  : {n.ball.cx} / {n.ball.cy}\n"
                     f" ball.area     : {n.ball.area}\n"
+                    f" ball.conf     : {n.ball.confidence:.2f}\n"
                     f" centered_cnt  : {n.ball_centered_count}/{BALL_CENTERED_FRAMES}\n"
                     f" pole.visible  : {n.pole.visible}\n"
                     f" pole.cx / cy  : {n.pole.cx} / {n.pole.cy}\n"
                     f" pole.area/cnt : {n.pole.area} / {n.pole.candidate_count}\n"
+                    f" pole.conf     : {n.pole.confidence:.2f}\n"
                     f" goal.visible  : {n.goal.visible}\n"
                     f" goal.cx / cy  : {n.goal.cx} / {n.goal.cy}\n"
                     f" goal.x_min/max: {n.goal.x_min} / {n.goal.x_max}\n"
@@ -437,19 +403,6 @@ class StatusPrinter(threading.Thread):
                     f" kick.cx        : {n.kick_debug_cx}  IMG_CX={IMG_CX}\n"
                     f" kick.side      : {n.kick_debug_side}\n"
                     f" kick.sector    : {n.kick_debug_sector}\n"
-
-                    f" kick.best_v    : {n.kick_debug_best_v}\n"
-                    f" kick.pos_judge : {n.kick_position_judge}\n"
-                    f" kick.recovery  : {n.kick_recovery_action} "
-                    f"count={n.kick_recovery_count}/{KICK_RECOVERY_RETRY_MAX} "
-                    f"frames={n.kick_recovery_frames} settle={n.kick_recovery_settle}\n"
-                    f"#=========== failure 診斷 ============#\n"
-                    f" failure_type  : {n.debug_failure_type}\n"
-                    f" failure_detail: {n.debug_failure_detail}\n"
-                    f" failure_count : {n.failure_count}\n"
-                    f" last_state    : {n.last_failure_state}\n"
-                    f" kick_yaw_err : {n.kick_yaw_error:+.1f}°\n"
-                    f" orbit_judge  : {n.orbit_quality_judge}\n"
                     f"#=========== find_goal 狀態 ============#\n"
                     f" goal_found_h  : {n.goal_found_h}\n"
                     f" goal_found_v  : {n.goal_found_v}\n"
@@ -470,6 +423,27 @@ class StatusPrinter(threading.Thread):
 class UnitedSoccer(API):
     def __init__(self):
         super().__init__('us_v2')
+
+        # ==========================================================
+        # YOLO objects receiver
+        # yolo_detector_node 會發布 /yolo/objects
+        # ball -> yellow, blue-pole/obstacle -> blue
+        # ==========================================================
+        self.yolo_objects = {
+            'yellow': [],
+            'blue': []
+        }
+        self.yolo_frame_id = -1
+        self.yolo_fps = 0.0
+        self.yolo_last_update_time = 0.0
+        self.yolo_object_count = 0
+
+        self.create_subscription(
+            String,
+            '/yolo/objects',
+            self._yolo_objects_cb,
+            10
+        )
 
         self.ball = BallInfo(self)
         self.pole = PoleInfo(self)
@@ -561,31 +535,6 @@ class UnitedSoccer(API):
         self.sub_state     = ''
         self.action_detail = '等待開始'
 
-        # [新增] failure 診斷狀態（專題 v1：先紀錄，不改流程）
-        self.debug_failure_type = FAIL_NONE
-        self.debug_failure_detail = ''
-        self.failure_count = 0
-        self.failure_history = []
-        self.last_failure_state = ''
-
-        # [新增] kick 前 yaw 診斷用
-        self.kick_target_yaw = 0.0
-        self.kick_yaw_error = 0.0
-
-        # [新增] kick 前位置診斷顯示用
-        self.kick_debug_best_v = 0
-        self.kick_position_judge = 'UNKNOWN'
-
-        # [新增] 繞球品質診斷顯示用
-        self.orbit_quality_judge = 'UNKNOWN'
-
-        # [新增] kick 前位置 recovery 狀態
-        self.kick_recovery_count = 0
-        self.kick_recovery_action = 'NONE'
-        self.kick_recovery_frames = 0
-        self.kick_recovery_settle = 0
-        self.kick_recovery_from_failure = FAIL_NONE
-
         # referee comm 狀態
         self.ref_state = 0
         self.ref_state_name = 'NO_REF'
@@ -636,282 +585,45 @@ class UnitedSoccer(API):
         self.ref_self_enabled = bool(data.get('self_enabled', False))
         self.ref_time_left = data.get('time_left', 0)
 
-    # -----------------------------------------------------------------------
-    # [新增] 失敗診斷工具函式（專題 v1）
-    # -----------------------------------------------------------------------
-
-    def _set_failure(self, failure_type, detail=''):
+    def _yolo_objects_cb(self, msg):
         """
-        記錄目前偵測到的失敗原因。
-        這一版只負責顯示與存 history，不直接改變原本動作流程。
+        接收 yolo_detector_node 發出的 /yolo/objects。
+        只保留策略需要的 yellow(ball) 與 blue(obstacle)。
         """
-        self.debug_failure_type = failure_type
-        self.debug_failure_detail = detail
-        self.last_failure_state = self.state
-        self.failure_count += 1
-
-        self.failure_history.append({
-            'time': time.time(),
-            'state': self.state,
-            'sub_state': self.sub_state,
-            'failure_type': failure_type,
-            'detail': detail,
-            'ball_visible': self.ball.visible,
-            'ball_cx': self.ball.cx,
-            'ball_cy': self.ball.cy,
-            'head_h': self.head_h,
-            'head_v': self.head_v,
-            'kick_sector': self.kick_debug_sector,
-            'kick_yaw_error': self.kick_yaw_error,
-            'kick_best_v': self.kick_debug_best_v,
-            'kick_position_judge': self.kick_position_judge,
-            'orbit_target_frames': self._orbit_target_frames,
-            'orbit_quality_judge': self.orbit_quality_judge,
-            'kick_recovery_action': self.kick_recovery_action,
-            'kick_recovery_count': self.kick_recovery_count,
-            'kick_recovery_from_failure': self.kick_recovery_from_failure,
-        })
-
-        if len(self.failure_history) > FAILURE_HISTORY_MAX:
-            self.failure_history.pop(0)
-
-    def _clear_current_failure(self):
-        """清除目前畫面上的 failure，但保留 failure_history 與 failure_count。"""
-        self.debug_failure_type = FAIL_NONE
-        self.debug_failure_detail = ''
-        self.last_failure_state = ''
-        self.kick_yaw_error = 0.0
-        self.kick_position_judge = 'UNKNOWN'
-        self.kick_debug_best_v = 0
-        self.orbit_quality_judge = 'UNKNOWN'
-
-    def _diagnose_pre_kick_yaw(self):
-        """
-        kick 前 yaw 診斷：
-        比較目前 yaw 與進入 kick 當下記錄的 kick_target_yaw。
-        若偏差過大，只記錄 YAW_ERROR_BEFORE_KICK，不強制修正。
-        """
-        if not PRE_KICK_YAW_CHECK:
+        try:
+            data = json.loads(msg.data)
+        except Exception as e:
+            self.action_detail = f'YOLO json 解析失敗: {e}'
             return
 
-        yaw = self._read_imu_yaw()
-        if yaw is None:
-            return
+        obj_map = {
+            'yellow': [],
+            'blue': []
+        }
 
-        self.kick_yaw_error = self._normalize_yaw_error(self.kick_target_yaw, yaw)
+        for obj in data.get('objects', []):
+            color = obj.get('color', '')
+            if color not in obj_map:
+                continue
 
-        if abs(self.kick_yaw_error) > PRE_KICK_YAW_MAX_ERROR:
-            self._set_failure(
-                FAIL_YAW_ERROR_BEFORE_KICK,
-                f'kick前yaw偏差過大 err={self.kick_yaw_error:+.1f}° '
-                f'target={self.kick_target_yaw:.1f} current={yaw:.1f}'
-            )
+            obj_map[color].append({
+                'centroid': obj.get('centroid', [0, 0]),
+                'area': obj.get('area', 0),
+                'aspect_ratio': obj.get('aspect_ratio', 0.0),
+                'bbox': obj.get('bbox', [0, 0, 0, 0]),
+                'confidence': obj.get('confidence', 0.0),
+                'class_name': obj.get('class', '')
+            })
 
-    def _diagnose_kick_position(self, best):
-        """
-        [新增] kick 前球位置診斷：
-        使用 kick 掃描中 area 最大的球樣本 best 判斷距離與左右偏移。
-        這一版只紀錄 failure_type，不做前進、後退或平移修正。
-        """
-        best_v = best.get('head_v', self.kick_ref_head_v)
-        best_cx = best.get('cx', self.kick_ref_cx)
+        self.yolo_objects = obj_map
+        self.yolo_frame_id = data.get('frame_id', -1)
+        self.yolo_fps = data.get('fps', 0.0)
+        self.yolo_last_update_time = time.time()
+        self.yolo_object_count = len(data.get('objects', []))
 
-        self.kick_debug_best_v = best_v
-        self.kick_position_judge = 'OK'
-
-        # 優先判斷距離，再判斷左右偏移，避免同一幀連續跳多個狀態。
-        if best_v <= KICK_TOO_CLOSE_V:
-            self.kick_position_judge = 'TOO_CLOSE'
-            self._set_failure(
-                FAIL_TOO_CLOSE,
-                f'kick前球太近 best_v={best_v} <= {KICK_TOO_CLOSE_V}, cx={best_cx}'
-            )
-            return FAIL_TOO_CLOSE
-
-        if best_v >= KICK_TOO_FAR_V:
-            self.kick_position_judge = 'TOO_FAR'
-            self._set_failure(
-                FAIL_TOO_FAR,
-                f'kick前球太遠 best_v={best_v} >= {KICK_TOO_FAR_V}, cx={best_cx}'
-            )
-            return FAIL_TOO_FAR
-
-        if best_cx < IMG_CX - KICK_SIDE_OFFSET_TOL:
-            self.kick_position_judge = 'BALL_OFFSET_LEFT'
-            self._set_failure(
-                FAIL_BALL_SIDE_OFFSET,
-                f'kick前球太偏左 cx={best_cx} < {IMG_CX - KICK_SIDE_OFFSET_TOL}, best_v={best_v}'
-            )
-            return FAIL_BALL_SIDE_OFFSET
-
-        if best_cx > IMG_CX + KICK_SIDE_OFFSET_TOL:
-            self.kick_position_judge = 'BALL_OFFSET_RIGHT'
-            self._set_failure(
-                FAIL_BALL_SIDE_OFFSET,
-                f'kick前球太偏右 cx={best_cx} > {IMG_CX + KICK_SIDE_OFFSET_TOL}, best_v={best_v}'
-            )
-            return FAIL_BALL_SIDE_OFFSET
-
-        return FAIL_NONE
-
-    def _diagnose_orbit_quality(self, source_name, target_frames):
-        """
-        [新增] 繞球品質診斷：
-        第一版先用計算出的 target_frames 粗略判斷。
-        target_frames 太少 → 可能繞球不足
-        target_frames 太多 → 可能繞球過頭
-        這一版只紀錄，不改變 adjust_position 動作。
-        """
-        self.orbit_quality_judge = 'OK'
-
-        if target_frames < ORBIT_MIN_FRAMES:
-            self.orbit_quality_judge = 'ORBIT_NOT_ENOUGH'
-            self._set_failure(
-                FAIL_ORBIT_NOT_ENOUGH,
-                f'{source_name} 繞球目標幀數太少 target={target_frames} < {ORBIT_MIN_FRAMES}'
-            )
-            return FAIL_ORBIT_NOT_ENOUGH
-
-        if target_frames > ORBIT_MAX_FRAMES:
-            self.orbit_quality_judge = 'ORBIT_OVER'
-            self._set_failure(
-                FAIL_ORBIT_OVER,
-                f'{source_name} 繞球目標幀數過多 target={target_frames} > {ORBIT_MAX_FRAMES}'
-            )
-            return FAIL_ORBIT_OVER
-
-        return FAIL_NONE
-
-    def _reset_kick_scan(self):
-        """
-        [新增] 重置 kick 掃描流程。
-        recovery 完成後呼叫，讓 kick 從 prepare 重新開始掃球。
-        """
-        self._kick_phase = 'prepare'
-        self._kick_scan_idx = 0
-        self._kick_scan_wait = 0
-        self._kick_scan_samples = []
-        self._kick_selected_cx = -1
-        self._kick_selected_area = 0
-
-        self.kick_debug_visible = False
-        self.kick_debug_cx = -1
-        self.kick_debug_side = 're_scan'
-        self.kick_debug_sector = 0
-
-        self.kick_debug_best_v = 0
-        self.kick_position_judge = 'RE_SCAN'
-
-    def _start_kick_recovery(self, action, failure_type, detail='', record_failure=True):
-        """
-        [新增] 啟動 kick 前位置修正。
-        這裡只設定 recovery 狀態，不直接走路。
-
-        action:
-          'BACK'       : 後退一小步
-          'FORWARD'    : 前進一小步
-          'SIDE_LEFT'  : 往一側平移
-          'SIDE_RIGHT' : 往另一側平移
-
-        record_failure:
-          True  = 啟動 recovery 時順便呼叫 _set_failure()
-          False = failure 已經在診斷函式中記錄過，避免重複累計
-        """
-        if self.kick_recovery_count >= KICK_RECOVERY_RETRY_MAX:
-            self.action_detail = (
-                f'kick recovery 已達上限 '
-                f'{self.kick_recovery_count}/{KICK_RECOVERY_RETRY_MAX}，'
-                f'不再修正，保留原本流程'
-            )
-            return False
-
-        self.kick_recovery_count += 1
-        self.kick_recovery_action = action
-        self.kick_recovery_from_failure = failure_type
-        self.kick_recovery_settle = 0
-
-        if action == 'BACK':
-            self.kick_recovery_frames = KICK_RECOVERY_BACK_FRAMES
-        elif action == 'FORWARD':
-            self.kick_recovery_frames = KICK_RECOVERY_FORWARD_FRAMES
-        elif action == 'SIDE_LEFT':
-            self.kick_recovery_frames = KICK_RECOVERY_SIDE_FRAMES
-        elif action == 'SIDE_RIGHT':
-            self.kick_recovery_frames = KICK_RECOVERY_SIDE_FRAMES
-        else:
-            self.kick_recovery_frames = 0
-            return False
-
-        if record_failure:
-            self._set_failure(failure_type, detail)
-
-        self._kick_phase = 'recover'
-
-        self.action_detail = (
-            f'啟動 kick recovery：action={action} '
-            f'failure={failure_type} '
-            f'count={self.kick_recovery_count}/{KICK_RECOVERY_RETRY_MAX}'
-        )
-        return True
-
-    def _process_kick_recovery(self):
-        """
-        [新增] 執行 kick 前位置修正。
-        修正完成後停幾幀，再重新進 kick scan。
-        """
-        self.sendbodyAuto(1)
-
-        # --------------------------------------------------
-        # recovery 動作還沒做完：持續送一個小步伐命令
-        # --------------------------------------------------
-        if self.kick_recovery_frames > 0:
-            x = 0
-            y = 0
-            theta = 0
-
-            if self.kick_recovery_action == 'BACK':
-                x = KICK_RECOVERY_BACK_X
-            elif self.kick_recovery_action == 'FORWARD':
-                x = KICK_RECOVERY_FORWARD_X
-            elif self.kick_recovery_action == 'SIDE_LEFT':
-                y = KICK_RECOVERY_SIDE_Y
-            elif self.kick_recovery_action == 'SIDE_RIGHT':
-                y = -KICK_RECOVERY_SIDE_Y
-
-            self.sendContinuousValue(x=x, y=y, theta=theta)
-            self.kick_recovery_frames -= 1
-
-            self.action_detail = (
-                f'kick recovery 執行中 action={self.kick_recovery_action} '
-                f'x={x} y={y} theta={theta} '
-                f'剩餘={self.kick_recovery_frames}'
-            )
-            return
-
-        # --------------------------------------------------
-        # recovery 動作做完，先停下等待穩定
-        # --------------------------------------------------
-        self.sendContinuousValue(x=0, y=0, theta=0)
-        self.sendbodyAuto(0)
-
-        self.kick_recovery_settle += 1
-        self.action_detail = (
-            f'kick recovery 完成，停下穩定中 '
-            f'{self.kick_recovery_settle}/{KICK_RECOVERY_SETTLE_FRAMES}'
-        )
-
-        if self.kick_recovery_settle < KICK_RECOVERY_SETTLE_FRAMES:
-            return
-
-        # --------------------------------------------------
-        # 穩定完成，重新 kick scan
-        # --------------------------------------------------
-        self.kick_recovery_action = 'NONE'
-        self.kick_recovery_frames = 0
-        self.kick_recovery_settle = 0
-
-        self._reset_kick_scan()
-        self.action_detail = 'kick recovery 完成 ✅ → 重新 kick 掃描'
+    def get_yolo_objects(self, color):
+        """給 BallInfo / PoleInfo 使用。yellow=ball，blue=blue-pole/obstacle。"""
+        return self.yolo_objects.get(color, [])
 
     # -----------------------------------------------------------------------
     # 頭部控制
@@ -1456,7 +1168,6 @@ class UnitedSoccer(API):
                 self.sendContinuousValue(x=0, y=0, theta=0)
                 self.sendbodyAuto(0)
                 self._reset_head()
-                self._set_failure(FAIL_BALL_LOST, f'approach_ball 球消失太久 lost={self.ball_lost_count}')
                 self.state = 'find_ball'
                 self.sub_state = ''
                 self.ball_centered_count = 0
@@ -1605,7 +1316,6 @@ class UnitedSoccer(API):
             self.goal.update()
             if not self.goal.visible:
                 self._goal_confirm_frames = 0
-                self._set_failure(FAIL_TARGET_LOST, 'find_goal 對準過程中球門追丟')
                 self.sub_state = 'scan'
                 self.action_detail = '球門追丟，回掃描'
             else:
@@ -1651,10 +1361,6 @@ class UnitedSoccer(API):
                 self._orbit_dir           = 1 if goal_error < 0 else -1
                 self._orbit_target_frames = int(abs(goal_error) * ORBIT_TICK_GAIN)
                 self._orbit_frames        = 0
-
-                # [新增] 只診斷繞球量是否可能不足或過多，不改變原本流程
-                self._diagnose_orbit_quality('find_goal', self._orbit_target_frames)
-
                 self.sendbodyAuto(1)
                 self.state     = 'adjust_position'
                 self.sub_state = ''
@@ -1698,7 +1404,6 @@ class UnitedSoccer(API):
             if not self.pole.visible:
                 # 追丟了：回去繼續掃
                 self._pole_confirm_frames = 0
-                self._set_failure(FAIL_TARGET_LOST, 'find_pole 對準過程中藍柱追丟')
                 self.sub_state = 'scan'
                 self.action_detail = '藍柱追丟，回掃描'
             else:
@@ -1747,10 +1452,6 @@ class UnitedSoccer(API):
                 self._orbit_dir           = 1 if pole_error < 0 else -1
                 self._orbit_target_frames = int(abs(pole_error) * ORBIT_TICK_GAIN)
                 self._orbit_frames        = 0
-
-                # [新增] 只診斷繞球量是否可能不足或過多，不改變原本流程
-                self._diagnose_orbit_quality('find_pole', self._orbit_target_frames)
-
                 self.sendbodyAuto(1)
                 self.state     = 'adjust_position'
                 self.sub_state = ''
@@ -1792,22 +1493,6 @@ class UnitedSoccer(API):
             self._kick_scan_samples = []
             self._kick_selected_cx = -1
             self._kick_selected_area = 0
-            self.kick_debug_best_v = 0
-            self.kick_position_judge = 'SCANNING'
-
-            # [新增] 每次重新進入 kick 時，重置 recovery 狀態。
-            self.kick_recovery_count = 0
-            self.kick_recovery_action = 'NONE'
-            self.kick_recovery_frames = 0
-            self.kick_recovery_settle = 0
-            self.kick_recovery_from_failure = FAIL_NONE
-
-            # [新增] 進入 kick 當下記錄 yaw，後面用來診斷踢前姿態是否又偏掉。
-            yaw = self._read_imu_yaw()
-            if yaw is not None:
-                self.kick_target_yaw = yaw
-            self.kick_yaw_error = 0.0
-
             self.state = 'kick'
             self.action_detail = (
                 f'軌道修正完成 ✅ → kick  '
@@ -1841,7 +1526,7 @@ class UnitedSoccer(API):
             y     = ORBIT_Y_RIGHT
             theta = ORBIT_THETA_RIGHT
 
-        self.sendContinuousValue(x=x, y=y, theta=theta)
+        self.sendContinuousValue(x=x-500, y=y, theta=theta)
         self._orbit_frames += 1
         self.action_detail = (
             f'繞球中 [{self._orbit_frames}/{self._orbit_target_frames}]  '
@@ -1866,13 +1551,6 @@ class UnitedSoccer(API):
         """
 
         # ------------------------------------------------------------
-        # phase 0.5：kick 前位置 recovery
-        # ------------------------------------------------------------
-        if self._kick_phase == 'recover':
-            self._process_kick_recovery()
-            return
-
-        # ------------------------------------------------------------
         # phase 1：準備，停止走路，H 拉到 2048，V 到第一層
         # ------------------------------------------------------------
         if self._kick_phase == 'prepare':
@@ -1885,8 +1563,6 @@ class UnitedSoccer(API):
             self._kick_selected_cx = -1
             self._kick_selected_area = 0
             self._kick_prepare_from_h = self.head_h
-            self.kick_debug_best_v = 0
-            self.kick_position_judge = 'SCANNING'
 
             # [重點] 只在 prepare 先把 Horizontal 拉回 2048。
             # settle/scan 會持續補送同一個 H 目標，避免實體頭部還停在上一狀態。
@@ -2007,10 +1683,6 @@ class UnitedSoccer(API):
         # phase 3：根據掃描結果決定左右腳
         # ------------------------------------------------------------
         if self._kick_phase == 'decide':
-            # [新增] kick 前姿態診斷，只記錄，不在球旁強制補轉。
-            # 若後續同時發生距離/位置問題，畫面會優先顯示距離/位置診斷。
-            self._diagnose_pre_kick_yaw()
-
             if len(self._kick_scan_samples) >= KICK_SCAN_MIN_SAMPLES:
                 # 選 area 最大的那筆，通常代表球看得最清楚 / 最近
                 best = max(self._kick_scan_samples, key=lambda s: s['area'])
@@ -2025,9 +1697,6 @@ class UnitedSoccer(API):
                 self.kick_ref_head_h = best['head_h']
                 self.kick_ref_head_v = best['head_v']
 
-                # --------------------------------------------------
-                # 先保留原本左右腳判斷
-                # --------------------------------------------------
                 if best['cx'] < IMG_CX - KICK_SIDE_DEADZONE:
                     self.kick_debug_side = 'left_scan_v_only'
                     self.kick_debug_sector = 200
@@ -2055,83 +1724,14 @@ class UnitedSoccer(API):
                         f'→ 預設 sector={KICK_DEFAULT_SECTOR}'
                     )
 
-                # --------------------------------------------------
-                # [新增] kick 前球位置診斷 + recovery
-                # 只針對第一次位置異常做一次小修正，修正後重新 scan。
-                # --------------------------------------------------
-                pos_failure = self._diagnose_kick_position(best)
-
-                if pos_failure == FAIL_TOO_CLOSE:
-                    started = self._start_kick_recovery(
-                        'BACK',
-                        FAIL_TOO_CLOSE,
-                        (
-                            f'kick前球太近 best_v={best["head_v"]} <= {KICK_TOO_CLOSE_V} '
-                            f'→ 後退重掃'
-                        ),
-                        record_failure=False
-                    )
-                    if started:
-                        return
-
-                elif pos_failure == FAIL_TOO_FAR:
-                    started = self._start_kick_recovery(
-                        'FORWARD',
-                        FAIL_TOO_FAR,
-                        (
-                            f'kick前球太遠 best_v={best["head_v"]} >= {KICK_TOO_FAR_V} '
-                            f'→ 前進重掃'
-                        ),
-                        record_failure=False
-                    )
-                    if started:
-                        return
-
-                elif pos_failure == FAIL_BALL_SIDE_OFFSET:
-                    if best['cx'] < IMG_CX:
-                        action = 'SIDE_LEFT'
-                        side_text = '球太偏左 → 側移重掃'
-                    else:
-                        action = 'SIDE_RIGHT'
-                        side_text = '球太偏右 → 側移重掃'
-
-                    started = self._start_kick_recovery(
-                        action,
-                        FAIL_BALL_SIDE_OFFSET,
-                        f'{side_text} cx={best["cx"]}, IMG_CX={IMG_CX}',
-                        record_failure=False
-                    )
-                    if started:
-                        return
-
             else:
-                # --------------------------------------------------
-                # [新增] KICK_NO_BALL recovery：第一次沒看到球先後退重掃。
-                # 若 recovery 已達上限，才保留原本預設腳踢的流程。
-                # --------------------------------------------------
                 self.kick_debug_visible = False
                 self.kick_debug_cx = -1
                 self.kick_debug_side = 'no_ball_scan_v_only'
                 self.kick_debug_sector = KICK_DEFAULT_SECTOR
-
-                detail = f'kick掃描沒看到球 samples={len(self._kick_scan_samples)} → 後退重掃'
-                started = self._start_kick_recovery(
-                    'BACK',
-                    FAIL_KICK_NO_BALL,
-                    detail,
-                    record_failure=True
-                )
-                if started:
-                    return
-
-                # 已經修正過仍然看不到球，保留原本流程：記錄後用預設腳。
-                self._set_failure(
-                    FAIL_KICK_NO_BALL,
-                    f'kick掃描仍沒看到球，recovery已達上限，samples={len(self._kick_scan_samples)}'
-                )
                 self.action_detail = (
                     f'kick掃描全部沒看到球，samples={len(self._kick_scan_samples)} '
-                    f'→ recovery已達上限，預設 sector={KICK_DEFAULT_SECTOR}'
+                    f'→ 預設 sector={KICK_DEFAULT_SECTOR}'
                 )
 
             self._kick_phase = 'execute'
@@ -2146,8 +1746,8 @@ class UnitedSoccer(API):
             self.sendContinuousValue(x=0, y=0, theta=0)
             self.sendbodyAuto(0)
 
-            time.sleep(2)
-            self.sendBodySector(999)
+            # time.sleep(2)
+            # self.sendBodySector(999)
 
             # 左腳你原本想等久一點，保留 4 秒；右腳維持 2 秒
             if sector == 200:
@@ -2156,12 +1756,12 @@ class UnitedSoccer(API):
                 time.sleep(2)
 
             self.sendBodySector(sector)
-            time.sleep(14)
+            time.sleep(15)
             self.sendBodySector(29)
             time.sleep(1)
 
-            self.sendBodySector(123)
-            time.sleep(1)
+            # self.sendBodySector(123)
+            # time.sleep(1)
 
 
             self._kick_wait_frames = 0
@@ -2190,8 +1790,8 @@ class UnitedSoccer(API):
 
         self.action_detail = 'PENALTY_KICK：左腳射門 sector={200}'
 
-        time.sleep(2)
-        self.sendBodySector(999)   # 踢球前預備
+        # time.sleep(2)
+        # self.sendBodySector(999)   # 踢球前預備
         time.sleep(2)
         self.sendBodySector(200)
         time.sleep(14)
@@ -2217,15 +1817,13 @@ class UnitedSoccer(API):
         time.sleep(1)
         self.sendBodySector(29)
         time.sleep(1)
-        self.sendBodySector(123)
+        self.sendBodySector(678)
+        time.sleep(1)
         self.sendContinuousValue(x=0, y=0, theta=0)
         self.sendbodyAuto(0)
         time.sleep(0.5)   # 等身體確實站穩，再校正 IMU 零點
         self.sendSensorReset(True)   # 踢球後姿態可能偏移，重新校正 Yaw/Roll/Pitch
-        time.sleep(0.5)
-
-        # [新增] 每次重新初始化時清除目前 failure 顯示，但保留 failure_history 統計。
-        self._clear_current_failure()
+        time.sleep(0.05)
 
         self.ball.visible = False
         self.pole.visible = False
@@ -2272,13 +1870,6 @@ class UnitedSoccer(API):
         self._kick_selected_cx = -1
         self._kick_selected_area = 0
         self._kick_prepare_from_h = HEAD_H_CENTER
-
-        # [新增] 初始化時重置 kick recovery 狀態
-        self.kick_recovery_count = 0
-        self.kick_recovery_action = 'NONE'
-        self.kick_recovery_frames = 0
-        self.kick_recovery_settle = 0
-        self.kick_recovery_from_failure = FAIL_NONE
 
 
 
