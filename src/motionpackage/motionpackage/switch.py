@@ -224,7 +224,7 @@ class UnifiedSensorNode(Node):
         msg = SensorPackage()
         
         # 保留原有的多命名相容性
-        for field, val in zip(['yaw', 'pitch', 'roll'], [y, p, r]):
+        for field, val in zip(['yaw', 'pitch', 'roll'], [-y, p, r]):
             for f in [field, field.capitalize()]:
                 if hasattr(msg, f):
                     setattr(msg, f, float(round(val, 2)))

@@ -1,0 +1,130 @@
+# rl_deploy 設定。★ = 已經在真機上量出來的值（2026-10-06）。
+#
+# ⚠️ 最上層的 key 是 **節點名**，不是套件名。原本寫 `rl_deploy:`（套件名）
+#    所有參數都不會生效，而且**不會報錯** —— 節點只會安靜地用預設值
+#    （policy_joint_order 就停在 FILL_ME 而拒絕啟動）。
+#    用 `/**:` 通配，這樣節點改名也不會失效。
+/**:
+  ros__parameters:
+    # ── 模型 ──────────────────────────────────────────────────────────
+    model: "kid_6600.onnx"        # 47 維、無站立模式、feet_distance 三維版
+    obs_dim: 47
+    control_hz: 50.0
+    action_scale: 0.25            # 從 6600 的 params/env.yaml 確認
+    action_clip: 3.0              # 訓練時 clip_actions=None，部署刻意加的保護
+
+    # ── ❗ 必填：policy 的 12 個輸出對應哪 12 個關節 ──────────────────
+    # 這是**模擬器內部的關節順序**（PhysX 決定的，不是 LEG_JOINTS 的列表
+    # 順序）。填錯等於把動作接到錯誤的關節上 —— 機器人會做出完全無關的動作。
+    # 取得方式（訓練電腦上）：
+    #   cd ~/IsaacLab && ./isaaclab.sh -p ~/isaac_projects/kid_rl/inspect_usd.py
+    # 還是 FILL_ME 的話 policy_node 會拒絕啟動。
+    #
+    # ★ 2026-10-06 inspect_usd.py 實測。Isaac Lab 的 SceneEntityCfg
+    #   preserve_order=False → find_joints 回傳的索引是**依 PhysX 索引升序**，
+    #   所以觀測與動作的順序就是下面這個（PhysX 索引寫在註解裡）。
+    #
+    #   ⚠️ 是 **L/R 交錯、按關節類型分組**，不是「左腿整條再右腿」，
+    #      也不是 URDF 的宣告順序（URDF 是 R 腿先）。我原本照 URDF 猜是錯的。
+    policy_joint_order:
+      - Lhip_jointJoint         #  0  (PhysX  7)  馬達 ID 10  L 髖 yaw
+      - Rhip_jointJoint         #  1  (PhysX  8)  馬達 ID 16  R 髖 yaw
+      - LassJoint               #  2  (PhysX 11)  馬達 ID 11  L 髖 roll
+      - RassJoint               #  3  (PhysX 12)  馬達 ID 17  R 髖 roll
+      - LthightJoint            #  4  (PhysX 15)  馬達 ID 12  L 髖 pitch
+      - RthightJoint            #  5  (PhysX 16)  馬達 ID 18  R 髖 pitch
+      - LcalvesJoint            #  6  (PhysX 17)  馬達 ID 13  L 膝
+      - RcalvesJoint            #  7  (PhysX 18)  馬達 ID 19  R 膝
+      - LankleJoint             #  8  (PhysX 19)  馬達 ID 14  L 踝 pitch
+      - RankleJoint             #  9  (PhysX 20)  馬達 ID 20  R 踝 pitch
+      - Lsoles_of_feetJoint     # 10  (PhysX 21)  馬達 ID 15  L 踝 roll
+      - Rsoles_of_feetJoint     # 11  (PhysX 22)  馬達 ID 21  R 踝 roll
+
+    # ── ★ 通訊（dxl --bench + calib --stage link）────────────────────
+    # 修補 clearPort 之後：3 port 完整迴圈 32.1 → 11.0 ms（31 → 91 Hz），
+    # 實際 /joint_states 50.0 Hz、抖動 σ 0.48 ms。
+    # 必須用 rl_deploy/driver_patched（不是 motor_control/driver_node）。
+    measured_joint_state_hz: 50.0
+    # 有真正運動的 8 個關節，暫存器 vs 位置微分相關 0.82~0.96；
+    # 暫存器 RMS 一致低約 6%（伺服內部濾波）→ 用暫存器。
+    joint_vel_source: register
+
+    # ── ★ IMU 安裝座標（calib --stage imu）──────────────────────────
+    # 感測器座標 → base_link = (+x, -y, -z)，重力殘差 0.69°。
+    # 前後搖晃時 sensor y 吃掉 90.4% 能量 → y 對應 base 的左右軸。
+    # 180° 歧義由 stage pose 解決：模擬站姿量到 g_base.x = -0.133（後傾），
+    # 與目視「往後傾」一致；若用 (-x,+y,-z) 會變成前傾，與目視矛盾。
+    imu_rotation: [ 1.0,  0.0,  0.0,
+                    0.0, -1.0,  0.0,
+                    0.0,  0.0, -1.0]
+    imu_static_residual_deg: 0.69
+    # projected_gravity 的來源。
+    # ⚠️ **必須用 quat**。加速度計量的是比力 (a − g)：走路時機身有 0.11 g
+    #    的加速度（實測 vz RMS 0.105 m/s @1.67 Hz），視在重力會偏 6.37°，
+    #    而訓練雜訊只有 ±0.05 = 2.87° → 超標 222%。
+    #    DMP 的 QUAT 是融合 gyro+accel 的姿態估計，不含機身加速度。
+    #    加速度計只留給靜態校正與健康檢查。
+    gravity_source: quat
+    # QUAT 是相對歸零姿態的（IMUService rel_mode=True），所以開機流程是
+    #   ① 下站姿 → ② 歸零 IMU → ③ 才跑 policy
+    zero_imu_at_stand: true
+
+    # ── ★ 站姿基準（calib --stage pose）─────────────────────────────
+    # stand.ini    : pitch +6.64°（前傾）總傾角 6.75°，腳底平貼 ✅
+    # 模擬 STAND_* : pitch -7.63°（後傾）總傾角 7.89°，腳底不平 ❌
+    # 兩者差 14.27°，FK 預測 17° → 吻合；目視也確認。
+    pose_reference: stand_ini
+    stand_ini_path: "~/ros2_kid/src/strategy/strategy/Parameter/stand.ini"
+
+    # ── ★ Dynamixel 位置環增益（2026-10-06 階躍辨識，ID 13）────────────
+    #
+    # 出廠是 P=800, I=0, D=0 → K = 52.6 N·m/rad，模擬是 25（硬 2.1 倍）。
+    # e-Manual 的 KPP = P/128，加上 PWM→扭矩（堵轉 11.42 N·m / PWM 885）：
+    #     P=800 → 52.6    P=380 → 25.0    P=200 → 13.1  N·m/rad
+    #
+    # **這個換算被獨立驗證過**：階躍的穩態垂度就是重力把關節拉下的量，
+    # K·e = τ_gravity。同一顆關節在 P=200 與 P=380 下算出同一個扭矩
+    # （0.907 / 0.843 N·m），而且反推力臂 143 mm 與機構吻合
+    # （膝以下懸掛 0.618 kg、膝→踝 117 mm）。
+    #
+    # D 的掃描（P=380，目標是複製模擬的閉環：慢極點 14.7 rad/s、
+    # 10~90% 上升 150 ms、無過衝）：
+    #       D      過衝%   上升    慢極點   vs 模擬
+    #       0       0.0   131ms     17      +16%
+    #     500       0.5   144ms     15       +2%   ← 選這個
+    #    1500       1.2   163ms      —
+    #    6000       0.0   291ms      8      +46%
+    #   12000       0.6   463ms      5      +66%
+    #
+    # ⚠️ **D=0 時就已經沒有過衝** —— 關節本身的摩擦/減速機提供了大量阻尼，
+    #    我原本「D=0 等於 ζ=0」的預測是錯的（那假設無摩擦）。所以 D 的作用
+    #    很小，P 才是主因。這也解釋了為什麼實測 P=200 比 P=800 好看 ——
+    #    不是阻尼問題，純粹是變軟之後對 policy 的大幅指令反應沒那麼猛。
+    #
+    # ⚠️ 過衝那欄 0.5/1.2/1.2/0/0.6% 非單調 → 是量測雜訊，不是真過衝。
+    #    所以 D=1500/3000 推出的 ζ≈0.82 不可當真，全部都該視為無過衝。
+    #
+    # 只套在 12 個腿關節（--ids legs）；手臂/腰/頭維持 P=800 才夾得住。
+    #     ros2 run rl_deploy dxl --set-pgain 380 --set-dgain 500 --ids legs
+    position_p_gain: 380
+    position_i_gain: 0
+    position_d_gain: 500
+
+    # ── 安全 ──────────────────────────────────────────────────────────
+    # ⚠️ 傾角是**從 QUAT 算、相對站姿**的，不是加速度計的絕對值。
+    #    原本用加速度計，一進 POLICY 就量到 55°/59° 而誤觸發 ——
+    #    加速度計量的是 (a − g)，吊著的機器人一踢腿就有 1.4 g 的水平分量。
+    max_tilt_deg: 30.0            # 超過就退回站姿
+    # 進 POLICY 時把動作幅度從 0 升到滿值的秒數。LSTM 的隱藏狀態進 POLICY
+    # 時被清零，第一步是冷啟動，全幅套用會猛然一踢。0.5 s = 25 步。
+    action_ramp_s: 0.5
+    # 診斷：以這個頻率把觀測與動作逐項印出來，對帳尺度/符號。0 = 關。
+    log_obs_hz: 1.0
+    # ★ 2026-10-06：100 → 200 ms。實測 policy 跑到一半 /joint_states 單次
+    #    停頓 108 ms（IMU 同期最大只有 21 ms → 是匯流排不是 ROS）。
+    #    原因是 SDK 的 LATENCY_TIMER=16 讓單次讀取失敗要等 36.7 ms，
+    #    三次連續失敗 = 110 ms。fast_port 已把它改成 1（→ 20 ms），
+    #    門檻再放到 200 ms 當雙重保險。200 ms = 10 個控制週期，期間馬達
+    #    維持上一個指令不動，仍是有效的保護界線。
+    stale_timeout_ms: 200.0
+    stale_warn_ms: 50.0          # 超過就記一筆（不中止），看停頓分布

@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>rl_deploy</name>
+  <version>0.1.0</version>
+  <description>Isaac Lab 訓練的盲走 policy 的真機部署與校正工具。不修改原有套件。</description>
+  <maintainer email="5454sky@gmail.com">iclab</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>tku_msgs</exec_depend>
+  <exec_depend>motor_control</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

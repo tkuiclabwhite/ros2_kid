@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 #coding=utf-8
 import sys
-import rclpy 
+import rclpy
+from rclpy.executors import MultiThreadedExecutor
 from strategy.API import API
+from sensor_msgs.msg import Image as RosImage
+from ultralytics import YOLO
+import cv2
 import numpy as np
 import math
 import time
-
-
 #--校正量--#
 #前進量校正
 FORWARD_CORRECTION         = -350 ##往後補償 ＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠＠邊平移邊往後
@@ -15,7 +17,7 @@ FORWARD_CORRECTION         = -350 ##往後補償 ＠＠＠＠＠＠＠＠＠＠�
 #平移校正
 TRANSLATION_CORRECTION     = -0.5  ####斜著走改這個
 #旋轉校正     ####往右面負  往左面正
-THETA_CORRECTION           = -0.5
+THETA_CORRECTION           = -1.0
 TRANSLATION_THETA_CORRECTION = -0.5##  平移旋轉
 #____________________________________________________________________________________________________________________________________________________
 #基礎變化量(前進&平移)
@@ -25,28 +27,41 @@ HEAD_CHANGE_V              = 100
 # ---微調站姿開關---#
 STAND_CORRECT_CW           = False                 #sector(33) CW_stand微調站姿 測就知道
 DRAW_FUNCTION_FLAG         = True                  #影像繪圖開關
-TARGET_COLOAR_1              = 'Red'                  #'Orange' 'Yellow' 'Blue' 'Green' 'Black' 'Red' 'White'       
+TARGET_COLOAR_1              = 'Red'                  #'Orange' 'Yellow' 'Blue' 'Green' 'Black' 'Red' 'White'
 TARGET_COLOAR_2              = 'Red'
-
-W_CENTER = 30  # 距離中心點的權重 
-W_ALIGN = 70  # 水平對齊的權重 
+# ==================== YOLO / TensorRT ====================
+# 之後重新訓練時，只要把同名 best.engine 覆蓋掉即可。
+ENGINE_PATH = "/home/iclab/ros2_kid/src/strategy/strategy/sr/best.engine"
+CAMERA_TOPIC = "/camera1/image_raw"
+YOLO_CONF = 0.50
+YOLO_WIDTH = 320
+YOLO_HEIGHT = 240
+YOLO_MAX_DRAW_BOXES = 30
+YOLO_TERMINAL_DEBUG = True
+YOLO_DEBUG_INTERVAL = 10   # 每 10 次 find_ladder 印一次，避免 Terminal 洗太快
+# 同一排判定：兩顆攀岩點中心 Y 相差多少 pixel 以內，視為同一排
+# 實機只需要調這一個參數，不用去改 find_ladder / get_best_climbing_target
+# =============================== 相差多少 pixel 以內，視為同一排===========================================
+YOLO_ROW_Y_TOLERANCE = 30
+# ==================== 實機測試開關 ====================
+# False：只跑 YOLO、分排、距離判斷、Terminal Debug，不讓機器人走
+# True ：正式讓機器人依策略走路
+WALK_ENABLE = True
+# =====================================================
+# =========================================================
+W_CENTER = 30  # 距離中心點的權重
+W_ALIGN = 70  # 水平對齊的權重
 W_HEIGHT = -50  #高度權重
-
-
 W_FAR = 920
 RATIO_FAR = -0.90 #2251-2363)/100
-
-W_NEAR = 1120     
+W_NEAR = 1120
 RATIO_NEAR = -1.35 #(2251-2363)/100
-
-
 # ========= 距離抓點參數：參考籃球 distance = FOCAL * REAL / pixel_length =========
 # 攀岩點實際高度，單位自己統一即可，先用 10 當基準
 CW_REAL_POINT_LENGTH = 10
 # 相機焦距參數，先沿用籃球的 330，現場再校正
 CW_FOCAL_LENGTH = 330
-
-# # # # # # # # 距離抓點# # # # # # # # # # # # # # # # 
+# # # # # # # # 距離抓點# # # # # # # # # # # # # # # #
 # 理想抓點距離，越大代表希望站/抓得更遠 抓太前面 → 調大 / 抓太後面 → 調小
 CW_DIST_TARGET = 60
 # 左右像素偏移轉手馬達量 左右抓歪
@@ -63,70 +78,57 @@ CW_DIST_GAIN_Z = 4.0
 # ========= 手部抓點微調 =========
 #____________________________________________________________________________________________________________________________________________________
 # X：左右修正。左手抓太左/右手抓太左 -> 加大；抓太右 -> 減小 右正左負
-LEFT_HAND_X_OFFSET = -200
-RIGHT_HAND_X_OFFSET = -215
-
+LEFT_HAND_X_OFFSET = 38
+RIGHT_HAND_X_OFFSET = -95
 # Y：高低修正。 加大往下
-LEFT_HAND_Y_OFFSET = 630
-RIGHT_HAND_Y_OFFSET = -630
+LEFT_HAND_Y_OFFSET = 640
+RIGHT_HAND_Y_OFFSET = -640
 #____________________________________________________________________________________________________________________________________________________
-# # # # # # # # # # # # # # # # # # # # # # # # # # # 
-
+# # # # # # # # # # # # # # # # # # # # # # # # # # #
 # 防止一次輸出太大，可依你的馬達安全範圍調整
 CW_HAND_X_LIMIT = 1000
 CW_HAND_Y_LIMIT = 1000
-
 #------------------#
 HEAD_HORIZONTAL            = 2048               #頭水平
 HEAD_VERTICAL              = 2048              #頭垂直 #30cm2150
 #____________________________________________________________________________________________________________________________________________________
 ###左右手初始頭部選點 往右減少 往左加 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++換點調
-HEAD_LEFT_HAND_H = 2730    
-HEAD_LEFT_HAND_V = 2360  #2100
-
-HEAD_RIGHT_HAND_H = 1948   ####右手選點左右 
-HEAD_RIGHT_HAND_V = 2360
+HEAD_LEFT_HAND_H = 2480
+HEAD_LEFT_HAND_V = 2155  #2100
+HEAD_RIGHT_HAND_H = 1735   ####右手選點左右
+HEAD_RIGHT_HAND_V = 2350
 #____________________________________________________________________________________________________________________________________________________
 HEAD_LEFT_LEG_H = 1750
 HEAD_LEFT_LEG_V = 1750
-
 HEAD_RIGHT_LEG_H = 2350
 HEAD_RIGHT_LEG_V = 1750
-
 MOTOR_LEFT_HAND_Y = 1071
 MOTOR_LEFT_HAND_X = 1919
-
 MOTOR_RIGHT_HAND_Y = 2406
 MOTOR_RIGHT_HAND_X = 1742
-
 MOTOR_LEFT_LEG_Y = 0
 MOTOR_LEFT_LEG_X = 0
-
 MOTOR_RIGHT_LEG_Y = 0
 MOTOR_RIGHT_LEG_X = 0
-
 MOTOR_LEFT_HEAP = 0
 MOTOR_RIGHT_HEAP = 0
-
-
 #判斷值
 # FOOTLADDER_LINE            = 215                   #上梯基準線
 MY_LINE_Y= 120 #攀岩基準線
 MY_LINE_X =160 #攀岩基準線
-MY_SIZE = 950
+MY_SIZE = 1100
 #____________________________________________________________________________________________________________________________________________________
 # ========= 走到定點微調 =========
-# 直接調這個控制停下來距離：走太近 -> 改更負；走太遠 -> 改大
-READY_DISTANCE_ADJUST = -22
+# 直接調這個控制停下來距離：走太遠 -> 減
+READY_DISTANCE_ADJUST = -30
 #____________________________________________________________________________________________________________________________________________________
 # 保留原本參數但不再用它控制距離，避免搞混
 WALK_SIZE_OFFSET = 0
 #____________________________________________________________________________________________________________________________________________________
 # 左右：人站太左/太右時微調中心線；正負方向依現場測一次修 左邊正
-WALK_X_OFFSET = 5
+WALK_X_OFFSET = -5
 #____________________________________________________________________________________________________________________________________________________
 ROI_RADIUS = 120
-
 #==================== 抓點高度微調 ====================
 # 目標抓 MY_LINE_Y 上方多少 pixel；數字越大，抓越高
 LEFT_HAND_TARGET_Y_OFFSET  = 55
@@ -134,20 +136,20 @@ RIGHT_HAND_TARGET_Y_OFFSET = 55
 # 允許高度範圍；數字越小越不容易跳到別顆
 LEFT_HAND_Y_RANGE  = 25
 RIGHT_HAND_Y_RANGE = 20
-
+# ===== 抓點最低高度限制（只限制選點，不限制頭部角度） =====
+# 影像座標 cy 越小代表越上面。低於此值的點不選，避免手去抓太高。抓點限制
+RIGHT_HAND_MIN_CY = 110
 # 參照 0422：只掃左上、右上安全角度，避免頭亂掃卡到
 HAND_SAFE_SCAN_VIEWS = [
     (HEAD_LEFT_HAND_H,  HEAD_LEFT_HAND_V),
     (HEAD_RIGHT_HAND_H, HEAD_RIGHT_HAND_V),
 ]
-
 #前後值
 BACK_MIN                   = -150                #小退後
 FORWARD_MIN               = 150
 FORWARD_LOW               = 120             #小前進 300
 FORWARD_NORMAL             = 250                 #前進
 FORWARD_HIGH                = 300               #大前進
-
 #平移值
 TRANSLATION_BIG            = 100                  #大平移
 TRANSLATION_NORMAL         = 70
@@ -158,60 +160,140 @@ TRANSLATION_NORMAL         = 70
 #----------------------------------------手校正
 LHEAD_X_CA = 2576
 LHEAD_Y_CA = 2101
-
 LHAND_X_CA = 1791
 LHAND_Y_CA = 1836
-
 RHEAD_X_CA = 1618
 RHEAD_Y_CA = 2357
-
 RHAND_X_CA = 2060
 RHAND_Y_CA = 2701
 #----------------------------------------腳校正
 HEAD_X_CA2 = 2600
 HEAD_X_CA2 = 2190
-
 LEG_X_CA = 1
 LEG_Y_CA = 1
 #---------------------------------------腳高度校正
-
-
 class WallClimbing(API):
 #CW主策略
     def __init__(self):
         super().__init__('wall_climbing_node')
+        # ===== YOLO TensorRT：只在節點啟動時載入一次 =====
+        self.get_logger().info(f"Loading YOLO TensorRT engine: {ENGINE_PATH}")
+        self.yolo_model = YOLO(ENGINE_PATH)
+        self.yolo_boxes = []
+        self.yolo_busy = False
+        self.yolo_frame_count = 0
+        self.yolo_debug_count = 0
+        # API 已經建立 self._bridge、self.qos_fast、self.image_cbg
+        self.yolo_image_sub = self.create_subscription(
+            RosImage,
+            CAMERA_TOPIC,
+            self.yolo_image_callback,
+            self.qos_fast,
+            callback_group=self.image_cbg
+        )
+        # 保留舊 ObjectInfo，避免其他舊程式碼引用時出錯；
+        # SR 的主要辨識已改由 self.yolo_boxes 提供。
         self.target = ObjectInfo(TARGET_COLOAR_1,TARGET_COLOAR_2,'Ladder',self)
+        # Start 狀態只在節點建立時初始化一次
+        self.is_start = False
         self.init()
         self.timer = self.create_timer(0.05, self.strategy_loop)
-        self.get_logger().info("Wall Climbing Node Initialized")
-        
+        self.get_logger().info("Wall Climbing Node Initialized - YOLO mode")
         # self.STAND_CORRECT_CW = STAND_CORRECT_CW
-
+    def yolo_image_callback(self, msg):
+        """
+        直接訂閱機器人原本的 /camera1/image_raw。
+        YOLO 只負責把畫面中的攀岩點轉成 bbox/center/size/confidence。
+        不開 cv2.imshow()，所以不會多一個 YOLO 視窗。
+        """
+        if self.yolo_busy:
+            return
+        self.yolo_busy = True
+        try:
+            frame = self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+            # SR 原本所有座標與基準線都是 320x240，
+            # 因此先統一成相同座標系，後面的選點/追蹤邏輯不用改。
+            frame = cv2.resize(
+                frame,
+                (YOLO_WIDTH, YOLO_HEIGHT),
+                interpolation=cv2.INTER_LINEAR
+            )
+            results = self.yolo_model.predict(
+                source=frame,
+                imgsz=320,
+                conf=YOLO_CONF,
+                verbose=False
+            )
+            detections = []
+            if results:
+                result = results[0]
+                if result.boxes is not None:
+                    for i, box in enumerate(result.boxes):
+                        xyxy = box.xyxy[0].detach().cpu().tolist()
+                        xmin, ymin, xmax, ymax = [int(round(v)) for v in xyxy]
+                        # 保護座標範圍
+                        xmin = max(0, min(YOLO_WIDTH - 1, xmin))
+                        xmax = max(0, min(YOLO_WIDTH - 1, xmax))
+                        ymin = max(0, min(YOLO_HEIGHT - 1, ymin))
+                        ymax = max(0, min(YOLO_HEIGHT - 1, ymax))
+                        width = max(0, xmax - xmin)
+                        height = max(0, ymax - ymin)
+                        if width <= 0 or height <= 0:
+                            continue
+                        conf = float(box.conf[0].detach().cpu().item())
+                        cls_id = int(box.cls[0].detach().cpu().item())
+                        # 若之後模型有多類別，可在這裡依 cls_id / class_name 篩選。
+                        class_name = str(result.names.get(cls_id, cls_id))
+                        cx = (xmin + xmax) // 2
+                        cy = (ymin + ymax) // 2
+                        detections.append({
+                            'bbox': (xmin, ymin, xmax, ymax),
+                            'center': (cx, cy),
+                            'cx': cx,
+                            'cy': cy,
+                            'xmin': xmin,
+                            'ymin': ymin,
+                            'xmax': xmax,
+                            'ymax': ymax,
+                            'width': width,
+                            'height': height,
+                            # YOLO bbox 面積；第一次實機時 MY_SIZE 需要重新校正
+                            'size': width * height,
+                            'confidence': conf,
+                            'class_id': cls_id,
+                            'class_name': class_name,
+                            'id': i,
+                        })
+            # 一次整包替換，strategy_loop 永遠讀最新一幀結果
+            self.yolo_boxes = detections
+            self.yolo_frame_count += 1
+        except Exception as e:
+            self.get_logger().error(f"YOLO inference failed: {e}")
+            self.yolo_boxes = []
+        finally:
+            self.yolo_busy = False
     def strategy_loop(self):
-        if self.is_start :
+        if self.is_start:
             self.current_strategy = "Wall_Climb_on"
         else:
-            self.current_strategy = "Wall_Climb_off" 
-        # self.current_strategy = "Wall_Climb_on"            
+            self.current_strategy = "Wall_Climb_off"
+        # ===== 測試用：強制啟動 SR =====
+        #self.current_strategy = "Wall_Climb_on"
         strategy = self.current_strategy
         if DRAW_FUNCTION_FLAG:
             self.draw_function()
-
         sys.stdout.write("\033[J")
         sys.stdout.write("\033[H")
-
         self.get_logger().info('________________________________________\033[K')
         self.get_logger().info(f'x: {self.now_forward} ,y: {self.now_translation} ,theta: {self.now_theta}\033[K')
         self.get_logger().info(f'Goal_x: {self.forward} ,Goal_y: {self.translation} ,Goal_theta: {self.theta}\033[K')
         self.get_logger().info(f"機器人狀態: {self.state}\033[K")
+        self.get_logger().info(f"START: {self.is_start} | strategy: {strategy} | WALK_ENABLE: {WALK_ENABLE}\033[K")
         self.get_logger().info(f"target_1_cy: {self.target_1_cy}\033[K")
         self.get_logger().info(f"head_h : {int(self.now_head_Horizontal)},head_v: {int(self.now_head_Vertical)},track:{int(self.track)}\033[K")
         self.get_logger().info('￣￣￣￣￣￣')
-        
-        
         if strategy == "Wall_Climb_off":
         #關閉策略,初始化設定
-        
             if (not self.walkinggait_stop and self.climbing):
                 self.get_logger().info("🔊CW parameter reset\033[K")
                 self.init()
@@ -222,8 +304,7 @@ class WallClimbing(API):
                 time.sleep(1.5)
                 # if STAND_CORRECT_CW:
                 #     send.sendBodySector(30)             #CW基礎站姿調整磁區
-                #     STAND_CORRECT_CW = False 
-                
+                #     STAND_CORRECT_CW = False
                 self.get_logger().info("reset\033[K")
                 self.imu_reset = True
             self.sendHeadMotor(1,HEAD_HORIZONTAL,100)  #水平
@@ -233,7 +314,6 @@ class WallClimbing(API):
             # self.keep_head()
             self.get_logger().info("turn off\033[K")
             self.walkinggait_stop = True
-
         elif strategy == "Wall_Climb_on":#為甚麼要有兩個參數
         #開啟CW策略
             if self.reset:
@@ -242,7 +322,6 @@ class WallClimbing(API):
                     self.sendHeadMotor(2,HEAD_VERTICAL, 80)#垂直
                     time.sleep(1)
                     self.reset = False
-
             if self.state != 'cw_finish':
                 # if self.STAND_CORRECT_CW:
                 #     send.sendBodySector(102)             #CW基礎站姿調整磁區
@@ -251,9 +330,11 @@ class WallClimbing(API):
                 #     send.execute = False
                 #     self.STAND_CORRECT_CW = False
                 #     rospy.sleep(2)
-                
                 if not self.readyclimb:
-                    self.sendbodyAuto(1)            #開始動作
+                    if WALK_ENABLE:
+                        self.sendbodyAuto(1)   # WALK_ENABLE=True 才開啟步態
+                    else:
+                        self.sendbodyAuto(0)   # 測試模式強制停止步態
                     self.find_ladder()
                     self.track = (int(self.target_1_cy - MY_LINE_Y))*(38/240)
                     self.now_head_Vertical = self.now_head_Vertical - round(self.track * 4096 / 360 * 0.05)
@@ -265,17 +346,19 @@ class WallClimbing(API):
                     self.sendHeadMotor(2,self.now_head_Vertical,100)  #像素轉換馬達值
                     # self.sendHeadMotor(2,HEAD_VERTICAL ,20)
                     motion = self.new_edge_judge()
-                    self.walkinggait(motion)
-                    
+                    if WALK_ENABLE:
+                        self.walkinggait(motion)
+                    else:
+                        self.get_logger().info(
+                            "WALK_ENABLE=False：目前只測 YOLO / 距離，機器人不走"
+                        )
                 else:
                     if not self.climbing:  # readyclimb == True：開始抓點 + 動作
                         self.action, self.value = self.lambs_select()
-
                         # 關鍵：找不到點就只掃描，不要進 climbmode 卡死
                         if self.action == 'searching' or self.value == 'no_object' or self.value is None:
                             self.get_logger().info(f"找不到點，持續掃描中... step={getattr(self,'climb_step',0)} scan={getattr(self,'scan_count',0)}\033[K")
                             return
-                        
                         # 找到點才真的執行動作
                         self.get_logger().info(f"看完了嘛:{self.lookok}\033[K")
                         if self.lookok:
@@ -295,54 +378,40 @@ class WallClimbing(API):
                         else:
                             self.state = "視覺追蹤與姿態準備中"
                             self.climbmode(self.action, self.value)
-                            
-
-                    
-                    
-                    
     def init(self):
         #狀態
         self.state                 = '停止'
-        self.is_start = False
+        # 不在 init() 重設 is_start，避免 Start 訊號被下一圈清掉
         #步態啟動旗標
-        self.walkinggait_stop      = True  
-        
+        self.walkinggait_stop      = True
         #設定頭部馬達
         self.now_head_Horizontal   = HEAD_HORIZONTAL
         self.now_head_Vertical = HEAD_VERTICAL
-        
         #imu_reast
         self.imu_reset             = True
-
         self.target_1_y = 0
         self.target_1_ym = 0
         self.target_2_y = 0
         self.target_2_ym = 0
-
-
         #步態參數
         self.forward               = 0
-        self.translation           = 0 
-        self.theta                 = 0 
-        self.now_forward           = 0 
+        self.translation           = 0
+        self.theta                 = 0
+        self.now_forward           = 0
         self.now_translation       = 0
         self.now_theta             = 0
-
         self.new_target_xmin       = 0
-        self.new_target_xmax       = 0 
-        self.size = 0 
-
+        self.new_target_xmax       = 0
+        self.size = 0
         self.lost_target_count = 0
-
         self.forward_ok = False
         self.dist_ok = False
         self.pos_x_ok = False
-
         self.head = True
         self.action = None
         self.value = None
         self.reset =True
-        self.readyclimb=False 
+        self.readyclimb=False
         self.lookok = False
         self.climbing=False
         self.beseen = False
@@ -351,7 +420,6 @@ class WallClimbing(API):
         self.beseen_lamb = False
         self.allontarget = False
         self.been_done = False
-
         self.object_x = 0  #debug default 0
         self.object_y = 0  # 0
         self.object_y1_len = 0
@@ -362,163 +430,207 @@ class WallClimbing(API):
         self.target_2_cy = 120
         self.target_1_size = 0
         self.target_2_size = 0
-
         self.track = 0
         self.stoptime = 0
-
         self.cnt = 1
-
-
         self.best_candidate = None
         self.max_score = -1
-
-       
         self.times = 1
-
         self.score_left_hand = 0
         self.score_right_hand = 0
         self.score_left_leg = 0
         self.score_right_leg = 0
-
         head1 = np.array([[LHEAD_X_CA,0],[0,LHEAD_X_CA]])
         hand1 = np.array([[LHAND_X_CA],[LHAND_Y_CA]])
         linear_solution = np.linalg.solve(head1,hand1)
-
         self.p_x1 = linear_solution[0]
         self.p_y1 = linear_solution[1]
-
-
         head2 = np.array([[RHEAD_X_CA,0],[0,RHEAD_X_CA]])
         hand2 = np.array([[RHAND_X_CA],[RHAND_Y_CA]])
         linear_solution = np.linalg.solve(head2,hand2)
-
         self.p_x2 = linear_solution[0]
         self.p_y2 = linear_solution[1]
-
         self.search_stage = 0
-        # self.p_height = HEAP_HEIGHT / TARGET_SIZE 
-
+        # self.p_height = HEAP_HEIGHT / TARGET_SIZE
     def clamp_value(self, value, min_value, max_value):
         return max(min(value, max_value), min_value)
-
     def find_ladder(self):
+        """
+        原本：從 Red 色模陣列取得候選點。
+        現在：從 YOLO bbox 取得候選點。
+        「最下面三顆 -> 左右排序 -> 選第2、3顆」策略完全保留。
+        """
         sys.stdout.write("\033[K")
-
-        # 現在全部攀岩點都是紅色，只抓 Red
-        red_color = self.target.color1
         candidates = []
-
-        obj_count = self.color_counts[red_color]
-        actual_list_len = len(self.object_sizes[red_color])
-
+        # 複製一份，避免 callback 更新時影響本次策略判斷
+        yolo_boxes = list(self.yolo_boxes)
         self.get_logger().info(
-            f"Red subject cnts: {obj_count}\033[K"
+            f"YOLO rock cnts: {len(yolo_boxes)}\033[K"
         )
-
-        # 收集畫面內所有紅色點
-        for i in range(min(obj_count, actual_list_len)):
-            size = self.object_sizes[red_color][i]
-
+        for det in yolo_boxes:
+            size = det['size']
+            # YOLO 已有 confidence 過濾；仍保留小框雜訊保護
             if size <= 100:
                 continue
-
-            cx = (
-                self.object_x_max[red_color][i]
-                + self.object_x_min[red_color][i]
-            ) // 2
-
-            cy = (
-                self.object_y_max[red_color][i]
-                + self.object_y_min[red_color][i]
-            ) // 2
-
             candidates.append({
-                'y_max': self.object_y_max[red_color][i],
-                'cx': cx,
-                'cy': cy,
+                'y_max': det['ymax'],
+                'cx': det['cx'],
+                'cy': det['cy'],
                 'size': size,
-                'idx': i
+                'bbox': det['bbox'],
+                'confidence': det['confidence'],
+                'idx': det['id'],
             })
-
         # 先找畫面最下面的三顆
-        candidates.sort(
-            key=lambda p: p['y_max'],
-            reverse=True
+        candidates.sort(key=lambda p: p['y_max'], reverse=True)
+        # ===== Terminal 攀岩點編號 =====
+        # 規則：
+        #   最下面一排：從左到右 1、2、3...
+        #   倒數第二排：從左到右 1、2、3...
+        #   倒數第三排：從左到右 1、2、3...
+        #
+        # YOLO 不會直接告訴我們「第幾排」，所以依中心點 cy 自動分排。
+        # 同一排攀岩點的 cy 只要相差不超過這個 pixel 值，就視為同一排。
+        ROW_Y_TOLERANCE = YOLO_ROW_Y_TOLERANCE
+        # 先由下往上排列
+        by_y = sorted(candidates, key=lambda p: p['cy'], reverse=True)
+        rows = []
+        for p in by_y:
+            placed = False
+            for row in rows:
+                row_mean_y = sum(q['cy'] for q in row) / len(row)
+                if abs(p['cy'] - row_mean_y) <= ROW_Y_TOLERANCE:
+                    row.append(p)
+                    placed = True
+                    break
+            if not placed:
+                rows.append([p])
+        # 每一排內由左到右編 1、2、3...
+        for row_no, row in enumerate(rows, start=1):
+            row.sort(key=lambda p: p['cx'])
+            for col_no, p in enumerate(row, start=1):
+                p['row_no'] = row_no
+                p['col_no'] = col_no
+                if row_no == 1:
+                    p['position_name'] = f"最下面一排第{col_no}顆"
+                elif row_no == 2:
+                    p['position_name'] = f"倒數第二排第{col_no}顆"
+                elif row_no == 3:
+                    p['position_name'] = f"倒數第三排第{col_no}顆"
+                else:
+                    p['position_name'] = f"倒數第{row_no}排第{col_no}顆"
+        self.yolo_debug_count += 1
+        do_debug = (
+            YOLO_TERMINAL_DEBUG and
+            self.yolo_debug_count % YOLO_DEBUG_INTERVAL == 0
         )
-
+        if do_debug:
+            print("\n========== YOLO 攀岩點 ==========")
+            print(f"總共偵測到 {len(candidates)} 顆")
+            for row_no, row in enumerate(rows, start=1):
+                if row_no == 1:
+                    row_name = "最下面一排"
+                elif row_no == 2:
+                    row_name = "倒數第二排"
+                elif row_no == 3:
+                    row_name = "倒數第三排"
+                else:
+                    row_name = f"倒數第{row_no}排"
+                print(f"\n【{row_name}】")
+                for p in row:
+                    xmin, ymin, xmax, ymax = p['bbox']
+                    width = xmax - xmin
+                    height = ymax - ymin
+                    print(
+                        f"  第{p['col_no']}顆 | "
+                        f"center=({p['cx']},{p['cy']}) | "
+                        f"W={width} H={height} | "
+                        f"area={p['size']} | "
+                        f"conf={p['confidence']:.2f}"
+                    )
         # 少於兩顆才是真的看不到目標
         if len(candidates) < 2:
             self.object_x = 0
             self.size = 0
-
             self.get_logger().info(
-                f"紅色點不足2顆，目前只有 {len(candidates)} 顆"
+                f"YOLO 攀岩點不足2顆，目前只有 {len(candidates)} 顆"
             )
             return
-
-        
-
-        if len(candidates) >= 3:
-            # 看得到三顆：先拿最下面三顆
-            bottom_points = candidates[:3]
-
-            # 左到右排序
-            bottom_points.sort(key=lambda p: p['cx'])
-
-            # 選第2顆和第3顆
-            c1 = bottom_points[1]
-            c2 = bottom_points[2]
-
-            self.get_logger().info("看見3顆，鎖定第2、3顆")
-
+        # ===== 走路選點：直接使用分排後的「最下面一排」 =====
+        # rows[0] 是最下面一排；前面已經依 cx 由左到右排序。
+        bottom_row = rows[0] if rows else []
+        if len(bottom_row) >= 3:
+            # 最下面一排由左到右：選第1、第2顆
+            c1 = bottom_row[0]
+            c2 = bottom_row[1]
+            self.get_logger().info(
+                "YOLO：最下面一排有3顆以上，鎖定第1、第2顆"
+            )
+        elif len(bottom_row) == 2:
+            # 靠近後只剩兩顆：使用第1、第2顆
+            c1 = bottom_row[0]
+            c2 = bottom_row[1]
+            self.get_logger().info(
+                "YOLO：最下面一排只剩2顆，鎖定第1、第2顆"
+            )
         else:
-            # 靠近後只看到兩顆：直接使用這兩顆
-            bottom_points = candidates[:2]
-            bottom_points.sort(key=lambda p: p['cx'])
-
-            c1 = bottom_points[0]
-            c2 = bottom_points[1]
-
-            self.get_logger().info("靠近後只剩2顆，繼續鎖定兩顆中間")
-
+            # 最下面一排只有一顆時，不拿上一排補，避免走錯
+            self.object_x = 0
+            self.size = 0
+            self.get_logger().info(
+                f"YOLO：最下面一排只有 {len(bottom_row)} 顆，暫不進行走路定位"
+            )
+            return
+        if do_debug:
+            name1 = c1.get('position_name', '未知位置')
+            name2 = c2.get('position_name', '未知位置')
+            total_area = c1['size'] + c2['size']
+            midpoint_x = (c1['cx'] + c2['cx']) // 2
+            print("------------- WALK TARGET ------------")
+            print(f"WALK_ENABLE: {WALK_ENABLE}")
+            print(f"走路目前選擇：{name1} + {name2}")
+            print(
+                f"{name1}: center=({c1['cx']},{c1['cy']}), "
+                f"area={c1['size']}, conf={c1['confidence']:.2f}"
+            )
+            print(
+                f"{name2}: center=({c2['cx']},{c2['cy']}), "
+                f"area={c2['size']}, conf={c2['confidence']:.2f}"
+            )
+            print(f"兩顆中心 object_x: {midpoint_x}")
+            print(f"bbox總面積: {total_area}")
+            print(f"目前 MY_SIZE: {MY_SIZE}")
+            print(f"面積差值(size-MY_SIZE): {total_area - MY_SIZE:+d}")
+            if total_area < MY_SIZE:
+                print("距離判讀: 面積較小 -> 相對較遠")
+            elif total_area > MY_SIZE:
+                print("距離判讀: 面積較大 -> 相對較近")
+            else:
+                print("距離判讀: 面積剛好等於 MY_SIZE")
+            print("=====================================\n")
         self.target_1_cx = c1['cx']
         self.target_1_cy = c1['cy']
         self.target_1_size = c1['size']
-
         self.target_2_cx = c2['cx']
         self.target_2_cy = c2['cy']
         self.target_2_size = c2['size']
-
-        # 走到第2顆與第3顆的中間
-        self.object_x = (
-            self.target_1_cx + self.target_2_cx
-        ) // 2
-
-        # 距離判斷仍使用第2顆與第3顆的面積總和
-        self.size = (
-            self.target_1_size + self.target_2_size
-        )
-
+        self.object_x = (self.target_1_cx + self.target_2_cx) // 2
+        # 保留原策略：用兩顆面積總和做前後距離判斷
+        self.size = self.target_1_size + self.target_2_size
         self.get_logger().info(
-            f"最下面第2顆: cx={self.target_1_cx}, "
-            f"cy={self.target_1_cy}, size={self.target_1_size}"
+            f"YOLO target1: cx={self.target_1_cx}, cy={self.target_1_cy}, "
+            f"size={self.target_1_size}, conf={c1['confidence']:.2f}"
         )
-
         self.get_logger().info(
-            f"最下面第3顆: cx={self.target_2_cx}, "
-            f"cy={self.target_2_cy}, size={self.target_2_size}"
+            f"YOLO target2: cx={self.target_2_cx}, cy={self.target_2_cy}, "
+            f"size={self.target_2_size}, conf={c2['confidence']:.2f}"
         )
-
         self.get_logger().info(
-            f"第2、3顆中間 object_x={self.object_x}, "
-            f"總面積={self.size}"
+            f"兩顆中間 object_x={self.object_x}, bbox總面積={self.size}"
         )
-            
-        
     def new_edge_judge(self):
         # 如果完全沒目標
         if not hasattr(self, 'lost_target_count'): self.lost_target_count = 0
-
         if self.size == 0 and self.object_x == 0:
             self.lost_target_count += 1
             self.forward = 0.0
@@ -526,28 +638,23 @@ class WallClimbing(API):
             if self.lost_target_count > 20: # 連續 1 秒沒看到
                 self.state = "目標丟失：搜尋中"
                 self.forward= 500 # 緩慢直走找尋
-            return 'walking'  
+            return 'walking'
         else:
             self.lost_target_count = 0
-
         # 偏差計算 ---
-
         target_x = MY_LINE_X + WALK_X_OFFSET
         target_size = MY_SIZE + READY_DISTANCE_ADJUST
-
         error_x = target_x - self.object_x
         error_size = target_size - self.size
-
         self.get_logger().info(f"目前面積:{self.size}")
         self.get_logger().info(f"垂直線:{target_x},我的面積:{target_size}, WALK_X_OFFSET:{WALK_X_OFFSET}, READY_DISTANCE_ADJUST:{READY_DISTANCE_ADJUST}")
         self.get_logger().info(f"誤差size:{error_size}, 誤差x:{error_x}")
-        
         # 前後距離控制 ---
         if not self.forward_ok :
-            if abs(error_size) <= 10:   #停誤差 ——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
-                self.forward = 0.0 
+            if abs(error_size) <= 35:   #停誤差 ——————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+                self.forward = 0.0
                 time.sleep(2)
-                self.forward_ok = True 
+                self.forward_ok = True
             else:
                 if error_size > 0:
                     if error_size > 200 and error_size <400:
@@ -560,57 +667,44 @@ class WallClimbing(API):
                     self.forward = BACK_MIN
         else:
                 self.get_logger().info("前進對齊,準備平移")
-                if self.object_x > 0:            
+                if self.object_x > 0:
                     self.translation = max(min(error_x * 10, 400), -400) if abs(error_x) > 6.0 else 0.0
                 else:
                     self.translation = 0.0
-
                 self.pos_x_ok = abs(error_x) <= 10 or self.object_x == 0      #平移死區值
-
-        if self.forward_ok  and self.pos_x_ok : 
+        if self.forward_ok  and self.pos_x_ok :
             if not hasattr(self, 'ready_count'): self.ready_count = 0
             self.get_logger().info("穩定加一")
             time.sleep(0.25)
             self.ready_count += 1
         else:
             self.ready_count = 0
-
         if  self.ready_count > 2: #  5 幀穩定
             self.state = "對齊完成：切換攀爬模式"
             return "ready_to_cw"
         else:
             self.state = f"對齊中...穩定度:{int(self.ready_count/2*100)}%"
             return "walking"
-         
-
-
     def walkinggait(self,motion):
     #步態函數
         if motion == 'ready_to_cw':
             self.get_logger().info("正面對齊：準備攀爬\033[K")
             self.forward = 0.0
             self.translation = 0.0
-
             self.sendbodyAuto(0)        #停止步態
             time.sleep(0.5)
             self.sendSensorReset(True)  #IMU reset 避免機器人步態修正錯誤
             self.state = 'ready_finish'
-            self.readyclimb = True  
-
-
+            self.readyclimb = True
         else:
             self.now_forward = self.ramp_speed(self.now_forward, self.forward, BASE_CHANGE)
             self.now_translation = self.ramp_speed(self.now_translation, self.translation, BASE_CHANGE)
-               
             f = max(min(int(self.now_forward), 501), -501)
             t = max(min(int(self.now_translation), 1001), -1001)
-
             self.get_logger().info(f"now_forward   :{self.now_forward}")
             self.get_logger().info(f"now_translation  : {self.now_translation}")
-            
             self.get_logger().info(f"f   :{f}")
             self.get_logger().info(f"t   :{t}")
-            
             if not self.forward_ok:
                 if f < 0:
                     self.sendContinuousValue(f, TRANSLATION_CORRECTION, 0)   #######後退旋轉
@@ -618,8 +712,6 @@ class WallClimbing(API):
                     self.sendContinuousValue(f, TRANSLATION_CORRECTION, THETA_CORRECTION)
             else:
                 self.sendContinuousValue(FORWARD_CORRECTION, t, TRANSLATION_THETA_CORRECTION)
-
-
     def ramp_speed(self, current, target, step):
         if abs(current - target) < step:
             return target
@@ -628,8 +720,6 @@ class WallClimbing(API):
         elif current > target:
             return current - step
         return target
-
-
     def calculate_hand_motor_by_distance(self, action, current_target):
         """
         參考籃球 basket_distance()：
@@ -638,17 +728,14 @@ class WallClimbing(API):
         """
         target_cx, target_cy = current_target['center']
         xmin, ymin, xmax, ymax = current_target['bbox']
-
         point_length = ymax - ymin
         if point_length <= 0:
             self.get_logger().info("攀岩點高度錯誤，停止抓點")
             return None, None
-
         target_distance = CW_FOCAL_LENGTH * CW_REAL_POINT_LENGTH / point_length
         target_dx = target_cx - MY_LINE_X
         target_dy = target_cy - MY_LINE_Y
         distance_error = target_distance - CW_DIST_TARGET
-
         # 左右偏移 + 遠近補償
         # 左手、右手分開算，因為右手遠近方向相反
         if action == 'left_hand':
@@ -657,33 +744,27 @@ class WallClimbing(API):
                 + distance_error * CW_DIST_GAIN_Z
                 + LEFT_HAND_X_OFFSET
             )
-
             motor_value_y = (
                 target_dy * CW_DIST_GAIN_Y
                 + LEFT_HAND_Y_OFFSET
             )
-
         elif action == 'right_hand':
             motor_value_x = (
                 -(target_dx * CW_DIST_GAIN_X
                 - distance_error * CW_DIST_GAIN_Z)
                 + RIGHT_HAND_X_OFFSET
             )
-
             motor_value_y = (
                 target_dy * CW_DIST_GAIN_Y
                 + RIGHT_HAND_Y_OFFSET
             )
-
         else:
             return None, None
-
         motor_value_x = self.clamp_value(
             motor_value_x,
             -CW_HAND_X_LIMIT,
             CW_HAND_X_LIMIT
         )
-
         motor_value_y = self.clamp_value(
             motor_value_y,
             -CW_HAND_Y_LIMIT,
@@ -698,37 +779,29 @@ class WallClimbing(API):
             f"{action} 最終輸出: M1(Y)={int(motor_value_y)}, M2(X)={int(motor_value_x)}"
         )
         return motor_value_x, motor_value_y
-
     def climbmode(self, action, target_data):
         current_target = self.get_best_climbing_target()
-
         if current_target == 'no_object' or current_target is None:
             self.get_logger().info(f"目標丟失！當前追蹤側: {action}，啟動分段搜尋...")
-
             if self.search_stage == 0:
                 self.search_stage = 1
                 self.cnt = 0
-
             if self.search_stage == 1:
                 step_h = -HEAD_CHANGE_H if action == 'left' else HEAD_CHANGE_H
                 self.sendHeadMotor(1, self.now_head_Horizontal + step_h, 30)
                 self.now_head_Horizontal += step_h
-
                 if abs(self.now_head_Horizontal - 2048) <= abs(HEAD_CHANGE_H):
                     self.get_logger().info("頭部已抵達中心，準備往上掃描")
                     self.search_stage = 2
-
             elif self.search_stage == 2:
                 self.sendHeadMotor(2, HEAD_CHANGE_V, 30)
                 self.now_head_Vertical += HEAD_CHANGE_V
                 self.get_logger().info("抬頭完成，準備反向掃描")
                 self.search_stage = 3
-
             elif self.search_stage == 3:
                 step_h = HEAD_CHANGE_H if action == 'left' else -HEAD_CHANGE_H
                 self.sendHeadMotor(1, self.now_head_Horizontal + step_h, 30)
                 self.now_head_Horizontal += step_h
-
             self.cnt += 1
             if self.cnt > 20:
                 self.get_logger().info("搜尋超時！停止動作確保安全")
@@ -736,19 +809,16 @@ class WallClimbing(API):
                 self.search_stage = 0
                 self.sendbodyAuto(0)
             return
-
         else:
             if self.search_stage != 0:
                 self.get_logger().info("重新鎖定目標！恢復正常追蹤")
                 self.search_stage = 0
                 self.cnt = 0
-
         if target_data == 'no_object' or target_data is None:
             self.get_logger().info("壞了...")
             self.get_logger().info("我閃亮登場...")
             self.sendbodyAuto(0)
             return
-
         config = {
             'left_hand': {
                 'ids': [1, 2], 'base_m': [HEAD_LEFT_HAND_H, HEAD_LEFT_HAND_V],
@@ -775,16 +845,12 @@ class WallClimbing(API):
                 'ready_climb': [MOTOR_RIGHT_LEG_X, MOTOR_RIGHT_LEG_Y]
             }
         }
-
         if action not in config:
             self.get_logger().error(f"蛤—這是甚摸: {action}")
             return
-
         cfg = config[action]
-
         if not self.move_ok:
             self.keep_head(current_target['center'])
-
         if self.track_ok:
             if not hasattr(self, 'okcnt'):
                 self.okcnt = 0
@@ -792,11 +858,9 @@ class WallClimbing(API):
             self.get_logger().info(f"目標對準中，穩定度:{int(self.okcnt / 15 * 100)}%")
         else:
             self.okcnt = 0
-
         if self.okcnt > 14 and not self.move_ok:
             self.state = "穩定鎖定！開始攀爬動作"
             self.get_logger().info(f"對準目標中心 x:{current_target['center'][0]} y: {current_target['center'][1]}")
-
             if not self.allontarget:
                 if action == 'left_hand' or action == 'right_hand':
                     time.sleep(3)
@@ -815,13 +879,11 @@ class WallClimbing(API):
             else:
                 # 原本有 cfg['default_sector']，但 config 裡沒有，避免 KeyError
                 self.get_logger().info("allontarget=True，略過 default_sector")
-
             # ========= 這裡是新版：手部用距離自動抓點，不再用 current_target['size'] =========
             if action == 'left_hand' or action == 'right_hand':
                 motor_value_x, motor_value_y = self.calculate_hand_motor_by_distance(action, current_target)
                 if motor_value_x is None or motor_value_y is None:
                     return
-
                 # theta_x = abs((2048 - self.now_head_Horizontal) * (360 / 4096))
                 # theta_y = abs((2048 - self.now_head_Vertical) * (360 / 4096 ))
                 # real_x = theta_x - 21.9014
@@ -830,12 +892,10 @@ class WallClimbing(API):
                 # output_y = (cfg['ready_climb'][1] - 2048 ) + (theta_y  *  per_angle_pix)
                 # motor_value_x = output_x
                 # motor_value_y = output_y
-
                 self.sendSingleMotor(cfg['ids'][1], int(motor_value_x), 20)
                 time.sleep(2)
                 self.sendSingleMotor(cfg['ids'][0], int(motor_value_y), 20)
                 time.sleep(2)
-
             if action == 'left_leg':
                 self.sendBodySector(19)
                 time.sleep(2)
@@ -849,46 +909,34 @@ class WallClimbing(API):
                 time.sleep(2)
                 self.sendBodySector(24)
                 time.sleep(2)
-
             self.move_ok = True
             self.state = '攀爬結束'
-
     def keep_head(self,coordinate):
-
         cx,cy = coordinate
-
         error_x = cx - MY_LINE_X # 水平誤差
         error_y = cy - MY_LINE_Y # 垂直誤差
-
         diff_h = (error_x * (51/320)) * (4096/360) *0.05
         diff_v = (error_y * (38/240)) * (4096/360) *0.05
-
         self.get_logger().info(f"diff_h:{diff_h},diff_v :{diff_v}")
-
         self.now_head_Horizontal -= round(diff_h)
         self.now_head_Vertical -= round(diff_v)
-
         self.now_head_Horizontal = max(1000, min(3000, self.now_head_Horizontal))
         self.now_head_Vertical = max(1000, min(3000, self.now_head_Vertical))
-
         self.sendHeadMotor(1, int(self.now_head_Horizontal), 100) # 水平
         self.sendHeadMotor(2, int(self.now_head_Vertical), 100) # 垂直
-
         if abs(error_x) < 10 and abs(error_y) < 10 :
-            self.track_ok = True 
+            self.track_ok = True
         else:
             self.track_ok = False
-
-
     def imu_angle(self):      #一般 imu修正角度
         imu_ranges = [  (180,  -3),
-                        (90,  -3), 
-                        (60,  -3), 
-                        (45,  -3), 
-                        (20,  -3), 
-                        (10,  -2), 
-                        (5,   -2), 
-                        (2,   -1), 
+                        (90,  -3),
+                        (60,  -3),
+                        (45,  -3),
+                        (20,  -3),
+                        (10,  -2),
+                        (5,   -2),
+                        (2,   -1),
                         (0,    0),
                         (-2,    1),
                         (-5,    2),
@@ -898,112 +946,176 @@ class WallClimbing(API):
                         (-60,   3),
                         (-90,   3),
                         (-180,   3)]
-        for imu_range in imu_ranges:           
+        for imu_range in imu_ranges:
             if self.imu_rpy[2] >= imu_range[0]:
                 return imu_range[1]
         return 0
-    def draw_function(self): 
-            self.drawImageFunction(1,1,0,320,MY_LINE_Y,MY_LINE_Y,255,255,3) #水平判斷線
-            self.drawImageFunction(2,1,MY_LINE_X,MY_LINE_X,0,240,255,255,3) #垂直判斷線
-            edge_x = 160-ROI_RADIUS  #最左上角的x
-            edge_y = 120-ROI_RADIUS  #最左上角的y
+    def draw_function(self):
+            # 原本 SR 基準線 / ROI
+            self.drawImageFunction(1,1,0,320,MY_LINE_Y,MY_LINE_Y,255,255,3)
+            self.drawImageFunction(2,1,MY_LINE_X,MY_LINE_X,0,240,255,255,3)
+            edge_x = 160-ROI_RADIUS
+            edge_y = 120-ROI_RADIUS
             xmin = edge_x
             xmax = ROI_RADIUS*2 + edge_x
-            ymin =edge_y
-            ymax =ROI_RADIUS*2 + edge_y
-
+            ymin = edge_y
+            ymax = ROI_RADIUS*2 + edge_y
             self.ROI_cx = ROI_RADIUS + edge_x
             self.ROI_cy = ROI_RADIUS + edge_y
-           
             self.drawImageFunction(3,1,xmin,xmax,ymin,ymax,0,255,255)
             self.drawImageFunction(4,1,self.ROI_cx,self.ROI_cx,self.ROI_cy,self.ROI_cy,0,255,255)
-
-    def get_best_climbing_target(self):
-        best_candidate = []
-        color_1 = self.target.color1
-        color_2 = self.target.color2
-        target_colors = [color_1, color_2]
-
-        point_r = 10
-
-        for color in target_colors:
-            cnts = self.color_counts[color]
-
-            for i in range(min(cnts, len(self.object_sizes[color]) + 1)):
-                size = self.object_sizes[color][i]
-                if size < 300:
-                    continue
-
-                cx = (self.object_x_max[color][i] + self.object_x_min[color][i]) // 2
-                cy = (self.object_y_max[color][i] + self.object_y_min[color][i]) // 2
-                
-                if cx is None or cy is None:
-                    continue
-
-                xmax = self.object_x_max[color][i]
-                xmin = self.object_x_min[color][i]
-                ymax = self.object_y_max[color][i]
-                ymin = self.object_y_min[color][i]
-
-                if xmin <= 0 or xmax >= 320 or ymin <= 0 or ymax >= 240:
-                    continue
-
-                dist = math.sqrt((cx - self.ROI_cx) ** 2 + (cy - self.ROI_cy) ** 2)
-                if (dist + point_r) > (ROI_RADIUS + 60):
-                    continue
-
-                center_ratio = 1.0 - (dist / ROI_RADIUS)
-                center_score = center_ratio * W_CENTER
-#####################右手選點排序太高減 
-                if hasattr(self, 'action') and self.action == 'right_hand':
-                    height_score = int((240 - cy) * 8)
+            # ===== YOLO bbox 直接畫進原本 Image 網頁介面 =====
+            # 不使用 cv2.imshow()，因此不會另外開 YOLO 視窗。
+            boxes = list(self.yolo_boxes)
+            for i in range(YOLO_MAX_DRAW_BOXES):
+                draw_id = 100 + i
+                if i < len(boxes):
+                    bx1, by1, bx2, by2 = boxes[i]['bbox']
+                    # mode=2：矩形。綠色框。
+                    self.drawImageFunction(
+                        draw_id, 2,
+                        bx1, bx2, by1, by2,
+                        0, 255, 0, 2
+                    )
+                    # 中心點用小圓表示
+                    cx, cy = boxes[i]['center']
+                    self.drawImageFunction(
+                        200 + i, 3,
+                        cx, 3, cy, cy,
+                        255, 0, 0, 2
+                    )
                 else:
-                    height_score = int((240 - cy) * 5)
-###########################
-                alignment_score = int((1 - abs(cx - self.ROI_cx) / ROI_RADIUS) * 55)
-
-                total_score = int(center_score + alignment_score + height_score)
-
-                best_candidate.append({
-                    'center': (cx, cy),
-                    'score': total_score,
-                    'size': size,
-                    'bbox': (xmin, ymin, xmax, ymax),
-                    'id': {i}
-                })
-
+                    # drawimage 是依 cnt 更新舊圖形，沒有 delete 指令；
+                    # 沒用到的框縮到左上角，避免上一幀殘留。
+                    self.drawImageFunction(draw_id, 2, 0, 0, 0, 0, 0, 0, 0, 1)
+                    self.drawImageFunction(200 + i, 3, 0, 1, 0, 0, 0, 0, 0, 1)
+    def get_best_climbing_target(self):
+        """
+        選點演算法保留原本版本，只把候選來源從色模陣列改成 YOLO bbox。
+        """
+        best_candidate = []
+        point_r = 10
+        # 抓取階段也建立相同的「第幾排、第幾顆」標示
+        ROW_Y_TOLERANCE = YOLO_ROW_Y_TOLERANCE
+        climb_dets = list(self.yolo_boxes)
+        climb_by_y = sorted(climb_dets, key=lambda p: p['cy'], reverse=True)
+        climb_rows = []
+        for p in climb_by_y:
+            placed = False
+            for row in climb_rows:
+                row_mean_y = sum(q['cy'] for q in row) / len(row)
+                if abs(p['cy'] - row_mean_y) <= ROW_Y_TOLERANCE:
+                    row.append(p)
+                    placed = True
+                    break
+            if not placed:
+                climb_rows.append([p])
+        climb_position_by_bbox = {}
+        for row_no, row in enumerate(climb_rows, start=1):
+            row.sort(key=lambda p: p['cx'])
+            for col_no, p in enumerate(row, start=1):
+                if row_no == 1:
+                    name = f"最下面一排第{col_no}顆"
+                elif row_no == 2:
+                    name = f"倒數第二排第{col_no}顆"
+                elif row_no == 3:
+                    name = f"倒數第三排第{col_no}顆"
+                else:
+                    name = f"倒數第{row_no}排第{col_no}顆"
+                climb_position_by_bbox[tuple(p['bbox'])] = name
+        # draw_function 尚未跑到時也保證 ROI 中心存在
+        roi_cx = getattr(self, 'ROI_cx', MY_LINE_X)
+        roi_cy = getattr(self, 'ROI_cy', MY_LINE_Y)
+        for det in list(self.yolo_boxes):
+            size = det['size']
+            # 原本色模 size<300 過濾保留。
+            # 注意：YOLO bbox area 與 HSV blob area 不完全相同，實機可再校正。
+            if size < 300:
+                continue
+            cx, cy = det['center']
+            # 抓點高度限制：只排除太高的候選點，不改頭部固定角度/掃描角度。
+            if getattr(self, 'action', '') == 'right_hand' and cy < RIGHT_HAND_MIN_CY:
+                continue
+            xmin, ymin, xmax, ymax = det['bbox']
+            # 保留原本邊界排除
+            if xmin <= 0 or xmax >= YOLO_WIDTH or ymin <= 0 or ymax >= YOLO_HEIGHT:
+                continue
+            dist = math.sqrt((cx - roi_cx) ** 2 + (cy - roi_cy) ** 2)
+            if (dist + point_r) > (ROI_RADIUS + 60):
+                continue
+            center_ratio = 1.0 - (dist / ROI_RADIUS)
+            center_score = center_ratio * W_CENTER
+            # 保留原本右手高度權重
+            if hasattr(self, 'action') and self.action == 'right_hand':
+                height_score = int((240 - cy) * 8)
+            else:
+                height_score = int((240 - cy) * 5)
+            alignment_score = int(
+                (1 - abs(cx - roi_cx) / ROI_RADIUS) * 55
+            )
+            total_score = int(center_score + alignment_score + height_score)
+            best_candidate.append({
+                'center': (cx, cy),
+                'score': total_score,
+                'size': size,
+                'bbox': (xmin, ymin, xmax, ymax),
+                'confidence': det['confidence'],
+                'class_name': det['class_name'],
+                'position_name': climb_position_by_bbox.get(
+                    tuple(det['bbox']), '未知位置'
+                ),
+                'id': det['id'],
+            })
         if len(best_candidate) == 0:
-            self.get_logger().info("畫面中沒有符合條件的攀爬點...")
+            self.get_logger().info("YOLO畫面中沒有符合條件的攀爬點...")
             return 'no_object'
-##################右手抓點太高減 太矮加
+        # 保留原本右手特殊排序
         if getattr(self, 'action', '') == 'right_hand':
             best_candidate.sort(
                 key=lambda x: (
-                    abs(x['center'][1] - (MY_LINE_Y - 30)),
+                    abs(x['center'][1] - MY_LINE_Y),
                     -x['score']
                 )
             )
         else:
             best_candidate.sort(key=lambda x: x['score'], reverse=True)
-##########################            
         best = best_candidate[0]
-
-        best_score = best['score']
-        best_size = best['size']
-        best_cx = best['center'][0]
-        best_cy = best['center'][1]
-        best_xmin = best['bbox'][0]
-        best_xmax = best['bbox'][2]
-        best_ymin = best['bbox'][1]
-        best_ymax = best['bbox'][3]
-
-        self.get_logger().info(f"total_score,{best_score}")
-        self.get_logger().info(f"size:{best_size}")
-        self.get_logger().info(f"cx:{best_cx},cy:{best_cy}")
-        self.get_logger().info(f"xmin,{best_xmin},ymin,{best_ymin},xmax,{best_xmax},ymax,{best_ymax},")
-
+        self.get_logger().info(
+            f"YOLO best: score={best['score']}, size={best['size']}, "
+            f"cx={best['center'][0]}, cy={best['center'][1]}, "
+            f"conf={best['confidence']:.2f}, bbox={best['bbox']}"
+        )
+        if YOLO_TERMINAL_DEBUG:
+            cx, cy = best['center']
+            xmin, ymin, xmax, ymax = best['bbox']
+            bbox_h = ymax - ymin
+            dx = cx - MY_LINE_X
+            dy = cy - MY_LINE_Y
+            action_name = getattr(self, 'action', 'unknown')
+            # 使用原本 calculate_hand_motor_by_distance 相同的 bbox 高度估距概念
+            est_distance = None
+            if bbox_h > 0:
+                try:
+                    est_distance = (
+                        CW_FOCAL_LENGTH * CW_REAL_POINT_LENGTH / bbox_h
+                    )
+                except Exception:
+                    est_distance = None
+            print("\n========== CLIMB TARGET ==========")
+            print(f"動作: {action_name}")
+            print(f"選到: {best.get('position_name', '未知位置')}")
+            print(f"center: ({cx}, {cy})")
+            print(f"bbox: ({xmin}, {ymin}, {xmax}, {ymax})")
+            print(f"bbox height: {bbox_h} px")
+            print(f"area: {best['size']}")
+            print(f"confidence: {best['confidence']:.2f}")
+            print(f"dx: {dx:+d} px  (正=目標在右邊, 負=左邊)")
+            print(f"dy: {dy:+d} px  (正=目標在下方, 負=上方)")
+            if est_distance is not None:
+                print(f"bbox估計距離: {est_distance:.2f}")
+            print(f"score: {best['score']}")
+            print("==================================\n")
         return best
-
     def lambs_select(self):
         if not hasattr(self, 'climb_step'):
             self.climb_step = 1
@@ -1015,7 +1127,6 @@ class WallClimbing(API):
             self.scan_count = 0
         if not hasattr(self, 'times'):
             self.times = 1
-
         if self.climb_step == 1:
             now_limb = 'left_hand'
             h_pos, v_pos = HEAD_LEFT_HAND_H, HEAD_LEFT_HAND_V
@@ -1030,30 +1141,23 @@ class WallClimbing(API):
             h_pos, v_pos = HEAD_RIGHT_LEG_H, HEAD_RIGHT_LEG_V
         else:
             now_limb = 'any'
-
         self.get_logger().info(f"當前模式: {now_limb}")
-
         if now_limb != 'any':
             if not self.beseen_lamb:
                 self.get_logger().info(f"頭部轉向 {now_limb} 尋找點位")
                 current_v = int(v_pos - (self.scan_count * HEAD_CHANGE_V))
                 self.sendHeadMotor(1, int(h_pos), 40)
                 self.sendHeadMotor(2, current_v, 40)
-
                 self.now_head_Horizontal = int(h_pos)
                 self.now_head_Vertical = current_v
                 time.sleep(1)
                 self.beseen_lamb = True
                 return ('searching', 'no_object')
-
             target_info = self.get_best_climbing_target()
-
             if target_info == 'no_object' or target_info is None:
                 self.lookok = False
-
                 if now_limb == 'left_leg' or now_limb == "right_leg":
                     return ('searching', 'no_object')
-
                 self.scan_count += 1
                 if (self.now_head_Vertical - (self.scan_count * HEAD_CHANGE_V)) <= 2000:
                     self.scan_count = 0
@@ -1063,7 +1167,6 @@ class WallClimbing(API):
                 self.lookok = True
                 self.scan_count = 0
                 return (now_limb, target_info)
-
         else:
             if self.lookok:
                 if self.any_lamb is None:
@@ -1078,9 +1181,7 @@ class WallClimbing(API):
                     val = self.val_right_leg
                 else:
                     return ('none', 'no_object')
-
                 return (self.any_lamb, val)
-
             else:
                 if self.times == 1:
                     self.sendHeadMotor(1, HEAD_LEFT_HAND_H, 40)
@@ -1090,7 +1191,6 @@ class WallClimbing(API):
                     self.score_left_hand = -1 if self.val_left_hand in [None, 'no_object'] else self.val_left_hand['score']
                     self.times = 2
                     return ('searching', 'no_object')
-
                 elif self.times == 2:
                     self.sendHeadMotor(1, HEAD_RIGHT_HAND_H, 40)
                     self.sendHeadMotor(2, HEAD_RIGHT_HAND_V, 40)
@@ -1099,7 +1199,6 @@ class WallClimbing(API):
                     self.score_right_hand = -1 if self.val_right_hand in [None, 'no_object'] else self.val_right_hand['score']
                     self.times = 3
                     return ('searching', 'no_object')
-
                 elif self.times == 3:
                     self.sendHeadMotor(1, HEAD_LEFT_LEG_H, 40)
                     self.sendHeadMotor(2, HEAD_LEFT_LEG_V, 40)
@@ -1108,7 +1207,6 @@ class WallClimbing(API):
                     self.score_left_leg = -1 if self.val_left_leg in [None, 'no_object'] else self.val_left_leg['score']
                     self.times = 4
                     return ('searching', 'no_object')
-
                 elif self.times == 4:
                     self.sendHeadMotor(1, HEAD_RIGHT_LEG_H, 40)
                     self.sendHeadMotor(2, HEAD_RIGHT_LEG_V, 40)
@@ -1117,10 +1215,8 @@ class WallClimbing(API):
                     self.score_right_leg = -1 if self.val_right_leg in [None, 'no_object'] else self.val_right_leg['score']
                     self.times = 5
                     return ('searching', 'no_object')
-
                 elif self.times >= 5:
                     self.times = 1
-
                     if self.last_limb == 'left_hand':
                         self.score_left_hand = -1
                     elif self.last_limb == 'right_hand':
@@ -1129,52 +1225,43 @@ class WallClimbing(API):
                         self.score_left_leg = -1
                     elif self.last_limb == 'right_leg':
                         self.score_right_leg = -1
-
                     scores = {
                         'left_hand': self.score_left_hand,
                         'right_hand': self.score_right_hand,
                         'left_leg': self.score_left_leg,
                         'right_leg': self.score_right_leg
                     }
-
                     best_limb = max(scores, key=scores.get)
                     best_score = scores[best_limb]
-
                     if best_score == -1:
                         self.get_logger().info("四個方向都找不到點...")
                         return ('none', 'no_object')
-
                     self.any_lamb = best_limb
                     self.lookok = True
                     self.get_logger().info(f"Any 模式選定目標: {best_limb}, 分數: {best_score}")
                     return self.lambs_select()
-
 class Coordinate:
 #儲存座標
     def __init__(self, x, y):
         self.x = x
         self.y = y
-
 class ObjectInfo():  #最大物件的訊息
     # 顏色與編號對照
     def __init__(self, color1,color2, object_type,api_node):
-        
         self.api = api_node
         self.color_dict = {
         'Orange': 0, 'Yellow': 1, 'Blue': 2, 'Green': 3,
         'Black': 4, 'Red': 5, 'White': 6
-        } 
+        }
         self.color1= self.color_dict[color1]
         self.color1_str = color1
         self.color2 = self.color_dict[color2]
         self.color2_str = color2
-
         self.edge_max = Coordinate(0, 0)
         self.edge_min = Coordinate(0, 0)
         self.center = Coordinate(0, 0)
         self.get_target = False
         self.target_size = 0
-
         # 設定物件尋找策略
         update_strategy = {
             'Board': self.get_object,
@@ -1182,16 +1269,11 @@ class ObjectInfo():  #最大物件的訊息
             'Target': self.get_object,
         }
         self.find_object = update_strategy[object_type]
-
     def get_object(self):
         """獲取最大面積物件的編號"""
-
         color_type = [self.color1,self.color2]
-
         for color in color_type :
-            
             count = self.api.color_counts[color]
-
             if count == 0:
                 return None
             else:
@@ -1199,19 +1281,15 @@ class ObjectInfo():  #最大物件的訊息
                     max_size = 0
                     max_idx = None
                     size = self.api.object_sizes[color][i]
-
                     if size > max_size:
                         max_size = size
                         max_idx = i
                         self.max_size_color = color
-            
             # 門檻判斷 (面積 > 100 像素才視為目標)
             return max_idx if max_size > 100 else None
-
     def update(self):
         """更新目標物的所有詳細資訊"""
         object_idx = self.find_object() #max_idx
-
         if object_idx is not None:
             self.get_target = True
             # 更新邊界座標 (API: object_x_min/max, object_y_min/max)
@@ -1219,26 +1297,25 @@ class ObjectInfo():  #最大物件的訊息
             self.edge_min.x = self.api.object_x_min[self.max_size_color][object_idx]
             self.edge_max.y = self.api.object_y_max[self.max_size_color][object_idx]
             self.edge_min.y = self.api.object_y_min[self.max_size_color][object_idx]
-            
             # 更新中心點 (API: get_object_cx/cy)
             self.center.x = self.api.get_object_cx(self.max_size_color, object_idx)
             self.center.y = self.api.get_object_cy(self.max_size_color, object_idx)
-            
             # 更新面積 (API: object_sizes)
             self.target_size = self.api.object_sizes[self.max_size_color][object_idx]
         else:
             self.get_target = False
-
 def main(args=None):
     rclpy.init(args=args)
     node = WallClimbing()
     try:
-        rclpy.spin(node)
+        executor = MultiThreadedExecutor(num_threads=4)
+        executor.add_node(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
+        executor.shutdown()
         node.destroy_node()
         rclpy.shutdown()
-
 if __name__ == '__main__':
     main()
