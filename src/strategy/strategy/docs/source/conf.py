@@ -5,20 +5,18 @@ import subprocess
 
 # 讓 Sphinx 找到上一層目錄的 API.py
 sys.path.insert(0, os.path.abspath('../../'))
+# 讓 autodoc 找到大人型的 API_adult.py（僅供文件產生，不參與執行）
+sys.path.insert(0, os.path.abspath('_adult'))
 
 
 # -- Project information -----------------------------------------------------
 
 project = 'TKU ICLAB ROS2 API'
 
-# 自動從 git log 取得最後一次 commit 日期作為版本號
-try:
-    release = subprocess.check_output(
-        ['git', '-C', os.path.abspath('../../'), 'log', '-1', '--format=%cd', '--date=format:%Y.%m.%d'],
-        stderr=subprocess.DEVNULL
-    ).decode().strip()
-except Exception:
-    release = '未知'
+# 版本號：**改文件時人工更新這一行**。
+# 原本是自動抓 git 最後一次 commit 日期，但那會誤導 —— 文件改了卻沒 commit 時
+# 版本號不會動（站上曾經長期停在 2026.05.26，實際內容已經新很多）。
+release = '2026.10.20'
 copyright = '2026, Yang,Shu-kai'
 author = 'Yang,Shu-kai'
 html_short_title = 'ICLAB API'
@@ -37,6 +35,7 @@ extensions = [
     'sphinx.ext.napoleon',    # 支援 Google 格式註解
     'sphinx_rtd_theme',       # 使用 Read the Docs 主題
     'sphinx_tabs.tabs',       # tab 指令必須常駐（.. only:: 仍會解析指令）
+    'sphinx_copybutton',      # code block 複製按鈕
 ]
 
 def _copy_interface(app, exception):
@@ -78,6 +77,8 @@ autodoc_mock_imports = [
     "std_msgs",
     "geometry_msgs",
     "sensor_msgs",
+    "std_srvs",
+    "nav_msgs",
     "tku_msgs",
 ]
 

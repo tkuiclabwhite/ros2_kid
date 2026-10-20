@@ -27,6 +27,7 @@ from tku_msgs.msg import (
     SingleMotorData,
     Parameter,
     Dio,
+    Zoom,
 )
 
 # -------------------- Strategy Process Manager (Plan B-1) --------------------
@@ -129,6 +130,8 @@ class API(Node):
         self.walkparameter_pub = self.create_publisher(Parameter, '/strategy/walkparameter', 10)
 
         self.walking_json_pub = self.create_publisher(String, '/walking_params_update', 10)
+
+        self.zoomin_pub = self.create_publisher(Zoom, '/Zoom_In_Topic', 10)
 
         # Head scale control
         self.HEAD_PAN_ID = 1
@@ -1127,14 +1130,14 @@ class API(Node):
             com_height (float): 質心高度。
         """
         msg = Parameter()
-        msg.mode = mode
-        msg.com_y_swing = com_y_swing
-        msg.width_size = width_size
-        msg.period_t = period_t
-        msg.t_dsp = t_dsp
-        msg.lift_height = lift_height
-        msg.stand_height = stand_height
-        msg.com_height = com_height
+        msg.mode = int(mode)
+        msg.com_y_swing = float(com_y_swing)
+        msg.width_size = float(width_size)
+        msg.period_t = int(period_t)
+        msg.t_dsp = float(t_dsp)
+        msg.lift_height = float(lift_height)
+        msg.stand_height = float(stand_height)
+        msg.com_height = float(com_height)
         self.walkparameter_pub.publish(msg)
 
     def sendLCWalkParameter(self,
@@ -1266,6 +1269,30 @@ class API(Node):
         self.xx = msg.x
         self.yy = msg.y
         self.tt = msg.theta
+
+    def setZoomIn(self, value: float = 1.0) -> None:
+        """
+        設定影像縮放倍率。
+
+        控制畫面的數位放大程度，縮放後解析度不變，但視野範圍縮小、目標物體的像素佔比增大。
+
+        Args:
+            value (float, optional): 縮放倍率，範圍 1.0 ~ 5.0，預設為 1.0。
+                1.0 為完整視野（不縮放），值越大視野越窄、目標在畫面中佔比越大。
+                超出範圍的輸入會自動夾至邊界。
+
+        Note:
+            * 與網頁 ZoomIn 滑桿共用同一個 topic，但網頁上的滑桿數值不會隨 API 呼叫同步更新。
+            * 此設定不會寫入 ini 檔，重啟影像節點後會恢復為預設值 1.0。
+            * 視野縮小後邊緣物體可能消失，追蹤遠距離目標時建議搭配 :meth:`set_head`\ 轉頭輔助。
+
+        Example:
+            >>> api.setZoomIn(2.0)   # 放大兩倍觀察遠處目標
+            >>> api.setZoomIn(1.0)   # 退回完整視野
+        """
+        n = Zoom()
+        n.zoomin = self._clamp(float(value), 1.0, 5.0)
+        self.zoomin_pub.publish(n)
 
 
 def main():

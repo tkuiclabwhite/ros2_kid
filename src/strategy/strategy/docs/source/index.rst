@@ -11,6 +11,8 @@ TKU ICLAB ROS2 API
    Walking
    Motion
    VisionSensors
+   ZedCamera
+   Hand
    System
    Other
 
@@ -34,7 +36,11 @@ TKU ICLAB ROS2 API
 
    ros2_install
    package_install
-   robot_setup
+   udev_setup
+   bashrc_setup
+   github_setup
+   wifi_setup
+   hotspot_setup
    sphinx_setup
 
 .. toctree::

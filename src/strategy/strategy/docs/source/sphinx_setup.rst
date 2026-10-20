@@ -7,6 +7,7 @@ Sphinx 文件建置
 .. code-block:: bash
 
    pip install sphinx sphinx-rtd-theme sphinx-tabs
+   pip install sphinx-copybutton
    pip install sphinx-autobuild
 
    # 選配：從 Python 型別標注自動生成說明
