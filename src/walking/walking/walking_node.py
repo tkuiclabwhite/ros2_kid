@@ -533,17 +533,17 @@ def main():
                     last_applied_com = cur_com
             
             # # --- dt / phase debug ---
-            # if not hasattr(node, "_last_loop_now"):
-            #     node._last_loop_now = time.perf_counter()
-            #     node._last_tnext = t_next
-            # else:
-            #     _now = time.perf_counter()
-            #     loop_dt = _now - node._last_loop_now
-            #     lag = _now - t_next   # >0 代表落後
-            #     if _now - last_dbg_t > 0.5:  # 每 0.5 秒印一次
-            #         last_dbg_t = _now
-            #         print(f"[LOOP] loop_dt={loop_dt*1000:.2f}ms  lag={lag*1000:.2f}ms  DT={DT*1000:.2f}ms")
-            #     node._last_loop_now = _now
+            if not hasattr(node, "_last_loop_now"):
+                node._last_loop_now = time.perf_counter()
+                node._last_tnext = t_next
+            else:
+                _now = time.perf_counter()
+                loop_dt = _now - node._last_loop_now
+                lag = _now - t_next   # >0 代表落後
+                if _now - last_dbg_t > 0.5:  # 每 0.5 秒印一次
+                    last_dbg_t = _now
+                    print(f"[LOOP] loop_dt={loop_dt*1000:.2f}ms  lag={lag*1000:.2f}ms  DT={DT*1000:.2f}ms")
+                node._last_loop_now = _now
 
             # 頻率鎖定
             now = time.perf_counter()

@@ -587,12 +587,14 @@
         </div>
         <div id="motor_area" style="width: 460px;">
             
-            <div>
-                <input type="button" id="btn_left_hand" class="button_choose" onclick="Torque_Choose('left_hand', 'btn_left_hand');" value="left_hand" style="width: 80px;">
-                <input type="button" id="btn_right_hand" class="button_choose" onclick="Torque_Choose('right_hand', 'btn_right_hand');" value="right_hand" style="width: 80px;">
-                <input type="button" id="btn_waist" class="button_choose" onclick="Torque_Choose('waist', 'btn_waist');" value="waist" style="width: 80px;">
-                <input type="button" id="btn_left_leg" class="button_choose" onclick="Torque_Choose('left_leg', 'btn_left_leg');" value="left_leg" style="width: 80px;">
-                <input type="button" id="btn_right_leg" class="button_choose" onclick="Torque_Choose('right_leg', 'btn_right_leg');" value="right_leg" style="width: 80px;">
+            <!-- 六顆部位按鈕用 flex 平分。按鈕 id 必須是 btn_<partName>，refreshTorqueUI 依此對應 robotConfig。 -->
+            <div style="display: flex; gap: 4px; width: 100%; box-sizing: border-box;">
+                <input type="button" id="btn_left_hand" class="button_choose" onclick="Torque_Choose('left_hand');" value="left_hand" style="flex: 1; min-width: 0;">
+                <input type="button" id="btn_right_hand" class="button_choose" onclick="Torque_Choose('right_hand');" value="right_hand" style="flex: 1; min-width: 0;">
+                <input type="button" id="btn_waist" class="button_choose" onclick="Torque_Choose('waist');" value="waist" style="flex: 1; min-width: 0;">
+                <input type="button" id="btn_left_leg" class="button_choose" onclick="Torque_Choose('left_leg');" value="left_leg" style="flex: 1; min-width: 0;">
+                <input type="button" id="btn_right_leg" class="button_choose" onclick="Torque_Choose('right_leg');" value="right_leg" style="flex: 1; min-width: 0;">
+                <input type="button" id="btn_head" class="button_choose" onclick="Torque_Choose('head');" value="head" style="flex: 1; min-width: 0;">
             </div>
             <div style="margin-top: 8px; margin-bottom: 8px; padding: 5px; background-color: rgba(46, 58, 61, 0.8); border-radius: 5px; color: white; display: flex; align-items: center; justify-content: center; width: 100%; box-sizing: border-box;">
                 <span style="font-weight: bold; margin-right: 10px;">單顆控制 ID:</span>
@@ -745,18 +747,31 @@
     <script type="text/javascript" src="./js/Interface2.js"></script>
 
     <script>
-        const btn = document.getElementById('TorqueButton');
+        // 全身扭力按鈕的文字與 active 樣式一律由 refreshTorqueUI() 依實際狀態決定。
+        // 原本這裡另有一個 click listener 自行 toggle，只看點擊次數不看真實狀態，已移除。
 
-        btn.addEventListener('click', function() {
-            // 切換 active class
-            btn.classList.toggle('active');
+        // 扭力狀態快取（motionpackage 維護）。開網頁時索取一次以還原介面，
+        // 否則 motorTorqueStates 是空的，畫面會全部顯示為關閉。
+        var TorqueStateClient = new ROSLIB.Service({
+            ros: ros,
+            name: '/package/GetTorqueState',
+            serviceType: 'tku_msgs/TorqueState'
+        });
 
-            // 改變文字內容
-            if (btn.classList.contains('active')) {
-                btn.innerText = "扭力已開啟";
-            } else {
-                btn.innerText = "扭力已關閉";
-            }
+        function LoadTorqueState() {
+            TorqueStateClient.callService(new ROSLIB.ServiceRequest({ query: true }), function (res) {
+                if (!res || !res.states) return;
+                for (var i = 0; i < res.states.length; i++) {
+                    motorTorqueStates[i + 1] = res.states[i];
+                }
+                if (typeof refreshTorqueUI === "function") refreshTorqueUI();
+                console.log("已載入扭力狀態", res.states);
+            });
+        }
+
+        ros.on('connection', function () {
+            // 連上後向 motionpackage 索取扭力狀態，還原介面顯示
+            try { LoadTorqueState(); } catch (e) { console.warn('LoadTorqueState 失敗:', e); }
         });
 
                 // --- 處理 Strategy Location 的 ROS Topic 通訊 ---

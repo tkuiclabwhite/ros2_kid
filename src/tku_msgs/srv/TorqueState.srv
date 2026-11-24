@@ -1,0 +1,11 @@
+# 查詢目前各馬達的扭力狀態。
+#
+# motionpackage 維護兩個來源：
+#   1. /torque_state（driver_node 開機掃描時從馬達讀回 Torque Enable，之後每次寫入後發布，latched）
+#      → 收到就整排覆蓋，這是硬體實際狀態。馬達斷過電就是全 OFF，沒斷電就是原本的狀態。
+#   2. /set_torque（Motion 網頁、ImageProcess 頭部按鈕等發的指令）→ 即時先更新。
+# driver_node 沒在跑時只剩 2，此時就只是指令快取。
+bool query
+---
+# index 0 對應 ID 1，index 22 對應 ID 23；1 = ON（鎖死），0 = OFF（洩力）
+int16[] states

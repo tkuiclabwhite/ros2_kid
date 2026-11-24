@@ -3,12 +3,12 @@
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile
+from rclpy.qos import QoSProfile, DurabilityPolicy
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Int16, Int16MultiArray, String
 
 from tku_msgs.msg import InterfaceSend2Sector, SaveMotion, SingleMotorData
-from tku_msgs.srv import CheckSector, ReadMotion
+from tku_msgs.srv import CheckSector, ReadMotion, TorqueState
 from rcl_interfaces.msg import SetParametersResult
 
 import configparser
@@ -31,6 +31,21 @@ class MotionNode(Node):
         # Publishers
         self.cmd_pub = self.create_publisher(JointState, '/joint_commands', 10)
         self.torque_pub = self.create_publisher(Int16MultiArray, '/set_torque', 10)
+
+        # 扭力狀態快取：訂閱 /set_torque 而非掛在封包解碼處，這樣連
+        # ImageProcessInterface 的頭部按鈕、rl_deploy 發的扭力指令也記錄得到。
+        # 初始值全部視為 OFF（Dynamixel 上電預設扭力關閉）。這是指令快取，不是硬體實際狀態。
+        self.MOTOR_ID_MAX = 23
+        self.torque_states = [0] * self.MOTOR_ID_MAX
+        self.torque_state_sub = self.create_subscription(
+            Int16MultiArray, '/set_torque', self.cb_torque_state, 10)
+        self.torque_state_srv = self.create_service(
+            TorqueState, '/package/GetTorqueState', self.cb_get_torque_state)
+        # driver_node 從馬達讀回的實際狀態（開機/重連掃描、每次寫入後發布，latched）。
+        # 收到就整排覆蓋上面的指令快取，所以 motionpackage 單獨重啟或馬達沒斷電時也正確。
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.torque_hw_sub = self.create_subscription(
+            Int16MultiArray, '/torque_state', self.cb_torque_hw_state, latched)
 
         # Subscribers
         self.joint_sub = self.create_subscription(JointState, '/joint_states', self.joint_state_cb, 10)
@@ -410,6 +425,28 @@ class MotionNode(Node):
     # Read / Save / Callbacks
     # ==========================================================
     # 策略切換與檔案讀取
+    def cb_torque_state(self, msg: Int16MultiArray):
+        """記錄每次扭力開關的結果。ID 0 代表全部馬達。"""
+        if len(msg.data) < 2:
+            return
+        motor_id, state = int(msg.data[0]), 1 if int(msg.data[1]) else 0
+        if motor_id == 0:
+            self.torque_states = [state] * self.MOTOR_ID_MAX
+        elif 1 <= motor_id <= self.MOTOR_ID_MAX:
+            self.torque_states[motor_id - 1] = state
+
+    def cb_torque_hw_state(self, msg: Int16MultiArray):
+        """driver_node 讀回的實際扭力狀態，index 0 對應 ID 1。"""
+        n = min(len(msg.data), self.MOTOR_ID_MAX)
+        for i in range(n):
+            self.torque_states[i] = 1 if int(msg.data[i]) else 0
+
+    def cb_get_torque_state(self, request, response):
+        """回傳扭力狀態快取，供網頁開啟時初始化介面。"""
+        del request
+        response.states = list(self.torque_states)
+        return response
+
     def cb_read_motion(self, request, response):
         home_path = os.path.expanduser("~")
         strategy_ini_path = os.path.join(home_path, "ros2_kid/src/strategy/strategy/strategy.ini")

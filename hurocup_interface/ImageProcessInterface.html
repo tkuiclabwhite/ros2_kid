@@ -579,6 +579,55 @@
 				// document.getElementById("你的按鈕ID").style.backgroundColor = "red";
 			}
 		}
+		// ---- 頭部扭力狀態同步 ----
+		// motionpackage 訂閱 /set_torque 記錄每顆馬達最後一次的開關（/package/GetTorqueState 可查）。
+		// 這裡連線後先查一次，之後再訂閱 /set_torque：不管是這頁、MotionControl 或其他分頁改了扭力，
+		// isHeadTorqueOn 都跟著變，按 No Torque? 時送出的才會是正確的反向狀態。
+		// 頭部兩顆（22、23）都開著才算「開」。
+		var headTorqueStates = { 22: 0, 23: 0 };
+		function ApplyHeadTorqueStates() {
+			isHeadTorqueOn = headTorqueStates[22] === 1 && headTorqueStates[23] === 1;
+		}
+		var HeadTorqueStateClient = new ROSLIB.Service({
+			ros: ros,
+			name: '/package/GetTorqueState',
+			serviceType: 'tku_msgs/TorqueState'
+		});
+		function LoadHeadTorqueState() {
+			HeadTorqueStateClient.callService(new ROSLIB.ServiceRequest({ query: true }), function (res) {
+				if (!res || !res.states) return;
+				[22, 23].forEach(function (id) { headTorqueStates[id] = res.states[id - 1] === 1 ? 1 : 0; });
+				ApplyHeadTorqueStates();
+				console.log("[Head Torque] 已載入狀態", headTorqueStates);
+			});
+		}
+		ros.on('connection', LoadHeadTorqueState);
+		var HeadTorqueEcho_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/set_torque',
+			messageType: 'std_msgs/Int16MultiArray'
+		});
+		HeadTorqueEcho_Topic.subscribe(function (msg) {
+			if (!msg.data || msg.data.length < 2) return;
+			var id = msg.data[0], state = msg.data[1] ? 1 : 0;
+			if (id === 0) { headTorqueStates[22] = headTorqueStates[23] = state; }   // 0 = 全身
+			else if (id in headTorqueStates) { headTorqueStates[id] = state; }
+			else return;
+			ApplyHeadTorqueStates();
+		});
+		// driver_node 從馬達讀回的實際扭力（latched，index 0 對應 ID 1），整排校正頭部狀態
+		var HeadTorqueHw_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/torque_state',
+			messageType: 'std_msgs/Int16MultiArray'
+		});
+		HeadTorqueHw_Topic.subscribe(function (msg) {
+			if (!msg.data) return;
+			[22, 23].forEach(function (id) {
+				if (msg.data.length >= id) headTorqueStates[id] = msg.data[id - 1] ? 1 : 0;
+			});
+			ApplyHeadTorqueStates();
+		});
 		function CameraSave() {
 			console.log("CameraSave");
 			document.getElementById("CamBrightness").value = CamBrightnessValue;

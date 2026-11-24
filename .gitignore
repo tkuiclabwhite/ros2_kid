@@ -1,11 +1,22 @@
+# colcon
 build/
 install/
 log/
-build/
-install/
-log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+# macOS（repo 裡已經有 23 個 ._* 和 .DS_Store）
+.DS_Store
+._*
+# 編輯器 / IDE
+*.bak
+*.bak-*
+*.orig
+*.rej
+*.swp
+.vscode/
 src/strategy/strategy/mar/torch-2.4.0a0+f70bd71a48.nv24.06.15634931-cp310-cp310-linux_aarch64.whl
 src/strategy/strategy/mar/*.whl
-src/strategy/strategy/mar/*.whl
-__pycache__/
 *.pyc

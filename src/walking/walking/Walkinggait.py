@@ -162,10 +162,12 @@ class WalkingGaitByLIPM:
             N += 1                     # ★ 強制偶數，讓 0.5 不落在格點
         self._N = N
 
-        # 這一步內的相位時間（秒）
-        self.t_ = ((self.time_point_ - int(self.sample_time_)) % self.period_t + self.sample_time_) / 1000.0
-        # 依取樣點落在第幾個步
-        self.now_step_ = int((self.sample_point_ - 1) / int(self.period_t / self.sample_time_))
+        # ★ 統一時基：t_ 與 now_step_ 都從同一個 sample 計數推導，
+        #   消除 period_t 非 sample_time 整數倍時的相位錯位
+        n_per_step = max(1, int(round(self.period_t / self.sample_time_)))
+        self.now_step_ = (self.sample_point_ - 1) // n_per_step
+        self.t_ = (((self.sample_point_ - 1) % n_per_step) + 1) * dt
+        self.TT_ = n_per_step * dt   # 實效步週期，與離散格數一致
 
         # ====== 步態狀態更新 ======
         if self.now_step_ == self.step_:
