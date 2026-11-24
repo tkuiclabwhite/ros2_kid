@@ -38,37 +38,23 @@ extensions = [
     'sphinx_copybutton',      # code block 複製按鈕
 ]
 
-def _copy_interface(app, exception):
-    """複製 hurocup_interface/ 到 HTML 輸出的子目錄，供 demo 界面使用。"""
-    if exception or app.builder.format != 'html':
-        return
-    src = os.path.abspath(os.path.join(app.confdir, '../../../../../hurocup_interface'))
-    dst = os.path.join(app.outdir, 'hurocup_interface')
-    if os.path.exists(dst):
-        shutil.rmtree(dst)
-    shutil.copytree(src, dst)
+def _copy_screenshots(app, exception):
+    """同步 _static/screenshots 到輸出目錄。
 
-def _copy_demo_html(app, exception):
-    """Sphinx 不會複製 _static/ 裡的 HTML 檔，手動補上。"""
+    Sphinx 只會處理被 .. image:: 引用的圖，介面圖是寫在 .. raw:: html 的
+    <img src> 裡，它看不到，所以要自己複製。
+    """
     if exception or app.builder.format != 'html':
         return
-    import glob
-    src_dir = os.path.join(app.confdir, '_static')
-    dst_dir = os.path.join(app.outdir, '_static')
-    os.makedirs(dst_dir, exist_ok=True)
-    for html_file in glob.glob(os.path.join(src_dir, '*_demo.html')):
-        shutil.copy2(html_file, dst_dir)
-    # 同步截圖
-    src_shots = os.path.join(src_dir, 'screenshots')
-    dst_shots = os.path.join(dst_dir, 'screenshots')
+    src_shots = os.path.join(app.confdir, '_static', 'screenshots')
+    dst_shots = os.path.join(app.outdir, '_static', 'screenshots')
     if os.path.isdir(src_shots):
         if os.path.exists(dst_shots):
             shutil.rmtree(dst_shots)
         shutil.copytree(src_shots, dst_shots)
 
 def setup(app):
-    app.connect('build-finished', _copy_interface)   # 兩種 build 都需要 demo 連結
-    app.connect('build-finished', _copy_demo_html)   # 補上 _static/ 裡的 HTML demo 檔
+    app.connect('build-finished', _copy_screenshots)
 
 autodoc_mock_imports = [
     "rclpy",

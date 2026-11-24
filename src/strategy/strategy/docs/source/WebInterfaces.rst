@@ -1,9 +1,8 @@
 網頁操作介面教學
 ================
 
-各節的 **▶ 開啟 DEMO** 按鈕開啟模擬版，不需連接機器人即可互動試用。
-
 點選圖片中虛線匡內可直接跳轉至該功能說明。
+大小人型介面不同的頁面會分成兩個分頁，切換後虛線匡的位置也會跟著換。
 
 ----
 
@@ -49,85 +48,390 @@
 ImageProcessInterface
 --------------------------------------
 
-.. raw:: html
+.. tabs::
 
-   <a href="_static/ImageProcess_demo.html" target="_blank"
-      style="background:#03e9f4;color:#000;padding:5px 14px;border-radius:4px;
-             text-decoration:none;font-weight:bold;font-family:monospace;">
-     &#9654; 開啟 DEMO
-   </a>
+   .. tab:: 小人型 (KID)
 
-.. raw:: html
+      .. raw:: html
 
-   <div class="iface-map-wrap">
-     <img src="_static/screenshots/ImageProcess.png" alt="ImageProcess 介面截圖">
+         <div class="iface-map-wrap">
+           <img src="_static/screenshots/ImageProcess.png" alt="ImageProcess 介面截圖">
 
-    <!-- Address(各網頁共用) -->
-    <a class="area-overlay" href="#shared-address"
-      style="top:18.5%;left:36%;width:12.75%;height:4.25%;color:#ffcc00"></a>
+          <!-- Address(各網頁共用) -->
+          <a class="area-overlay" href="#shared-address"
+            style="top:18.5%;left:36%;width:12.75%;height:4.25%;color:#ffcc00"></a>
 
-    <!-- 策略選擇 -->
-    <a class="area-overlay" href="#image-strategy-select"
-      style="top:18.5%;left:48.75%;width:10.75%;height:4.25%;color:#ffcc00"></a>
+          <!-- 策略選擇 -->
+          <a class="area-overlay" href="#image-strategy-select"
+            style="top:18.5%;left:48.75%;width:10.75%;height:4.25%;color:#ffcc00"></a>
 
-    <!-- SaveAll -->
-    <a class="area-overlay" href="#image-save-all"
-      style="top:18.5%;left:59.5%;width:5%;height:4.25%;color:#ffcc00"></a>
+          <!-- SaveAll -->
+          <a class="area-overlay" href="#image-save-all"
+            style="top:18.5%;left:59.5%;width:5%;height:4.25%;color:#ffcc00"></a>
 
-    <!-- 策略指撥開關 -->
-    <a class="area-overlay" href="#image-strategy-toggle"
-      style="top:22.5%;left:46%;width:8.5%;height:4.25%;color:#ffcc00"></a>
+          <!-- 策略指撥開關 -->
+          <a class="area-overlay" href="#image-strategy-toggle"
+            style="top:22.5%;left:46%;width:8.5%;height:4.25%;color:#ffcc00"></a>
 
-    <!-- 原始影像 -->
-    <a class="area-overlay" href="#image-camera"
-      style="top:30%;left:27.5%;width:19%;height:24.25%;color:#ffcc00"></a>
+          <!-- 原始影像 -->
+          <a class="area-overlay" href="#image-camera"
+            style="top:30%;left:27.5%;width:19%;height:24.25%;color:#ffcc00"></a>
 
-    <!-- HSV色模 -->
-    <a class="area-overlay" href="#image-model-view"
-      style="top:30%;left:53.8%;width:19%;height:24.25%;color:#ffcc00"></a>
+          <!-- HSV色模 -->
+          <a class="area-overlay" href="#image-model-view"
+            style="top:30%;left:53.8%;width:19%;height:24.25%;color:#ffcc00"></a>
 
-    <!-- 頭部馬扭力 -->
-    <a class="area-overlay" href="#image-head-torque"
-      style="top:57%;left:27.5%;width:12.5%;height:3.5%;color:#ffcc00"></a>
+          <!-- 頭部馬扭力 -->
+          <a class="area-overlay" href="#image-head-torque"
+            style="top:57%;left:27.5%;width:12.5%;height:3.5%;color:#ffcc00"></a>
 
-    <!-- 儲存相機參數 -->
-    <a class="area-overlay" href="#image-save-camera"
-      style="top:57%;left:40.5%;width:5.75%;height:3.5%;color:#ffcc00"></a>
+          <!-- 儲存相機參數 -->
+          <a class="area-overlay" href="#image-save-camera"
+            style="top:57%;left:40.5%;width:5.75%;height:3.5%;color:#ffcc00"></a>
 
-    <!-- 頭部馬達控制 -->
-    <a class="area-overlay" href="#image-head-motor"
-      style="top:60.25%;left:27.5%;width:19%;height:14%;color:#ffcc00"></a>
+          <!-- 頭部馬達控制 -->
+          <a class="area-overlay" href="#image-head-motor"
+            style="top:60.25%;left:27.5%;width:19%;height:14%;color:#ffcc00"></a>
 
-    <!-- 相機參數設定 -->
-    <a class="area-overlay" href="#image-camera-settings"
-      style="top:73.75%;left:27.5%;width:19%;height:23.5%;color:#ffcc00"></a>
+          <!-- 相機參數設定 -->
+          <a class="area-overlay" href="#image-camera-settings"
+            style="top:73.75%;left:27.5%;width:19%;height:23.5%;color:#ffcc00"></a>
 
-    <!-- Build table -->
-    <a class="area-overlay" href="#image-build-table"
-      style="top:57.25%;left:53.8%;width:19%;height:3.5%;color:#ffcc00"></a>
+          <!-- Build table -->
+          <a class="area-overlay" href="#image-build-table"
+            style="top:57.25%;left:53.8%;width:19%;height:3.5%;color:#ffcc00"></a>
 
-    <!-- Color Select -->
-    <a class="area-overlay" href="#image-color-labels"
-      style="top:60.5%;left:53.8%;width:10.25%;height:3.5%;color:#ffcc00"></a>
+          <!-- Color Select -->
+          <a class="area-overlay" href="#image-color-labels"
+            style="top:60.5%;left:53.8%;width:10.25%;height:3.5%;color:#ffcc00"></a>
 
-    <!-- Reset/Close -->
-    <a class="area-overlay" href="#image-reset-close"
-      style="top:60.5%;left:66%;width:6.75%;height:3.5%;color:#ffcc00"></a>
+          <!-- Reset/Close -->
+          <a class="area-overlay" href="#image-reset-close"
+            style="top:60.5%;left:66%;width:6.75%;height:3.5%;color:#ffcc00"></a>
 
-    <!-- 色模參數設定 -->
-    <a class="area-overlay" href="#image-hsv"
-      style="top:63.75%;left:53.8%;width:19%;height:20.5%;color:#ffcc00"></a>
+          <!-- 色模參數設定 -->
+          <a class="area-overlay" href="#image-hsv"
+            style="top:63.75%;left:53.8%;width:19%;height:20.5%;color:#ffcc00"></a>
 
-    <!-- SaveHsv -->
-    <a class="area-overlay" href="#image-save-hsv"
-      style="top:84%;left:53.8%;width:9.5%;height:4%;color:#ffcc00"></a>
+          <!-- SaveHsv -->
+          <a class="area-overlay" href="#image-save-hsv"
+            style="top:84%;left:53.8%;width:9.5%;height:4%;color:#ffcc00"></a>
 
-    <!-- BuildHsv -->
-    <a class="area-overlay" href="#image-build-hsv"
-      style="top:84%;left:63.3%;width:9.5%;height:4%;color:#ffcc00"></a>
+          <!-- BuildHsv -->
+          <a class="area-overlay" href="#image-build-hsv"
+            style="top:84%;left:63.3%;width:9.5%;height:4%;color:#ffcc00"></a>
 
 
-   </div>
+         </div>
+
+   .. tab:: 大人型 (ADULT)
+
+      右上角的下拉選單可切換 **疊合 / 色模 / 深度** 三種檢視，
+      切換時右側影像與下方的參數面板會一起換，**左半邊與頂部不受影響**\ 。
+
+      .. tabs::
+
+         .. tab:: 疊合
+
+            .. raw:: html
+
+               <div class="iface-map-wrap">
+                 <img src="_static/screenshots/ImageProcess_adult_overlap.png" alt="ImageProcess 介面截圖（大人型・疊合）">
+
+                 <!-- ======== 左半邊與頂部：三種檢視都一樣 ======== -->
+
+                 <!-- Address(各網頁共用) -->
+                 <a class="area-overlay" href="#shared-address"
+                 style="top:17%;left:31.5%;width:21.25%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 策略選擇 -->
+                 <a class="area-overlay" href="#image-strategy-select"
+                 style="top:17%;left:52.75%;width:10.75%;height:3%;color:#ffcc00"></a>
+
+                 <!-- SaveAll -->
+                 <a class="area-overlay" href="#image-save-all"
+                 style="top:17%;left:63.75%;width:4.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 策略指撥開關 -->
+                 <a class="area-overlay" href="#image-strategy-toggle"
+                 style="top:20.5%;left:46%;width:8%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 左邊影像 -->
+                 <a class="area-overlay" href="#image-camera"
+                 style="top:29%;left:21.75%;width:27.5%;height:25.75%;color:#ffcc00"></a>
+
+                 <!-- 右邊影像 -->
+                 <a class="area-overlay" href="#image-right-image"
+                 style="top:29%;left:50.25%;width:27.5%;height:25.75%;color:#ffcc00"></a>
+
+                 <!-- 溫度 -->
+                 <a class="area-overlay" href="#image-temperature"
+                 style="top:29%;left:45.5%;width:3.75%;height:2.5%;color:#ffcc00"></a>
+
+                 <!-- 頭部馬扭力 -->
+                 <a class="area-overlay" href="#image-head-torque"
+                 style="top:56%;left:22%;width:10%;height:3%;color:#ffcc00"></a>
+
+                 <!-- hz指令面板 -->
+                 <a class="area-overlay" href="#image-hz-cmd"
+                 style="top:56%;left:32.25%;width:3.25%;height:3%;color:#ffcc00"></a>         
+                 <a class="area-overlay" href="#image-hz-cmd"
+                 style="top:12.25%;left:76%;width:22%;height:9.5%;color:#ffcc00"></a>              
+
+                 <!-- 線條作畫清除 -->
+                 <a class="area-overlay" href="#image-draw-clear"
+                 style="top:56%;left:35.75%;width:6.5%;height:3%;color:#ffcc00"></a>                              
+
+                 <!-- 儲存相機參數 -->
+                 <a class="area-overlay" href="#image-save-camera"
+                 style="top:56%;left:42.5%;width:6.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 頭部馬達控制 -->
+                 <a class="area-overlay" href="#image-head-motor"
+                 style="top:59%;left:22%;width:27%;height:11.75%;color:#ffcc00"></a>
+
+                 <!-- 相機參數設定 -->
+                 <a class="area-overlay" href="#image-camera-settings"
+                 style="top:70.5%;left:22%;width:27%;height:24.5%;color:#ffcc00"></a>
+
+                 <!-- 檢視切換下拉（左眼畫面 / 深度畫面）-->
+                 <a class="area-overlay" href="#image-left-view"
+                 style="top:25.75%;left:21.75%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+                 <!-- 檢視切換下拉（疊合 / 色模 / 深度）-->
+                 <a class="area-overlay" href="#image-right-view"
+                   style="top:25.75%;left:50.25%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+                 <!-- ======== 右半邊：疊合模式 ======== -->
+                 <!-- TODO: 換上實際截圖後，依實際控制項把下面兩個大框拆細 -->
+
+                 <!-- Build table -->
+                 <a class="area-overlay" href="#image-overlap-build-table"
+                   style="top:56.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- Overlap Select -->
+                 <a class="area-overlay" href="#image-overlap-select"
+                   style="top:59.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>     
+
+                 <!-- Color Select -->
+                 <a class="area-overlay" href="#image-overlap-select"
+                   style="top:62.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>        
+
+                 <!-- Distance Select -->
+                 <a class="area-overlay" href="#image-overlap-select"
+                   style="top:65.5%;left:52%;width:23%;height:3%;color:#ffcc00"></a>   
+
+                 <!-- Reset/Close -->
+                 <a class="area-overlay" href="#image-reset-close"
+                 style="top:59.5%;left:70%;width:6.5%;height:3%;color:#ffcc00"></a>          
+
+                 <!-- SaveOverlap -->
+                 <a class="area-overlay" href="#image-save-overlap"
+                 style="top:68.5%;left:53%;width:9.5%;height:4%;color:#ffcc00"></a>
+
+                 <!-- BuildOverlap -->
+                 <a class="area-overlay" href="#image-build-overlap"
+                 style="top:68.5%;left:66.5%;width:9.5%;height:4%;color:#ffcc00"></a>                                                                   
+               </div>
+
+         .. tab:: 色模
+
+            .. raw:: html
+
+               <div class="iface-map-wrap">
+                 <img src="_static/screenshots/ImageProcess_adult_color.png" alt="ImageProcess 介面截圖（大人型・色模）">
+
+                 <!-- ======== 左半邊與頂部：三種檢視都一樣 ======== -->
+
+                 <!-- Address(各網頁共用) -->
+                 <a class="area-overlay" href="#shared-address"
+                 style="top:17%;left:31.5%;width:21.25%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 策略選擇 -->
+                 <a class="area-overlay" href="#image-strategy-select"
+                 style="top:17%;left:52.75%;width:10.75%;height:3%;color:#ffcc00"></a>
+
+                 <!-- SaveAll -->
+                 <a class="area-overlay" href="#image-save-all"
+                 style="top:17%;left:63.75%;width:4.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 策略指撥開關 -->
+                 <a class="area-overlay" href="#image-strategy-toggle"
+                 style="top:20.5%;left:46%;width:8%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 左邊影像 -->
+                 <a class="area-overlay" href="#image-camera"
+                 style="top:29%;left:21.75%;width:27.5%;height:25.75%;color:#ffcc00"></a>
+
+                 <!-- 右邊影像 -->
+                 <a class="area-overlay" href="#image-right-image"
+                 style="top:29%;left:50.25%;width:27.5%;height:25.75%;color:#ffcc00"></a>
+
+                 <!-- 溫度 -->
+                 <a class="area-overlay" href="#image-temperature"
+                 style="top:29%;left:45.5%;width:3.75%;height:2.5%;color:#ffcc00"></a>
+
+                 <!-- 頭部馬扭力 -->
+                 <a class="area-overlay" href="#image-head-torque"
+                 style="top:56%;left:22%;width:10%;height:3%;color:#ffcc00"></a>
+
+                 <!-- hz指令面板 -->
+                 <a class="area-overlay" href="#image-hz-cmd"
+                 style="top:56%;left:32.25%;width:3.25%;height:3%;color:#ffcc00"></a>         
+                 <a class="area-overlay" href="#image-hz-cmd"
+                 style="top:12.25%;left:76%;width:22%;height:9.5%;color:#ffcc00"></a>              
+
+                 <!-- 線條作畫清除 -->
+                 <a class="area-overlay" href="#image-draw-clear"
+                 style="top:56%;left:35.75%;width:6.5%;height:3%;color:#ffcc00"></a>                              
+
+                 <!-- 儲存相機參數 -->
+                 <a class="area-overlay" href="#image-save-camera"
+                 style="top:56%;left:42.5%;width:6.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 頭部馬達控制 -->
+                 <a class="area-overlay" href="#image-head-motor"
+                 style="top:59%;left:22%;width:27%;height:11.75%;color:#ffcc00"></a>
+
+                 <!-- 相機參數設定 -->
+                 <a class="area-overlay" href="#image-camera-settings"
+                 style="top:70.5%;left:22%;width:27%;height:24.5%;color:#ffcc00"></a>
+
+                 <!-- 檢視切換下拉（左眼畫面 / 深度畫面）-->
+                 <a class="area-overlay" href="#image-left-view"
+                 style="top:25.75%;left:21.75%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+                 <!-- 檢視切換下拉（疊合 / 色模 / 深度）-->
+                 <a class="area-overlay" href="#image-right-view"
+                   style="top:25.75%;left:50.25%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+                 <!-- ======== 右半邊：色模模式 ======== -->
+
+                 <!-- Build table -->
+                 <a class="area-overlay" href="#image-build-table"
+                 style="top:56.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- Color Select -->
+                 <a class="area-overlay" href="#image-color-labels"
+                 style="top:59.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- Reset/Close -->
+                 <a class="area-overlay" href="#image-reset-close"
+                 style="top:59.5%;left:70%;width:6.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 色模參數設定 -->
+                 <a class="area-overlay" href="#image-hsv"
+                 style="top:62.5%;left:50.5%;width:27.5%;height:18%;color:#ffcc00"></a>
+
+                 <!-- SaveHsv -->
+                 <a class="area-overlay" href="#image-save-hsv"
+                 style="top:80.75%;left:53%;width:9.5%;height:4%;color:#ffcc00"></a>
+
+                 <!-- BuildHsv -->
+                 <a class="area-overlay" href="#image-build-hsv"
+                 style="top:80.75%;left:66.5%;width:9.5%;height:4%;color:#ffcc00"></a>
+
+
+               </div>
+
+         .. tab:: 深度
+
+            .. raw:: html
+
+               <div class="iface-map-wrap">
+                 <img src="_static/screenshots/ImageProcess_adult_depth.png" alt="ImageProcess 介面截圖（大人型・深度）">
+
+                 <!-- ======== 左半邊與頂部：三種檢視都一樣 ======== -->
+                 <!-- Address(各網頁共用) -->
+                 <a class="area-overlay" href="#shared-address"
+                 style="top:17%;left:31.5%;width:21.25%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 策略選擇 -->
+                 <a class="area-overlay" href="#image-strategy-select"
+                 style="top:17%;left:52.75%;width:10.75%;height:3%;color:#ffcc00"></a>
+
+                 <!-- SaveAll -->
+                 <a class="area-overlay" href="#image-save-all"
+                 style="top:17%;left:63.75%;width:4.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 策略指撥開關 -->
+                 <a class="area-overlay" href="#image-strategy-toggle"
+                 style="top:20.5%;left:46%;width:8%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 左邊影像 -->
+                 <a class="area-overlay" href="#image-camera"
+                 style="top:29%;left:21.75%;width:27.5%;height:25.75%;color:#ffcc00"></a>
+
+                 <!-- 右邊影像 -->
+                 <a class="area-overlay" href="#image-right-image"
+                 style="top:29%;left:50.25%;width:27.5%;height:25.75%;color:#ffcc00"></a>
+
+                 <!-- 溫度 -->
+                 <a class="area-overlay" href="#image-temperature"
+                 style="top:29%;left:45.5%;width:3.75%;height:2.5%;color:#ffcc00"></a>
+
+                 <!-- 頭部馬扭力 -->
+                 <a class="area-overlay" href="#image-head-torque"
+                 style="top:56%;left:22%;width:10%;height:3%;color:#ffcc00"></a>
+
+                 <!-- hz指令面板 -->
+                 <a class="area-overlay" href="#image-hz-cmd"
+                 style="top:56%;left:32.25%;width:3.25%;height:3%;color:#ffcc00"></a>         
+                 <a class="area-overlay" href="#image-hz-cmd"
+                 style="top:12.25%;left:76%;width:22%;height:9.5%;color:#ffcc00"></a>              
+
+                 <!-- 線條作畫清除 -->
+                 <a class="area-overlay" href="#image-draw-clear"
+                 style="top:56%;left:35.75%;width:6.5%;height:3%;color:#ffcc00"></a>                              
+
+                 <!-- 儲存相機參數 -->
+                 <a class="area-overlay" href="#image-save-camera"
+                 style="top:56%;left:42.5%;width:6.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 頭部馬達控制 -->
+                 <a class="area-overlay" href="#image-head-motor"
+                 style="top:59%;left:22%;width:27%;height:11.75%;color:#ffcc00"></a>
+
+                 <!-- 相機參數設定 -->
+                 <a class="area-overlay" href="#image-camera-settings"
+                 style="top:70.5%;left:22%;width:27%;height:24.5%;color:#ffcc00"></a>
+
+                 <!-- 檢視切換下拉（左眼畫面 / 深度畫面）-->
+                 <a class="area-overlay" href="#image-left-view"
+                 style="top:25.75%;left:21.75%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+                 <!-- 檢視切換下拉（疊合 / 色模 / 深度）-->
+                 <a class="area-overlay" href="#image-right-view"
+                   style="top:25.75%;left:50.25%;width:27.75%;height:3%;color:#03e9f4"></a>
+
+                 <!-- ======== 右半邊：深度模式 ======== -->
+                 <!-- TODO: 換上實際截圖後，依實際控制項把下面兩個大框拆細 -->
+
+                 <!-- Build table -->
+                 <a class="area-overlay" href="#image-depth-build-table"
+                 style="top:56.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- Distance Select -->
+                 <a class="area-overlay" href="#image-distance-select"
+                 style="top:59.5%;left:52%;width:15.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- Reset/Close -->
+                 <a class="area-overlay" href="#image-reset-close"
+                 style="top:59.5%;left:70%;width:6.5%;height:3%;color:#ffcc00"></a>
+
+                 <!-- 深度參數設定 -->
+                 <a class="area-overlay" href="#image-depth-params"
+                 style="top:62.5%;left:50.5%;width:27.5%;height:6%;color:#ffcc00"></a>
+
+                 <!-- SaveDistance -->
+                 <a class="area-overlay" href="#image-save-distance"
+                 style="top:68.5%;left:53%;width:9.5%;height:4%;color:#ffcc00"></a>
+
+                 <!-- BuildDistance -->
+                 <a class="area-overlay" href="#image-build-distance"
+                 style="top:68.5%;left:66.5%;width:9.5%;height:4%;color:#ffcc00"></a>
+               </div>
+
 
 .. _image-strategy-select:
 
@@ -169,14 +473,36 @@ SaveAll
 原始影像
 ^^^^^^^^
 
-顯示相機的原始影像，畫面大小為320*240。
+顯示相機的原始影像。
+
+.. tabs::
+
+   .. tab:: 小人型 (KID)
+
+      畫面大小 **320 x 240**\ 。
+
+   .. tab:: 大人型 (ADULT)
+
+      畫面大小 **960 x 600**\ 。左側顯示內容可用
+      :ref:`image-left-view` 在「左眼畫面」與「深度畫面」之間切換。
 
 .. _image-model-view:
 
 HSV 色模顯示
 ^^^^^^^^^^^^^
 
-顯示經過 HSV 遮罩處理後的影像，畫面大小為320*240，顯示各顏色抓取HSV遮罩的結果。
+顯示經過 HSV 遮罩處理後的影像，顯示各顏色抓取 HSV 遮罩的結果。
+
+.. tabs::
+
+   .. tab:: 小人型 (KID)
+
+      畫面大小 **320 x 240**\ 。
+
+   .. tab:: 大人型 (ADULT)
+
+      畫面大小 **960 x 600**\ 。右側顯示的不一定是色模 ——
+      見 :ref:`image-right-view` 與 :ref:`image-right-image`\ 。
 
 各顏色在 HSV 色模顯示畫面中對應的標示顏色（OpenCV BGR 轉換）：
 
@@ -308,29 +634,83 @@ HSV 色模顯示
 .. _image-camera-settings:
 
 相機參數設定
-^^^^^^^^^^^^^
+^^^^^^^^^^^^
 
-即時調整相機的影像擷取參數，調整後畫面立即更新：
+調整相機的影像參數，拉動滑桿即時生效。
 
-.. list-table::
-   :header-rows: 1
+.. important::
 
-   * - 參數
-     - 說明
-   * - ``brightness``
-     - 亮度
-   * - ``contrast``
-     - 對比度
-   * - ``saturation``
-     - 飽和度
-   * - ``white_balance``
-     - 色溫（手動白平衡值）
-   * - ``auto_white_balance``
-     - 自動白平衡開關
-   * - ``auto_exposure``
-     - 自動曝光開關
-   * - ``zoomin``
-     - 數位縮放倍率（預設 1.0）
+   **兩台的相機不同，可調的參數也完全不同**\ ，只有 Saturation 是共用的。
+   小人型是一般 USB 相機，大人型是 ZED X Mini。
+
+.. tabs::
+
+   .. tab:: 小人型 (KID)
+
+      .. list-table::
+         :header-rows: 1
+         :widths: 30 24 22 24
+
+         * - 參數
+           - 範圍
+           - 預設
+           - 說明
+         * - Brightness
+           - ``-60`` ~ ``60``
+           - ``-15``
+           - 亮度
+         * - Contrast
+           - ``0`` ~ ``200``
+           - ``50``
+           - 對比
+         * - Saturation
+           - ``0`` ~ ``100``
+           - ``50``
+           - 飽和度
+         * - WhiteBalance
+           - ``0`` ~ ``8000``
+           - ``4000``
+           - 白平衡
+
+   .. tab:: 大人型 (ADULT)
+
+      .. list-table::
+         :header-rows: 1
+         :widths: 30 24 22 24
+
+         * - 參數
+           - 範圍
+           - 預設
+           - 說明
+         * - Exposure
+           - ``0`` ~ ``100``
+           - ``80``
+           - 曝光
+         * - Gain
+           - ``0`` ~ ``100``
+           - ``80``
+           - 增益
+         * - Gamma
+           - ``1`` ~ ``9``
+           - ``8``
+           - Gamma 校正
+         * - Saturation
+           - ``0`` ~ ``8``
+           - ``4``
+           - 飽和度（**範圍與小人型不同**\ ）
+         * - Denoising
+           - ``0`` ~ ``100``
+           - ``50``
+           - 降噪強度
+         * - WBTemp
+           - ``28`` ~ ``65``
+           - ``42``
+           - 白平衡**色溫**\ （單位百 K，例如 42 = 4200K）
+
+      .. note::
+
+         大人型**沒有** Brightness / Contrast / WhiteBalance，
+         改由 Exposure / Gain / Gamma / WBTemp 控制。
 
 .. _image-build-table:
 
@@ -407,20 +787,261 @@ BuildHsv
 
 ----
 
+.. _image-left-view:
+
+左側檢視切換 (大人型)
+^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+左眼畫面上方的下拉選單，切換左側顯示的影像來源。
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 34 40
+
+   * - 選項
+     - 影像來源
+     - 說明
+   * - 左眼畫面
+     - ``/zoom_in``
+     - ZED 左眼的 RGB 畫面，受 ZoomIn 倍率影響
+   * - 深度畫面
+     - ``/depth_view``
+     - 深度圖的視覺化（顏色代表距離）
+
+切換時**只影響左側畫面**，右側與下方面板不動。
+
+.. _image-right-image:
+
+右側影像 (大人型)
+^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+右側顯示處理後的影像，內容由 :ref:`image-right-view` 決定
+（疊合 ``/overlap_image`` / 色模 ``/processed_image`` / 深度 ``/depth_processed_image``\ ）。
+
+小人型只有色模一種，所以右側固定是 ``/processed_image``\ 。
+
+.. _image-temperature:
+
+相機溫度 (大人型)
+^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+疊在左眼畫面右上角的Zed相機即時溫度顯示
+
+.. _image-hz-cmd:
+
+Topic Hz 指令面板 (大人型)
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+產生查看影像串流更新率的指令，方便直接複製到終端機執行。
+左右兩側各一個，內容會**跟著各自的檢視切換自動更新**\ ：
+
+.. code-block:: bash
+
+   ros2 topic hz /zoom_in           # 左側選「左眼畫面」時
+   ros2 topic hz /depth_view        # 左側選「深度畫面」時
+   ros2 topic hz /overlap_image     # 右側選「疊合」時
+   ros2 topic hz /processed_image   # 右側選「色模」時
+   ros2 topic hz /depth_processed_image   # 右側選「深度」時
+
+點輸入框會全選，按 **Copy** 直接複製。
+
+.. _image-draw-clear:
+
+清除繪圖 (大人型)
+^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+清除影像上由策略畫上去的所有線條與框
+
+.. _image-distance-select:
+
+Distance Select (大人型)
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+選擇目前要編輯的距離類別 **D1 ~ D8**\ ，以及 **Reset** / **Close**\ 。
+架構與色模的 :ref:`image-color-labels` 相同，只是維度從顏色換成距離。
+
+.. _image-depth-params:
+
+深度參數設定 (大人型)
+^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+設定目前選取的距離類別的範圍，單位**公分**\ ：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 20 56
+
+   * - 欄位
+     - 預設
+     - 說明
+   * - Build Status
+     - ``All_distance_build``
+     - ``All_distance_build`` 一次建立全部 D1~D8；
+       ``Single_distance_build`` 只建立目前選取的那一個
+   * - Distance Range (cm)
+     - ``10`` ~ ``1000``
+     - 這個類別涵蓋的距離區間
+
+API 端的用法見 :doc:`ZedCamera` 的「深度偵測 (Depth)」。
+
+.. _image-save-distance:
+
+SaveDistance (大人型)
+^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+把目前的深度區間設定寫回策略資料夾的 ``depth.ini``\ 。
+與色模的 :ref:`image-save-hsv` 相同，**不存檔重開節點就會回到舊值**\ 。
+
+.. _image-build-distance:
+
+BuildDistance (大人型)
+^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+依目前的設定重新建立深度模型。建立期間按鈕會變灰，完成後才恢復。
+
+.. _image-depth-build-table:
+
+Build table（深度）(大人型)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+深度模式的建立狀態選擇（``#depth-build-select``\ ）：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - 選項
+     - 說明
+   * - ``All_distance``
+     - 一次建立全部 D1~D8（預設）
+   * - ``Single_distance``
+     - 只建立目前 :ref:`image-distance-select` 選取的那一個
+
+.. _image-overlap-build-table:
+
+Build table（疊合）(大人型)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+疊合模式的建立狀態選擇：``All_overlap_build`` 一次建立 Set1~Set8，
+``Single_overlap_build`` 只建立目前選取的那一組。
+
+.. _image-overlap-select:
+
+Overlap Select (大人型)
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+選擇目前要編輯的 **Set1 ~ Set8**\ ，並設定該組要綁定的顏色與距離：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 78
+
+   * - 欄位
+     - 說明
+   * - Overlap Select
+     - 要編輯哪一組（1~8），以及 **Reset** / **Close**
+   * - Color
+     - 這一組綁定的顏色類別（orange / yellow / blue / green / black …）
+   * - Distance
+     - 這一組綁定的距離類別（D1~D8）
+   * - Enable
+     - 這一組要不要啟用。**取消勾選後該組就不參與偵測**\ ，
+       但綁定的顏色與距離會保留，之後再勾回來不用重設。
+       按 **Reset** 會把 Enable 復原成勾選
+
+取兩者的**交集區域**，用於「**這個顏色、而且在這個距離**」的複合條件判斷。
+各組的顯示色是固定的，不可更改。
+
+API 端的用法見 :doc:`ZedCamera` 的「疊合偵測 (Overlap)」。
+
+.. _image-save-overlap:
+
+SaveOverlap (大人型)
+^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+把目前的 Set1~Set8 綁定寫回策略資料夾的 ``overlap.ini``\ 。
+
+.. _image-build-overlap:
+
+BuildOverlap (大人型)
+^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。
+
+依目前的設定重新建立疊合模型。建立期間按鈕會變灰，完成後才恢復。
+
+.. _image-right-view:
+
+檢視切換 (大人型)
+^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。小人型只有色模一種檢視。
+
+右側影像上方的下拉選單，切換 **疊合 / 色模 / 深度** 三種檢視。
+切換時右側的影像串流與下方的參數面板會**一起換掉**，左半邊與頂部不受影響。
+
+.. list-table::
+   :header-rows: 1
+   :widths: 16 34 50
+
+   * - 選項
+     - 影像來源
+     - 下方面板
+   * - 疊合
+     - ``/overlap_image``
+     - :ref:`image-overlap-select`
+   * - 色模
+     - ``/processed_image``
+     - :ref:`image-hsv`
+   * - 深度
+     - ``/depth_processed_image``
+     - :ref:`image-depth-params`
+
 .. _interface-motion:
 
 MotionControlInterface
 --------------------------------------
-
-.. raw:: html
-
-   <a href="_static/MotionControl_demo.html" target="_blank"
-      style="background:#03e9f4;color:#000;padding:5px 14px;border-radius:4px;
-             text-decoration:none;font-weight:bold;font-family:monospace;
-             display:block;width:fit-content;margin-bottom:14px;">
-     &#9654; 開啟 DEMO
-   </a>
-
 
 .. raw:: html
 
@@ -1006,85 +1627,203 @@ X_Series / Pro_Series 換算面板
 WalkingInterface
 ---------------------------------
 
-.. raw:: html
+.. tabs::
 
-   <a href="_static/Walking_demo.html" target="_blank"
-      style="background:#03e9f4;color:#000;padding:5px 14px;border-radius:4px;
-             text-decoration:none;font-weight:bold;font-family:monospace;">
-     &#9654; 開啟 DEMO
-   </a>
+   .. tab:: 小人型 (KID)
 
-.. raw:: html
+      .. raw:: html
 
-   <div class="iface-map-wrap">
-     <img src="_static/screenshots/Walking.png" alt="Walking 介面截圖">
+         <div class="iface-map-wrap">
+           <img src="_static/screenshots/Walking.png" alt="Walking 介面截圖">
 
-    <!-- 現在策略顯示(各網頁共用) -->
-    <a class="area-overlay" href="#strategy"
-      style="top:9%;left:0.5%;width:7.5%;height:13%;color:#ffcc00"></a>
-      
-    <!-- Address(各網頁共用) -->
-    <a class="area-overlay" href="#shared-address"
-      style="top:28.25%;left:44%;width:12%;height:5%;color:#ffcc00"></a>
+          <!-- 現在策略顯示(各網頁共用) -->
+          <a class="area-overlay" href="#strategy"
+            style="top:9%;left:0.5%;width:7.5%;height:13%;color:#ffcc00"></a>
+            
+          <!-- Address(各網頁共用) -->
+          <a class="area-overlay" href="#shared-address"
+            style="top:28.25%;left:44%;width:12%;height:5%;color:#ffcc00"></a>
 
-    <!-- IMU -->
-    <a class="area-overlay" href="#walking-imu"
-      style="top:35%;left:27.25%;width:11%;height:53%;color:#ffcc00"></a>
+          <!-- IMU -->
+          <a class="area-overlay" href="#walking-imu"
+            style="top:35%;left:27.25%;width:11%;height:53%;color:#ffcc00"></a>
 
-    <!-- Walking Mode 調整 -->
-    <a class="area-overlay" href="#walking-mode"
-      style="top:35%;left:38.5%;width:21.25%;height:8.5%;color:#ffcc00"></a>
+          <!-- Walking Mode 調整 -->
+          <a class="area-overlay" href="#walking-mode"
+            style="top:35%;left:38.5%;width:21.25%;height:8.5%;color:#ffcc00"></a>
 
-    <!-- 步長調整 -->
-    <a class="area-overlay" href="#walking-step-size"
-      style="top:43%;left:38.5%;width:21.25%;height:12.5%;color:#ffcc00"></a>
+          <!-- 步長調整 -->
+          <a class="area-overlay" href="#walking-step-size"
+            style="top:43%;left:38.5%;width:21.25%;height:12.5%;color:#ffcc00"></a>
 
-    <!-- Load -->
-    <a class="area-overlay" href="#walking-load"
-      style="top:55%;left:38.5%;width:10.625%;height:6.25%;color:#ffcc00"></a>
+          <!-- Load -->
+          <a class="area-overlay" href="#walking-load"
+            style="top:55%;left:38.5%;width:10.625%;height:6.25%;color:#ffcc00"></a>
 
-    <!-- Generate -->
-    <a class="area-overlay" href="#walking-generate"
-      style="top:55%;left:49.125%;width:10.625%;height:6.25%;color:#ffcc00"></a>
+          <!-- Generate -->
+          <a class="area-overlay" href="#walking-generate"
+            style="top:55%;left:49.125%;width:10.625%;height:6.25%;color:#ffcc00"></a>
 
-    <!-- 方向控制 -->
-    <a class="area-overlay" href="#walking-direction"
-      style="top:61%;left:38.5%;width:21.25%;height:14.25%;color:#ffcc00"></a>
+          <!-- 方向控制 -->
+          <a class="area-overlay" href="#walking-direction"
+            style="top:61%;left:38.5%;width:21.25%;height:14.25%;color:#ffcc00"></a>
 
-    <!-- 步態參數 -->
-    <a class="area-overlay" href="#walking-params"
-      style="top:35%;left:60%;width:18.5%;height:25.5%;color:#ffcc00"></a>
+          <!-- 步態參數 -->
+          <a class="area-overlay" href="#walking-params"
+            style="top:35%;left:60%;width:18.5%;height:25.5%;color:#ffcc00"></a>
 
-    <!-- Save -->
-    <a class="area-overlay" href="#walking-save"
-      style="top:60.25%;left:60%;width:9.2%;height:6%;color:#ffcc00"></a>
+          <!-- Save -->
+          <a class="area-overlay" href="#walking-save"
+            style="top:60.25%;left:60%;width:9.2%;height:6%;color:#ffcc00"></a>
 
-    <!-- Send -->
-    <a class="area-overlay" href="#walking-send"
-      style="top:60.25%;left:69.25%;width:9.2%;height:6%;color:#ffcc00"></a>
+          <!-- Send -->
+          <a class="area-overlay" href="#walking-send"
+            style="top:60.25%;left:69.25%;width:9.2%;height:6%;color:#ffcc00"></a>
 
-   </div>
+         </div>
+
+   .. tab:: 大人型 (ADULT)
+
+      .. raw:: html
+
+         <div class="iface-map-wrap">
+           <img src="_static/screenshots/Walking_adult.png" alt="Walking 介面截圖（大人型）">
+
+          <!-- 現在策略顯示(各網頁共用) -->
+          <a class="area-overlay" href="#strategy"
+            style="top:9%;left:0.5%;width:7.5%;height:13%;color:#ffcc00"></a>
+            
+          <!-- Address(各網頁共用) -->
+          <a class="area-overlay" href="#shared-address"
+            style="top:27%;left:41.25%;width:17.5%;height:3.25%;color:#ffcc00"></a>
+
+          <!-- IMU -->
+          <a class="area-overlay" href="#walking-imu"
+            style="top:33%;left:30%;width:10%;height:66%;color:#ffcc00"></a>
+
+          <!-- Walking Mode 調整 -->
+          <a class="area-overlay" href="#walking-mode"
+            style="top:33%;left:40.25%;width:19%;height:10%;color:#ffcc00"></a>
+
+          <!-- 步長調整 -->
+          <a class="area-overlay" href="#walking-step-size"
+            style="top:43%;left:40.25%;width:19%;height:12.5%;color:#ffcc00"></a>
+
+          <!-- Load -->
+          <a class="area-overlay" href="#walking-load"
+            style="top:55%;left:40.25%;width:9.5%;height:4.25%;color:#ffcc00"></a>
+
+          <!-- Generate -->
+          <a class="area-overlay" href="#walking-generate"
+            style="top:55%;left:49.75%;width:9.5%;height:4.25%;color:#ffcc00"></a>
+
+          <!-- 方向控制 -->
+          <a class="area-overlay" href="#walking-direction"
+            style="top:59.25%;left:40.25%;width:19%;height:14.25%;color:#ffcc00"></a>
+
+          <!-- 步態參數 -->
+          <a class="area-overlay" href="#walking-params"
+            style="top:33%;left:59.5%;width:16.5%;height:26%;color:#ffcc00"></a>
+
+          <!-- Save -->
+          <a class="area-overlay" href="#walking-save"
+            style="top:59%;left:59.5%;width:8.3%;height:6%;color:#ffcc00"></a>
+
+          <!-- Send -->
+          <a class="area-overlay" href="#walking-send"
+            style="top:59%;left:67.6%;width:8.4%;height:6%;color:#ffcc00"></a>
+
+         </div>
 
 .. _walking-imu:
 
-IMU 顯示
-^^^^^^^^
+IMU
+^^^
 
-左側 Sensor_Value 區塊顯示即時 IMU 數值。
+顯示機身姿態，由步態控制用來判斷跌倒與動態平衡。
+
+.. tabs::
+
+   .. tab:: 小人型 (KID)
+
+      一組 IMU（ESP32 讀取），顯示 **Roll / Pitch / Yaw** 三個角度。
+
+   .. tab:: 大人型 (ADULT)
+
+      **兩組 IMU 並列顯示**\ ，各自獨立、互不影響：
+
+      .. list-table::
+         :header-rows: 1
+         :widths: 18 34 48
+
+         * - 來源
+           - 欄位
+           - 說明
+         * - **Xsens**
+           - Roll / Pitch / Yaw
+           - 機身 IMU（MTi-620）。**數值已歸零**\ ，
+             以開機時的姿態為基準
+         * -
+           - Gyro X/Y/Z
+           - 角速度
+         * -
+           - Accel X/Y/Z
+           - 加速度
+         * -
+           - State
+           - driver 的連線狀態，掉線時會看得出來
+         * - **ZED**
+           - Roll / Pitch / Yaw
+           - ZED X Mini 內建的 IMU
+         * -
+           - Gyro X/Y/Z
+           - 角速度
+         * -
+           - Accel X/Y/Z
+           - 加速度
+         * - **odom**
+           - X / Y / Z / Yaw
+           - :ref:`walking-odom`\  ZED 的視覺里程計。
+
+      .. note::
+
+         步態控制用的是 **Xsens** 那一組（發 ``/package/sensorpackage``\ ）。
+         ZED 那一組是獨立的 topic，主要拿來交叉比對 ——
+         兩組差很多時通常代表其中一顆沒鎖緊或線鬆了。
+
+         Xsens 與舊的 Arduino IMU 由 ``imu_source`` 二擇一，不會同時啟動，
+         見 :doc:`Command` 的啟動參數。
+.. _walking-odom:
+
+Odom（ZED 視覺里程計）(大人型)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. note::
+   本功能為 **大人型專用**。小人型沒有 ZED 相機，也就沒有視覺里程計。
+
+顯示 ZED 相機的視覺里程計，來自 ``/zed/zed_node/odom``\ （``nav_msgs/Odometry``\ ）。
 
 .. list-table::
    :header-rows: 1
+   :widths: 20 80
 
    * - 欄位
      - 說明
-   * - Roll
-     - 左右傾斜角（°）
-   * - Pitch
-     - 前後傾斜角（°）
+   * - X / Y / Z
+     - 相對於起點的位移，**單位公分**\ （原始訊息是公尺，顯示時乘 100）
    * - Yaw
-     - 旋轉角（°）
+     - 相對於起點的朝向角（度）
 
-**IMU Reset** 按鈕：將 IMU 數值重置歸零。
+.. warning::
+
+   **這是「相機」的位移，不是機器人底盤的位移。**
+   相機裝在頭部雲台上，所以**只轉頭、身體沒動的時候數值也會變**\ 。
+   目前尚未做頭部補償，**僅供觀察驗證用**\ ，不要直接拿來當定位依據。
+
+歸零的方式有兩個，兩者等價（都是呼叫 ``/zed/zed_node/reset_odometry``\ ）：
+
+* 網頁上的歸零按鈕
+* 策略裡呼叫 :meth:`API.sendOdomReset`\ （服務還沒就緒時只記錄警告，不會卡住主迴圈）
 
 .. _walking-mode:
 
@@ -1093,25 +1832,51 @@ Walking Mode 調整
 
 選擇步態模式的單選按鈕。切換模式後會自動呼叫 `Load`_ 重新載入對應參數。
 
-.. list-table::
-   :header-rows: 1
+.. important::
+   **兩台的模式不同。** 小人型是上下板（LC），大人型是斯巴達障礙（SR）。
 
-   * - 模式
-     - statetype
-     - 說明
-   * - Continuous
-     - 0
-     - 平地連續行走（預設）
-   * - LC_up
-     - 1
-     - 上樓梯步態
-   * - LC_down
-     - 2
-     - 下樓梯步態
+.. tabs::
 
-.. note::
-   LC_up / LC_down 選項只有在目前策略為 ``lc`` 時才會顯示。
+   .. tab:: 小人型 (KID)
 
+      .. list-table::
+         :header-rows: 1
+         :widths: 26 18 56
+
+         * - 模式
+           - statetype
+           - 說明
+         * - ``Continuous``
+           - 0
+           - 平地連續行走（預設）
+         * - ``LC_up``
+           - 1
+           - 上板步態
+         * - ``LC_down``
+           - 2
+           - 下板步態
+
+   .. tab:: 大人型 (ADULT)
+
+      .. list-table::
+         :header-rows: 1
+         :widths: 26 18 56
+
+         * - 模式
+           - statetype
+           - 說明
+         * - ``Continuous``
+           - 0
+           - 平地連續行走（預設）
+         * - ``SR_up``
+           - 1
+           - 上障礙物步態
+         * - ``SR_down``
+           - 2
+           - 下障礙物步態
+         * - ``SR_Continuous``
+           - 3
+           - 障礙物上的連續行走（**小人型沒有這個模式**\ ）
 .. _walking-step-size:
 
 步長調整
@@ -1194,51 +1959,126 @@ Generate
 步態參數
 ^^^^^^^^
 
-參數面板依選取的 Walking Mode 顯示不同欄位組。
+參數面板依選取的 `Walking Mode 調整`_ 顯示不同欄位組。
 
-**Continuous Step（平地連續步態）：**
+.. important::
+   **兩台的欄位組成不同**\ ，而且差異方向相反 ——
+   平地那組大人型多兩個，上下板／障礙那組反而是小人型多三個。
+
+Continuous Step（平地連續步態）
+"""""""""""""""""""""""""""""""
 
 .. list-table::
    :header-rows: 1
+   :widths: 24 44 16 16
 
    * - 參數
      - 說明
-     - 預設值
+     - 小人型
+     - 大人型
    * - ``com_y_swing``
-     - 質心起步偏移（cm）
-     - 0
+     - 質心起步偏移（cm），正值向左
+     - ✓
+     - ✓
    * - ``width_size``
-     - 腳寬（cm）
-     - 4.5
+     - 腳寬 / 步寬（cm）
+     - ✓
+     - ✓
    * - ``period_t``
-     - 週期(20一單位)
-     - 360
+     - 步態週期（以 20 為一單位），越小踏步越快
+     - ✓
+     - ✓
    * - ``T_DSP``
-     - 雙支撐時間比例（0–1）
-     - 0
+     - 雙支撐時間比例（0~1）
+     - ✓
+     - ✓
    * - ``lift_height``
      - 抬腳高度（cm）
-     - 2.5
+     - ✓
+     - ✓
    * - ``STAND_HEIGHT``
      - 站姿高度（cm）
-     - 23.5
+     - ✓
+     - ✓
    * - ``COM_HEIGHT``
      - 質心高度（cm）
-     - 29.5
-
-**LCup / LCdown Step（樓梯步態）：** 額外包含 ``Board_High`` （階梯高度）、``Clearance`` （越障餘裕）參數。
+     - ✓
+     - ✓
+   * - ``hip_roll``
+     - 髖關節 roll 補償
+     - ✗
+     - **✓**
+   * - ``ankle_roll``
+     - 踝關節 roll 補償
+     - ✗
+     - **✓**
 
 .. tabs::
 
    .. tab:: 小人型 (KID)
 
       預設值：``com_height`` = 29.5 cm、``stand_height`` = 23.5 cm、
-      ``period_t`` = 360 ms、``lift_height`` = 2.5 cm。
+      ``period_t`` = 360、``lift_height`` = 2.5 cm。
 
    .. tab:: 大人型 (ADULT)
 
       預設值：``com_height`` = 40 cm、``stand_height`` = 50 cm、
-      ``period_t`` = 420 ms、``lift_height`` = 5 cm。
+      ``period_t`` = 420、``lift_height`` = 5 cm。
+
+      多出來的 ``hip_roll`` / ``ankle_roll`` 是**平地步態也能調的 roll 補償**\ ；
+      小人型只有在上下板那一組才有這兩個欄位。
+
+上下板 / 障礙步態
+"""""""""""""""""
+
+小人型是 **LC_up / LC_down**\ （上下板），大人型是
+**SR_up / SR_down / SR_Continuous**\ （斯巴達障礙）。
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 44 16 16
+
+   * - 參數
+     - 說明
+     - 小人型
+     - 大人型
+   * - ``com_y_swing`` / ``width_size`` / ``period_t``
+     - 同平地
+     - ✓
+     - ✓
+   * - ``T_DSP``\ （欄位 id 為 ``osc_lockrange``\ ）
+     - 雙支撐時間比例
+     - ✓
+     - ✓
+   * - ``Clearance``
+     - 越障餘裕（cm）
+     - ✓
+     - ✓
+   * - ``Board_High``
+     - 板 / 障礙物高度（cm）
+     - ✓
+     - ✓
+   * - ``STAND_HEIGHT`` / ``COM_HEIGHT``
+     - 站姿與質心高度
+     - ✓
+     - ✓
+   * - ``base_default_z``
+     - 基準高度
+     - **✓**
+     - ✗
+   * - ``Hip_roll``
+     - 髖關節 roll 補償
+     - **✓**
+     - ✗
+   * - ``Ankle_roll``
+     - 踝關節 roll 補償
+     - **✓**
+     - ✗
+
+.. note::
+
+   大人型的 ``hip_roll`` / ``ankle_roll`` 在**平地那一組**\ ，
+   障礙這一組反而沒有；小人型剛好相反。改參數前先確認自己在哪一個模式。
 
 .. _walking-save:
 
@@ -1266,14 +2106,6 @@ Send
 
 miniDRC
 -------------------
-
-.. raw:: html
-
-   <a href="_static/miniDRC_demo.html" target="_blank"
-      style="background:#03e9f4;color:#000;padding:5px 14px;border-radius:4px;
-             text-decoration:none;font-weight:bold;font-family:monospace;">
-     &#9654; 開啟 DEMO
-   </a>
 
 .. raw:: html
 

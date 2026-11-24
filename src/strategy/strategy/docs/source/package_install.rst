@@ -220,6 +220,48 @@ pip 套件
      - 熱點管理 API（``usb_cam/launch/hotspot_api.py``\ ，大人型才有）
 
 安裝時用 ``pip install 套件==版本``\ ，版本照上表自己那一欄。
+整段複製貼上即可，每一行都是獨立可執行的指令。
+
+.. tabs::
+
+   .. tab:: 小人型 (KID)
+
+      .. code-block:: bash
+
+         pip install "numpy==1.26.4"
+         pip install "opencv-python==4.9.0.80"
+         pip install "Pillow==9.0.1"
+         pip install "pyserial==3.5"
+         pip install "PyYAML==5.4.1"
+         pip install "pydantic==1.10.26"
+         pip install "dynamixel-sdk==4.0.3"
+         pip install "pupil-apriltags==1.0.4.post11"
+         pip install "matplotlib==3.5.1"
+         pip install "mediapipe==0.10.15"
+         pip install "ultralytics==8.4.39"
+         pip install "scipy==1.8.0"
+
+   .. tab:: 大人型 (ADULT)
+
+      .. code-block:: bash
+
+         pip install "numpy==1.26.4"
+         pip install "opencv-python==4.8.1.78"
+         pip install "Pillow==9.0.1"
+         pip install "pyserial==3.5"
+         pip install "PyYAML==6.0.2"
+         pip install "pydantic==1.10.26"
+         pip install "dynamixel-sdk==3.8.4"
+         pip install "pupil-apriltags==1.0.4.post11"
+         pip install "matplotlib==3.5.1"
+         pip install "mediapipe==0.10.13"
+         pip install "ultralytics==8.4.34"
+         pip install "scipy==1.8.0"
+         pip install "flask==3.1.3"
+
+.. note::
+
+   ``torch`` **不在上面那串裡** —— 它要用 NVIDIA 的 Jetson wheel，見上方的警告。
 
 .. tabs::
 
@@ -237,19 +279,7 @@ pip 套件
          sudo groupadd -f -r gpio
          sudo usermod -a -G gpio $USER
 
-      **靈巧手（LinkerHand O6）**\ ：走 CAN，需要 python-can。
 
-      .. code-block:: bash
-
-         pip install python-can==4.6.1
-
-      .. note::
-
-         * LinkerHand 的 SDK **沒有用 pip 版**\ ，是 vendor 在
-           ``src/linkerhand-ros2-sdk``\ 。不要去 ``pip install linker-hand-sdk``\ 。
-         * 走 RS485 才需要 ``pymodbus``\ 。我們走 CAN，實機上沒裝也完全正常。
-         * 編譯 SDK **必須加** ``--symlink-install``\ ，否則 ``setting.yaml``
-           與 ``O6_positions.yaml`` 不會被安裝，程式讀設定時會掛掉。
 
       **官方 GUI（選用）**\ ：我們平常用網頁介面，這兩個只有要跑 LinkerHand
       官方的 PyQt GUI（``gui_control`` / ``graphic_display`` /
@@ -259,6 +289,184 @@ pip 套件
 
          pip install PyQt5==5.15.6
          pip install pyqtgraph==0.12.4
+
+機身 IMU (Xsens MTi) (大人型)
+-----------------------------
+
+.. note::
+   本節為 **大人型專用**。小人型使用 ESP32 作為 IMU 介面，見 :doc:`udev_setup`\ 。
+
+ROS 相依
+~~~~~~~~
+
+.. code-block:: bash
+
+   sudo apt install -y ros-humble-nmea-msgs ros-humble-mavros-msgs
+
+已驗證版本：``ros-humble-nmea-msgs`` ``2.0.0``\ 、``ros-humble-mavros-msgs`` ``2.14.0``\ 。
+
+driver
+~~~~~~
+
+官方 driver **放在獨立的 workspace**\ ，不在 ``ros2_adult`` 裡：
+
+.. code-block:: bash
+
+   cd ~
+   git clone --branch ros2 https://github.com/xsenssupport/Xsens_MTi_ROS_Driver_and_Ntrip_Client.git
+   mv Xsens_MTi_ROS_Driver_and_Ntrip_Client xsens_ws
+   cd ~/xsens_ws
+   colcon build --symlink-install
+
+.. note::
+
+   實機上的目錄名稱是 ``~/xsens_ws``\ 。``camera.launch.py`` 用
+   ``get_package_share_directory('xsens_mti_ros2_driver')`` 找它，
+   所以建完要 ``source ~/xsens_ws/install/setup.bash``\ 。
+
+參數設定
+~~~~~~~~
+
+編 ``~/xsens_ws/src/xsens_mti_ros2_driver/param/xsens_mti_node.yaml``\ ，
+改成下面四個值（其餘保持原樣）：
+
+.. code-block:: yaml
+
+   scan_for_devices: false                      # 務必 false，見下方警告
+   port: '/dev/ttyTHS1'                         # AGX 40-pin 排針 UART（pin 8 TX / pin 10 RX）
+   baudrate: 115200                             # MTi-620 出廠鮑率
+   port_config_hardware_flow_control: false     # GPIO UART 只接 TX/RX，沒接 RTS/CTS
+
+.. danger::
+
+   **``scan_for_devices`` 一定要是 ``false``。**
+   全域掃描會對每一個 ``ttyUSB`` 輪流送 Xsens 的握手封包，
+   **包括接著 Dynamixel 匯流排的 U2D2** —— 等於對馬達亂送資料。
+
+改完驗一下沒打壞格式：
+
+.. code-block:: bash
+
+   cd ~/xsens_ws/src/xsens_mti_ros2_driver/param
+   python3 -c "import yaml; yaml.safe_load(open('xsens_mti_node.yaml')); print('YAML valid')"
+   grep -nE "scan_for_devices:|^\s+port:|^\s+baudrate:|flow_control" xsens_mti_node.yaml
+
+40-pin UART
+~~~~~~~~~~~
+
+預設 ``/dev/ttyTHS1`` 被系統的除錯主控台佔用，要先關掉：
+
+.. code-block:: bash
+
+   sudo systemctl stop nvgetty
+   sudo systemctl disable nvgetty
+   sudo usermod -aG dialout $USER
+   sudo reboot
+
+重開後確認裝置存在：
+
+.. code-block:: bash
+
+   ls -l /dev/ttyTHS*
+   # 預期看到 /dev/ttyTHS1（group 為 dialout）
+
+.. note::
+
+   **沒有 ``/dev/ttyTHS0``。** AGX Orin 上 40-pin 排針的 UART 是 ``ttyTHS1``\ ，
+   填 ``ttyTHS0`` driver 會一直重試連不上。
+
+   改用 USB 轉接板時才需要下面這條 udev 規則（走 GPIO UART 不需要）：
+
+   .. code-block:: bash
+
+      sudo tee /etc/udev/rules.d/99-ftdi-latency.rules << 'EOF'
+      ACTION=="add", SUBSYSTEM=="usb-serial", DRIVER=="ftdi_sio", ATTR{latency_timer}="1"
+      EOF
+      sudo udevadm control --reload
+
+靈巧手 (LinkerHand O6) (大人型)
+-------------------------------
+
+.. note::
+   本節為 **大人型專用**。小人型沒有配備靈巧手。
+
+PEAK USB-CAN 驅動
+~~~~~~~~~~~~~~~~~
+
+手走 CAN，需要 PEAK 的核心模組。**已驗證版本 8.17.0**\ ：
+
+.. code-block:: bash
+
+   sudo apt install -y build-essential libpopt-dev
+   cd ~
+   wget https://www.peak-system.com/fileadmin/media/linux/files/peak-linux-driver-8.17.0.tar.gz
+   tar -xzvf peak-linux-driver-8.17.0.tar.gz
+   cd peak-linux-driver-8.17.0
+   make NET=NETDEV_SUPPORT
+   sudo make install
+   sudo modprobe pcan
+
+.. important::
+
+   **一定要 netdev 版。** 我們是用 ``ip link`` 操作 ``can2`` / ``can3`` 這種網路介面，
+   不是 chardev 的 ``/dev/pcan*``\ 。裝完這樣驗：
+
+   .. code-block:: bash
+
+      modinfo pcan | grep -E "^version|^description"
+      # 預期：version: Release_20240116_n
+      #       description: Netdev driver for PEAK-System CAN interfaces
+
+      ls /dev/pcan* 2>/dev/null
+      # 預期：沒有東西（有的話是裝成 chardev 模式了）
+
+驅動會自己裝 ``/etc/udev/rules.d/45-pcan.rules``\ ，不用手寫。
+
+CAN 介面設定
+~~~~~~~~~~~~
+
+插上 USB-CAN 盒後確認介面有出現：
+
+.. code-block:: bash
+
+   ip -br link show type can
+
+.. note::
+
+   AGX 內建的 CAN 是 ``can0`` / ``can1``\ （沒接東西），
+   **PEAK USB-CAN 會是 ``can2`` / ``can3``**\ 。
+   換機器前先用上面那行確認編號，再用 ``left_can:=`` / ``right_can:=`` 覆蓋。
+
+設定比特率並啟用（左右手各一條，比特率固定 1 Mbps）：
+
+.. code-block:: bash
+
+   sudo ip link set can2 type can bitrate 1000000
+   sudo ip link set can2 up
+   sudo ip link set can3 type can bitrate 1000000
+   sudo ip link set can3 up
+
+.. note::
+
+   平常不用手動下這幾行 —— SDK 啟動時會自己用 ``setting.yaml`` 裡的
+   ``PASSWORD`` 去 ``sudo ip link set ... up``\ 。
+   但**那段失敗時是靜默的**\ （例外被吞掉），現象是「手完全不動但沒有任何錯誤訊息」。
+   ``hands.launch.py`` 有加啟動檢查，CAN 沒 UP 會印警告。
+
+Python 套件
+~~~~~~~~~~~
+
+.. code-block:: bash
+
+   pip install python-can==4.6.1
+
+.. note::
+
+   * LinkerHand 的 SDK **沒有用 pip 版**\ ，是 vendor 在
+     ``src/linkerhand-ros2-sdk``\ 。不要去 ``pip install linker-hand-sdk``\ 。
+   * 走 RS485 才需要 ``pymodbus``\ 。我們走 CAN，實機上沒裝也完全正常。
+   * 編譯 SDK **必須加** ``--symlink-install``\ ，否則 ``setting.yaml``
+     與 ``O6_positions.yaml`` 不會被安裝，程式讀設定時會掛掉。
 
 .. note::
 
