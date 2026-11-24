@@ -904,9 +904,10 @@ function MotionList(mode)
 }
 
 
-// 建立一個物件來儲存馬達狀態，預設全為 0 (關閉)
+// 建立一個物件來儲存馬達狀態，預設全為 0 (關閉)。
+// 含頭部 22、23：以前只初始化到 21，頭部是 undefined，第一次點反而送出 OFF。
 let motorTorqueStates = {};
-for (let i = 1; i <= 21; i++) {
+for (let i = 1; i <= 23; i++) {
     motorTorqueStates[i] = 0;
 }
 
@@ -915,24 +916,10 @@ for (let i = 1; i <= 21; i++) {
  * @param {number} id 馬達編號
  */
 function toggleTorqueAtPosition(id) {
-    // 1. 切換狀態值 (0 變 1, 1 變 0)
-    motorTorqueStates[id] = motorTorqueStates[id] === 0 ? 1 : 0;
-    let newState = motorTorqueStates[id];
-
-    // 2. 更新 UI 視覺回饋 (變色)
-    const btn = document.getElementById(`pos-btn-${id}`);
-    if (newState === 1) {
-        btn.classList.add('torque-on');
-    } else {
-        btn.classList.remove('torque-on');
-    }
-
-    // 3. 呼叫原本的 SetSingleTorque 功能
-    // 為了不影響原本的 UI，我們手動指定 ID 給原本的輸入框再執行
+    // 畫面更新統一由 SetSingleTorque 內的 refreshTorqueUI 負責，這裡只決定目標狀態
+    const newState = motorTorqueStates[id] === 1 ? 0 : 1;
     document.getElementById("single_motor_id").value = id;
-    SetSingleTorque(newState); 
-
-    console.log(`馬達 ${id} 狀態已更改為: ${newState === 1 ? 'ON' : 'OFF'}`);
+    SetSingleTorque(newState);
 }
 
 function swapTableRows(table, idxA, idxB) {
@@ -997,4 +984,4 @@ function MoveRow(direction) {
   if (spdTable) swapTableRows(spdTable, targetIdx, swapIdx);
 
   document.getElementById('label').innerHTML = 'Moved ID ' + id + ' ' + (direction === -1 ? 'up' : 'down') + ' !!';
-}
+}

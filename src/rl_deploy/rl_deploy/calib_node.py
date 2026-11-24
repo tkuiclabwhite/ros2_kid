@@ -8,7 +8,7 @@
 
 ── 為什麼要有這支（而不是直接跑 policy）────────────────────────────────
 
-policy 的 47 維觀測裡有 6 維來自 IMU（`base_ang_vel` 3 + `projected_gravity`
+policy 的 48 維觀測裡有 6 維來自 IMU（`base_ang_vel` 3 + `projected_gravity`
 3）。`projected_gravity` 是它唯一的平衡感測 —— **軸排錯或正負號反了，policy
 會主動把自己推倒**，不是走得醜而是立刻倒。其他參數錯了頂多走不好。
 

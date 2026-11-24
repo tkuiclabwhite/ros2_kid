@@ -7,6 +7,7 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Int16MultiArray
 from tku_msgs.msg import HeadPackage
 from rcl_interfaces.msg import SetParametersResult
+from rclpy.qos import QoSProfile, DurabilityPolicy
 
 import time
 import threading
@@ -37,6 +38,10 @@ LEN_SYNC_WRITE_ALL          = 12   # 同步寫入：加速度(4) + 速度(4) + �
 # read_current=True                       → addr=126, len=10 (電流+速度+位置)
 
 PROTOCOL_VERSION = 2.0
+
+# Protocol 2.0 狀態封包的 error byte：bit7 = Alert（馬達 Hardware Error Status 有警示），
+# bit0~6 才是這個指令本身的錯誤。Alert 時指令照樣執行、讀值有效，所以判斷成功只看 bit0~6。
+ERR_MASK_NO_ALERT = 0x7F
 
 
 class DynamixelDriver(Node):
@@ -70,6 +75,15 @@ class DynamixelDriver(Node):
         self.id_port_map  = {}  # {motor_id: port_name}
         self._reconnecting = set()
 
+        # 扭力實際狀態：開機/重連掃描時從馬達讀回 Torque Enable，之後每次寫入成功就更新。
+        # 開機不關扭力：只重開 launch、馬達沒斷電時扭力維持原狀，機器人不會軟掉。
+        # 這是硬體讀回的值，不是指令快取；沒連上的馬達記為 0。
+        self.torque_enable = {mid: 0 for mid in self.target_ids}
+        self._torque_lock = threading.Lock()
+        # latched：motionpackage 晚啟動或單獨重啟，一訂閱就會拿到最後一次的完整狀態
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self.torque_state_pub = self.create_publisher(Int16MultiArray, '/torque_state', latched)
+
         self.get_logger().info(f"正在初始化 U2D2 Ports... Baudrate: {self.baudrate}")
         self._init_hardware_blind()
 
@@ -88,6 +102,10 @@ class DynamixelDriver(Node):
 
         # 6. 控制迴圈 20Hz
         self.timer = self.create_timer(0.02, self._control_loop)
+
+        # 7. 每秒重發扭力狀態：rosbridge 不一定會把 latched 訊息補給晚連上的網頁，
+        #    定期重發讓網頁／motionpackage 不管何時連上，最多 1 秒就校正。
+        self.torque_state_timer = self.create_timer(1.0, self._publish_torque_state)
 
         addr, length = self._get_read_params()
         self.get_logger().info(
@@ -180,8 +198,24 @@ class DynamixelDriver(Node):
                         gr.addParam(mid)
                         found_ids.add(mid)
                         self.joint_data[mid]['goal'] = None
-                        self.get_logger().info(f" -> ID {mid} 發現於 {port_name}")
+                        te = self._read_torque_enable(pk, ph, mid)
+                        # 扭力開著時，初始目標用馬達「原本的 Goal Position」而不是現在位置，
+                        # 否則負重下的下垂量會被當成新目標，每重開一次就沉一點。
+                        # （goal 為 None 時 control loop 會在第一次讀取時改用現在位置）
+                        if te:
+                            gval, gres, gerr = pk.read4ByteTxRx(ph, mid, ADDR_GOAL_POSITION)
+                            if gres == COMM_SUCCESS and (gerr & ERR_MASK_NO_ALERT) == 0:
+                                if gval > 0x7FFFFFFF: gval -= 4294967296
+                                self.joint_data[mid]['goal'] = gval
+                        self.get_logger().info(
+                            f" -> ID {mid} 發現於 {port_name}，扭力={'ON' if te else 'OFF'}")
                     else:
+                        # 只有「上次掃描時在這個 Port 上」的馬達掃不到才記為 OFF（重連時馬達不見了）。
+                        # 首次掃描會在每個 Port 掃全部 ID，別的 Port 上的馬達在這裡必然失敗，不能蓋掉。
+                        # （重連時 id_port_map 已先被清掉，所以看 self.ports 裡舊的 ids，迴圈結束前還沒被覆蓋）
+                        if mid in ((self.ports.get(port_name) or {}).get('ids') or ()):
+                            with self._torque_lock:
+                                self.torque_enable[mid] = 0
                         self.get_logger().warn(f" -> ID {mid} 掃描失敗")
 
                 self.ports[port_name] = {
@@ -196,6 +230,30 @@ class DynamixelDriver(Node):
 
         total = sum(len(p['ids']) for p in self.ports.values() if p.get('alive'))
         self.get_logger().info(f"硬體初始化完成，共連接 {total} 顆馬達。")
+        self._publish_torque_state()
+
+    def _read_torque_enable(self, pk, ph, mid):
+        """從馬達讀回 Torque Enable（addr 64），失敗重試 3 次，仍失敗視為 OFF。"""
+        value = 0
+        for _ in range(3):
+            try:
+                v, result, error = pk.read1ByteTxRx(ph, mid, ADDR_TORQUE_ENABLE)
+                if result == COMM_SUCCESS and (error & ERR_MASK_NO_ALERT) == 0:
+                    value = 1 if v else 0
+                    break
+            except Exception:
+                pass
+        with self._torque_lock:
+            self.torque_enable[mid] = value
+        return value
+
+    def _publish_torque_state(self):
+        """發布完整扭力狀態：index 0 對應 ID 1，1 = ON、0 = OFF。"""
+        with self._torque_lock:
+            data = [self.torque_enable.get(mid, 0) for mid in self.target_ids]
+        msg = Int16MultiArray()
+        msg.data = data
+        self.torque_state_pub.publish(msg)
 
     # ──────────────────────────────────────────────────────────────────────
     # 單一 Port 背景重連（不阻塞主迴圈）
@@ -310,12 +368,24 @@ class DynamixelDriver(Node):
             port = self.ports.get(port_name)
             if not port or not port['alive']:
                 continue
+            ok = False
+            last = None
             for _ in range(3):
                 try:
-                    pk.write1ByteTxRx(port['ph'], mid, ADDR_TORQUE_ENABLE, state)
+                    result, error = pk.write1ByteTxRx(port['ph'], mid, ADDR_TORQUE_ENABLE, state)
+                    last = (result, error)
+                    ok = ok or (result == COMM_SUCCESS and (error & ERR_MASK_NO_ALERT) == 0)
                     time.sleep(0.001)
                 except Exception:
                     pass
+            if ok:
+                with self._torque_lock:
+                    self.torque_enable[mid] = 1 if state else 0
+            else:
+                self.get_logger().warn(
+                    f"ID {mid} 扭力寫入未確認成功，狀態維持原值 (result={last and last[0]}, error={last and last[1]})")
+
+        self._publish_torque_state()
 
     # ──────────────────────────────────────────────────────────────────────
     # 主控制迴圈（Per-Port 隔離）

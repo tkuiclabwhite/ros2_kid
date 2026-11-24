@@ -63,6 +63,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/ReadMotion.srv"
   "srv/CheckSector.srv"
   "srv/SendHandSpeed.srv"
+  "srv/TorqueState.srv"
   ##########  walkingparameter/srv  ################
   "srv/WalkingGaitParameter.srv"
   "srv/LCWalkingGaitParameter.srv"

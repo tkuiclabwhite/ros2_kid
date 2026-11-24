@@ -74,6 +74,21 @@ A_PROFILE_ACCEL = (108, 4)   # driver 的 SyncWrite 起點（accel+vel+goal 共 
 LEN_SYNC_WRITE = 12
 A_GOAL_POSITION = (116, 4)
 A_TORQUE_ENABLE = (64, 1)
+# Hardware Error Status：bit0 電壓 / bit2 過熱 / bit3 編碼器
+# / bit4 電衝擊 / bit5 過載。**只有 reboot 或斷電才會清掉**，
+# 所以帶著警報的馬達還是能動，只是每個狀態封包都回 Alert (0x80)。
+A_HARDWARE_ERROR = (70, 1)
+# 電壓（單位都是 0.1 V）。Max/Min Voltage Limit 在 EEPROM，出廠 16.0 / 9.5 V。
+# 實際電壓超出這個窗就會在 Hardware Error Status 的 bit 0 立旗，而且**閂鎖**
+# 到 reboot 為止 —— 所以看到旗子不代表現在有問題，要讀 Present 才知道。
+# Shutdown：哪些硬體錯誤會讓馬達**自己關掉扭力**。位元同 Hardware Error
+# Status。X 系列出廠是 52 = 0b110100 = 過熱(2)+電衝擊(4)+過載(5)，
+# **不含輸入電壓(0)** —— 所以超壓會立旗但不會掉扭力。這要實測確認，
+# 因為掉扭力發生在走路中就是整台癱下去。
+A_SHUTDOWN = (63, 1)
+A_MAX_VOLT_LIMIT = (32, 2)
+A_MIN_VOLT_LIMIT = (34, 2)
+A_PRESENT_VOLT = (144, 2)
 
 LEG_IDS = list(range(10, 22))
 ALL_IDS = list(range(1, 24))
@@ -244,6 +259,117 @@ def _time_calls(fn, n: int = 40) -> tuple[float, float]:
         fn()
         ts.append((time.perf_counter() - t0) * 1000.0)
     return statistics.mean(ts), statistics.median(ts)
+
+
+_HW_BITS = {0: "電壓", 2: "過熱", 3: "編碼器", 4: "電衝擊", 5: "過載"}
+
+
+def decode_hw(v: int) -> str:
+    hit = [n for b, n in _HW_BITS.items() if v & (1 << b)]
+    return "+".join(hit) if hit else "無"
+
+
+def cmd_volt(bus: Bus, ids: list[int], seconds: float) -> None:
+    """連續取樣輸入電壓，判斷電壓警報是現在進行式還是歷史殘留。
+
+    Hardware Error Status 的 bit 0（輸入電壓）**閂鎖到 reboot 為止**，所以
+    看到旗子只代表「曾經」超出電壓窗。要分辨就得讀 Present Input Voltage。
+
+    ⚠️ 這支是**無負載**的量測（扭力沒開）。真正危險的是走路時的瞬間壓降，
+       那要在 policy 跑的時候量 —— 如果這裡乾淨，下一步才是加迴圈內監測。
+    """
+    found = bus.scan(ids)
+    if not found:
+        print("❌ 一顆都沒找到")
+        return
+    print(f"\n取樣輸入電壓 {seconds:.0f} 秒（{len(found)} 顆，扭力沒開 = 無負載）…")
+    lim = {}
+    for mid, pt in found.items():
+        lo, hi = bus.read(pt, mid, A_MIN_VOLT_LIMIT), bus.read(pt, mid, A_MAX_VOLT_LIMIT)
+        lim[mid] = (lo, hi)
+    samples: dict[int, list[int]] = {m: [] for m in found}
+    t0 = time.time()
+    while time.time() - t0 < seconds:
+        for mid, pt in found.items():
+            v = bus.read(pt, mid, A_PRESENT_VOLT)
+            if v is not None:
+                samples[mid].append(v)
+    print(f"   每顆取到 {min(len(v) for v in samples.values())}"
+          f"~{max(len(v) for v in samples.values())} 筆\n")
+    print(f"   {'ID':>3} {'最低':>7} {'平均':>7} {'最高':>7} "
+          f"{'允許範圍':>14} {'HW錯誤':>8} {'Shutdown':>22}")
+    bad, kills = [], []
+    for mid in sorted(found):
+        v = samples[mid]
+        if not v:
+            print(f"   {mid:>3}   讀不到")
+            continue
+        lo, hi = lim[mid]
+        mn, mx, av = min(v) / 10, max(v) / 10, sum(v) / len(v) / 10
+        hw = bus.read(found[mid], mid, A_HARDWARE_ERROR) or 0
+        out = (lo is not None and min(v) < lo) or (hi is not None and max(v) > hi)
+        if out:
+            bad.append(mid)
+        sd = bus.read(found[mid], mid, A_SHUTDOWN) or 0
+        if sd & 0x01:                      # 輸入電壓在 shutdown 遮罩裡
+            kills.append(mid)
+        print(f"   {mid:>3} {mn:>6.1f}V {av:>6.1f}V {mx:>6.1f}V "
+              f"{f'{(lo or 0)/10:.1f}~{(hi or 0)/10:.1f}V':>14} "
+              f"{('0x%02X' % hw) if hw else '—':>8} "
+              f"{('0x%02X ' % sd) + decode_hw(sd):>22}"
+              + ("  ❌ 超出" if out else ""))
+    print()
+    if kills:
+        print(f"   ❌❌ ID {kills} 的 Shutdown 含「輸入電壓」—— 超壓時這幾顆會"
+              "**自己關掉扭力**。走路中發生就是整台癱下去。")
+    else:
+        print("   ✅ 沒有馬達把「輸入電壓」列進 Shutdown → 超壓只會立旗，"
+              "不會掉扭力。")
+    if bad:
+        print(f"   ❌ ID {bad} 的電壓**現在就**超出它自己的窗 → 先修供電，"
+              "reboot 只會讓旗子再跳一次。")
+    else:
+        print("   ✅ 無負載下全部在窗內 → 旗子是歷史殘留，可以 --reboot 清掉。")
+        print("      但這**不代表走路時不會壓降** —— 清完之後跑一次 policy，"
+              "再回來看旗子有沒有重新立起來。")
+
+
+def cmd_reboot(bus: Bus, ids: list[int]) -> None:
+    """重開馬達以清除 Hardware Error Status。
+
+    過載（bit 5）與過熱（bit 2）的警報**會留著**直到馬達重開 —— 即使造成
+    它的狀況早就消失了。帶著警報的馬達扭力還是開得起來、也動得了，只是每個
+    狀態封包都會把 Alert 位元（0x80）帶回來。
+
+    ⚠️ reboot 會把 RAM 設定清回 EEPROM 的值，**包含扭力與 P/D 增益**。
+       清完要重設：
+           ros2 run rl_deploy dxl --set-pgain 380 --set-dgain 500 --ids legs
+    """
+    print("\n重開馬達（清 Hardware Error Status）")
+    print("⚠️ 會清掉扭力 —— 機器人要吊著或躺平，不然會直接癱下去。")
+    if input("   輸入 yes 繼續：").strip().lower() != "yes":
+        print("中止。")
+        return
+    found = bus.scan(ids)
+    okn = 0
+    for mid in sorted(found):
+        before = bus.read(found[mid], mid, A_HARDWARE_ERROR)
+        try:
+            result, _ = bus.ph.reboot(found[mid], mid)
+        except Exception as e:                               # noqa: BLE001
+            print(f"   ID {mid:>2}  ❌ {e}")
+            continue
+        if result != COMM_SUCCESS:
+            print(f"   ID {mid:>2}  ❌ {bus.ph.getTxRxResult(result)}")
+            continue
+        time.sleep(0.3)                                      # 重開要時間
+        after = bus.read(found[mid], mid, A_HARDWARE_ERROR)
+        okn += 1
+        print(f"   ID {mid:>2}  0x{(before or 0):02X} → 0x{(after or 0):02X}"
+              + ("  ✅" if not after else "  ⚠️ 還有警報，可能是現在進行式"))
+    print(f"\n   {okn}/{len(found)} 顆重開完成。")
+    print("   ⚠️ 記得重設增益：ros2 run rl_deploy dxl "
+          "--set-pgain 380 --set-dgain 500 --ids legs")
 
 
 def cmd_bench(bus: Bus, ids: list[int]) -> None:
@@ -768,6 +894,16 @@ def main() -> None:
     ap.add_argument("--baud", type=int, default=DEFAULT_BAUD)
     ap.add_argument("--ids", default="all", help="all | legs | 以逗號分隔")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--volt", action="store_true",
+                    help="連續取樣輸入電壓，找出是否真的超出馬達的電壓窗"
+                         "（Hardware Error Status 是閂鎖的，光看旗子分不出"
+                         "「現在就不對」還是「以前曾經不對」）")
+    ap.add_argument("--seconds", type=float, default=5.0,
+                    help="--volt 的取樣時長")
+    ap.add_argument("--reboot", action="store_true",
+                    help="重開馬達，清掉 Hardware Error Status 的警報"
+                         "（過載／過熱／電壓）。⚠️ 會清掉扭力與 RAM 設定，"
+                         "清完要重設 P/D 增益。")
     ap.add_argument("--bench", action="store_true")
     ap.add_argument("--set-rdt", type=int, default=None)
     ap.add_argument("--set-pgain", type=int, default=None)
@@ -791,6 +927,10 @@ def main() -> None:
     try:
         if args.check:
             cmd_check(bus, ids)
+        if args.volt:
+            cmd_volt(bus, ids, args.seconds)
+        if args.reboot:
+            cmd_reboot(bus, ids)
         if args.set_rdt is not None:
             cmd_write(bus, ids, A_RETURN_DELAY, args.set_rdt, "Return Delay Time")
         for val, addr, label in (
@@ -808,7 +948,8 @@ def main() -> None:
                 [int(x) for x in args.pgains.split(",")],
                 [int(x) for x in args.dgains.split(",")],
             )
-        if not any([args.check, args.bench, args.set_rdt is not None,
+        if not any([args.check, args.bench, args.reboot, args.volt,
+                    args.set_rdt is not None,
                     args.set_pgain is not None, args.set_dgain is not None,
                     args.set_igain is not None, args.step_test]):
             ap.print_help()
