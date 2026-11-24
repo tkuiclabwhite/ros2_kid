@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from launch import LaunchDescription
-from launch.actions import GroupAction
+from launch.actions import ExecuteProcess,GroupAction
 from launch_ros.actions import Node
 
 # 把本目錄加進 sys.path 以匯入 camera_config.py
@@ -116,10 +116,16 @@ def generate_launch_description():
         output='screen',
     )
 
+    http_server = ExecuteProcess(
+        cmd=['python3', '/home/iclab/ros2_kid/hurocup_interface/http_server.py'],
+        cwd='/home/iclab/ros2_kid/hurocup_interface',
+        output='screen',
+    )
+
     actions = (
         camera_nodes
         + [driver_node, walking_node, motion_node, web_bridge_node, sunified_sensor_node]
-        + [image_node, web_video, rosbridge_node]
+        + [image_node, web_video, rosbridge_node,http_server]
     )
 
     ld = LaunchDescription()

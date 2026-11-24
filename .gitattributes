@@ -4,3 +4,6 @@ git_push.sh merge=ours
 src/strategy/strategy/Parameter/stand.ini merge=ours
 src/strategy/strategy/Parameter/29.ini merge=ours
 hurocup_interface/js/config.js merge=ours
+src/motionpackage/motionpackage/switch.py merge=ours
+src/usb_cam/launch/camera.launch.py merge=ours
+wifi_manager.py merge=ours

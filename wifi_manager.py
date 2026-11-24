@@ -83,10 +83,14 @@ SPINNER_LABEL = "處理中"
 
 def run_nmcli(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess:
     """同步執行 nmcli 指令 (在背景 thread 呼叫，避免卡住 UI)；失敗時回傳一個假的
-    CompletedProcess，讓呼叫端不用額外處理例外，只需檢查 returncode。"""
+    CompletedProcess，讓呼叫端不用額外處理例外，只需檢查 returncode。
+
+    前面加 sudo 是因為部分系統的 polkit rules.d 沒有生效（精簡編譯版本可能拿掉了
+    JS rules 引擎支援），改用 /etc/sudoers.d/ 設定的 NOPASSWD 規則讓 nmcli 免密碼執行。
+    """
     try:
         return subprocess.run(
-            ["nmcli"] + args,
+            ["sudo", "nmcli"] + args,
             capture_output=True,
             text=True,
             input=input_text,
@@ -142,24 +146,63 @@ def signal_bar(percent: int) -> str:
 
 
 def get_saved_wifi_names() -> set[str]:
-    """取得所有已儲存的 WiFi connection profile 名稱
-    (假設 profile 命名跟 SSID 相同，這是 nmcli 預設行為)"""
+    """取得所有已儲存的 WiFi connection profile 的 SSID（不是 profile 名稱）
+    因為 profile 名稱跟 SSID 不一定相同，用 SSID 做比對才準確"""
     result = run_nmcli(["-t", "-f", "NAME,TYPE", "connection", "show"])
-    names: set[str] = set()
+    saved_ssids: set[str] = set()
     if result.returncode != 0:
-        return names
+        return saved_ssids
+
     for line in result.stdout.strip().splitlines():
         if not line:
             continue
         fields = _split_nmcli_line(line)
         if len(fields) >= 2 and fields[1] == "802-11-wireless":
-            names.add(fields[0])
-    return names
+            profile_name = fields[0]
+            # 取得這個 profile 實際儲存的 SSID
+            detail = run_nmcli(["connection", "show", profile_name])
+            if detail.returncode != 0:
+                continue
+            for detail_line in detail.stdout.splitlines():
+                if "802-11-wireless.ssid:" in detail_line:
+                    ssid = detail_line.split("802-11-wireless.ssid:")[-1].strip()
+                    if ssid and ssid != "--":
+                        saved_ssids.add(ssid)
+                    break
+
+    return saved_ssids
+
+
+def get_profile_name_for_ssid(ssid: str) -> str | None:
+    """根據 SSID 找到對應的 connection profile 名稱
+    用於 connect_saved_wifi 跟 delete_connection（這兩個需要 profile 名稱，不是 SSID）"""
+    result = run_nmcli(["-t", "-f", "NAME,TYPE", "connection", "show"])
+    if result.returncode != 0:
+        return None
+
+    for line in result.stdout.strip().splitlines():
+        if not line:
+            continue
+        fields = _split_nmcli_line(line)
+        if len(fields) >= 2 and fields[1] == "802-11-wireless":
+            profile_name = fields[0]
+            detail = run_nmcli(["connection", "show", profile_name])
+            if detail.returncode != 0:
+                continue
+            for detail_line in detail.stdout.splitlines():
+                if "802-11-wireless.ssid:" in detail_line:
+                    stored_ssid = detail_line.split("802-11-wireless.ssid:")[-1].strip()
+                    if stored_ssid == ssid:
+                        return profile_name
+                    break
+    return None
 
 
 def delete_connection(name: str) -> tuple[bool, str]:
-    """刪除已儲存的 connection profile (Forget Network)"""
-    result = run_nmcli(["connection", "delete", name])
+    """刪除已儲存的 connection profile (Forget Network)
+    name 可以是 SSID 或 profile 名稱，先嘗試用 SSID 找 profile 名稱"""
+    profile_name = get_profile_name_for_ssid(name) or name
+    result = run_nmcli(["connection", "delete", profile_name])
     if result.returncode == 0:
         return True, f"已忘記網路：{name}"
     return False, result.stderr.strip() or "刪除失敗"
@@ -224,7 +267,7 @@ def scan_wifi(saved_names: set[str] | None = None) -> list[WifiNetwork]:
     """掃描並回傳目前可見的 WiFi 清單"""
     saved_names = saved_names or set()
 
-    subprocess.run(["nmcli", "device", "wifi", "rescan"], capture_output=True, timeout=15)
+    run_nmcli(["device", "wifi", "rescan"])
     result = run_nmcli(
         ["-t", "-f", "SSID,BSSID,CHAN,FREQ,RATE,SIGNAL,SECURITY,IN-USE", "device", "wifi", "list"]
     )
@@ -286,8 +329,13 @@ def connect_wifi(ssid: str, password: str | None, hidden: bool = False) -> tuple
 
 
 def connect_saved_wifi(ssid: str) -> tuple[bool, str]:
-    """直接用已儲存的 connection profile 連線，不需要重新輸入密碼"""
-    result = run_nmcli(["connection", "up", ssid])
+    """直接用已儲存的 connection profile 連線，不需要重新輸入密碼
+    先找到對應的 profile 名稱，再用 connection up 啟動"""
+    profile_name = get_profile_name_for_ssid(ssid)
+    if profile_name is None:
+        # 找不到 profile，fallback 到直接用 SSID 嘗試
+        profile_name = ssid
+    result = run_nmcli(["connection", "up", profile_name])
     if result.returncode == 0:
         return True, f"已連線到 {ssid}"
     return False, result.stderr.strip() or result.stdout.strip() or "連線失敗"
