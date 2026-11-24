@@ -1,4 +1,6 @@
+.gitattributes merge=ours
 git_sync.sh merge=ours
-src/strategy/strategy/Parameter/29.ini merge=ours
-src/strategy/strategy/Parameter/config.js merge=ours
+git_push.sh merge=ours
 src/strategy/strategy/Parameter/stand.ini merge=ours
+src/strategy/strategy/Parameter/29.ini merge=ours
+hurocup_interface/js/config.js merge=ours
