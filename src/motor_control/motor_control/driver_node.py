@@ -4,12 +4,13 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Int16MultiArray
+from std_msgs.msg import Int16MultiArray, String
 from tku_msgs.msg import HeadPackage
 from rcl_interfaces.msg import SetParametersResult
 from rclpy.qos import QoSProfile, DurabilityPolicy
 
 import time
+import json
 import threading
 from collections import defaultdict
 from dynamixel_sdk import *
@@ -42,6 +43,24 @@ PROTOCOL_VERSION = 2.0
 # Protocol 2.0 狀態封包的 error byte：bit7 = Alert（馬達 Hardware Error Status 有警示），
 # bit0~6 才是這個指令本身的錯誤。Alert 時指令照樣執行、讀值有效，所以判斷成功只看 bit0~6。
 ERR_MASK_NO_ALERT = 0x7F
+
+
+class _Stat:
+    """累積一段時間內的 ms 數值，取 avg / max 後清空（給網頁延遲監測用）。"""
+    def __init__(self):
+        self.n = 0; self.sum = 0.0; self.max = 0.0
+
+    def add(self, ms):
+        self.n += 1; self.sum += ms
+        if ms > self.max: self.max = ms
+
+    def take(self):
+        """回傳 {'avg','max'}，沒有樣本回傳 None；取完清空。"""
+        if self.n == 0:
+            return None
+        d = {'avg': self.sum / self.n, 'max': self.max}
+        self.n = 0; self.sum = 0.0; self.max = 0.0
+        return d
 
 
 class DynamixelDriver(Node):
@@ -96,6 +115,21 @@ class DynamixelDriver(Node):
         self.torque_sub   = self.create_subscription(Int16MultiArray, '/set_torque',       self._torque_cb,    10)
         self.head_sub     = self.create_subscription(HeadPackage,     'Head_Topic',        self._head_cb,      10)
         self.readmode_sub = self.create_subscription(Int16MultiArray, '/set_motor_read',   self._read_mode_cb, 10)
+
+        # 延遲監測（網頁 WalkingInterface 的延遲表）
+        #   /latency_ping → 原封回 /latency_pong 並附上 t_robot（time.time()，秒）
+        #   /motor_timing → 每秒發一次 JSON：指令延遲、各 Port USB 寫/讀時間、控制迴圈週期
+        self.latency_pong_pub = self.create_publisher(String, '/latency_pong', 10)
+        self.motor_timing_pub = self.create_publisher(String, '/motor_timing', 10)
+        self.create_subscription(String, '/latency_ping', self._latency_ping_cb, 10)
+        self._st_cmd_age     = _Stat()   # 指令 header.stamp → driver 收到
+        self._st_cmd_wait    = _Stat()   # driver 收到 → 控制迴圈寫出
+        self._st_loop_period = _Stat()   # 控制迴圈實際週期
+        self._st_loop_busy   = _Stat()   # 每圈 USB 讀寫 + 發布耗時
+        self._st_ports       = {}        # port_name → {'write': _Stat, 'read': _Stat, 'fail': int}
+        self._cmd_pending_t  = None      # 最早一筆還沒寫出的指令收到時間 (perf_counter)
+        self._last_loop_t    = None
+        self.motor_timing_timer = self.create_timer(1.0, self._publish_motor_timing)
 
         # 5. 動態參數回呼（執行中切換讀取開關）
         self.add_on_set_parameters_callback(self._param_cb)
@@ -185,6 +219,10 @@ class DynamixelDriver(Node):
                     continue
 
                 self.get_logger().info(f"成功開啟 Port: {port_name}")
+                # SDK 每次送封包前 clearPort() = ser.flush()（tcdrain），寫完緊接著讀會被卡約 7 ms
+                # （實測 bench_u2d2_write.py：先寫再讀 10 ms → 不 flush 2~5 ms，失敗/位置異常皆 0/200）
+                # 同一條序列埠本來就依序送出，不需要等輸出清空
+                ph.clearPort = lambda: None
                 gw = GroupSyncWrite(ph, pk, ADDR_PROFILE_ACCELERATION, LEN_SYNC_WRITE_ALL)
                 gr = GroupSyncRead(ph, pk, addr, length)
 
@@ -320,6 +358,14 @@ class DynamixelDriver(Node):
 
     def _command_cb(self, msg: JointState):
         """接收一般行走指令：位置 + 速度"""
+        t_recv = time.perf_counter()
+        stamp_ns = msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec
+        if stamp_ns > 0:   # 沒填 header.stamp 的發布者（例如部分 motion 指令）不算
+            age_ms = (self.get_clock().now().nanoseconds - stamp_ns) / 1e6
+            if -1000.0 < age_ms < 10000.0:
+                self._st_cmd_age.add(age_ms)
+        if self._cmd_pending_t is None:
+            self._cmd_pending_t = t_recv
         for i, name in enumerate(msg.name):
             try:
                 mid = int(name)
@@ -330,6 +376,39 @@ class DynamixelDriver(Node):
                     self.joint_data[mid]['velocity'] = target_vel
             except ValueError:
                 pass
+
+    def _latency_ping_cb(self, msg: String):
+        """網頁延遲監測：原封回傳並附上 driver 收到的牆上時間。"""
+        t_robot = time.time()
+        try:
+            d = json.loads(msg.data)
+            if not isinstance(d, dict):
+                return
+        except Exception:
+            return
+        d['t_robot'] = t_robot
+        out = String()
+        out.data = json.dumps(d)
+        self.latency_pong_pub.publish(out)
+
+    def _publish_motor_timing(self):
+        ports = {}
+        for name, st in self._st_ports.items():
+            ports[name] = {'write': st['write'].take(), 'read': st['read'].take(), 'fail': st['fail']}
+            st['fail'] = 0
+        # 只回報目前存活的 Port（死掉的 Port 不會有新樣本）
+        ports = {n: v for n, v in ports.items() if (self.ports.get(n) or {}).get('alive')}
+        d = {
+            'cmd_age':     self._st_cmd_age.take(),
+            'cmd_wait':    self._st_cmd_wait.take(),
+            'loop_period': self._st_loop_period.take(),
+            'loop_busy':   self._st_loop_busy.take(),
+            'ports':       ports,
+            'sim':         False,
+        }
+        out = String()
+        out.data = json.dumps(d)
+        self.motor_timing_pub.publish(out)
 
     def _head_cb(self, msg: HeadPackage):
         """接收網頁頭部指令"""
@@ -396,6 +475,14 @@ class DynamixelDriver(Node):
         每個 Port 獨立 try/except：某 Port 壞掉只影響該 Port。
         背景執行緒重連，主迴圈不 sleep、不加鎖。
         """
+        t_loop0 = time.perf_counter()
+        if self._last_loop_t is not None:
+            self._st_loop_period.add((t_loop0 - self._last_loop_t) * 1000.0)
+        self._last_loop_t = t_loop0
+        if self._cmd_pending_t is not None:
+            self._st_cmd_wait.add((t_loop0 - self._cmd_pending_t) * 1000.0)
+            self._cmd_pending_t = None
+
         read_vel = self.read_velocity or self.read_current  # 速度包含在電流模式裡
         read_cur = self.read_current
         addr, length = self._get_read_params()
@@ -407,6 +494,7 @@ class DynamixelDriver(Node):
             gw  = port['gw']
             gr  = port['gr']
             ids = [mid for mid in port['ids'] if mid in self.id_port_map]
+            st = self._st_ports.setdefault(port_name, {'write': _Stat(), 'read': _Stat(), 'fail': 0})
 
             try:
                 # --- Step 1: 寫入指令 ---
@@ -428,10 +516,16 @@ class DynamixelDriver(Node):
                     dirty = True
 
                 if dirty:
+                    t0 = time.perf_counter()
                     gw.txPacket()
+                    st['write'].add((time.perf_counter() - t0) * 1000.0)
 
                 # --- Step 2: 讀取狀態 ---
-                gr.txRxPacket()
+                t0 = time.perf_counter()
+                rx_result = gr.txRxPacket()
+                st['read'].add((time.perf_counter() - t0) * 1000.0)
+                if rx_result != COMM_SUCCESS:
+                    st['fail'] += 1
                 for mid in ids:
                     if not gr.isAvailable(mid, addr, length):
                         continue
@@ -487,6 +581,7 @@ class DynamixelDriver(Node):
         cur_msg.name   = names
         cur_msg.effort = [float(self.joint_data[i]['present_cur']) for i in ids]
         self.cur_pub.publish(cur_msg)
+        self._st_loop_busy.add((time.perf_counter() - t_loop0) * 1000.0)
 
 
 def main(args=None):

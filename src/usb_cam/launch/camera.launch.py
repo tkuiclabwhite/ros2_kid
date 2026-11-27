@@ -53,7 +53,8 @@ def generate_launch_description():
         package='motor_control',
         executable='driver_node',
         name='dynamixel_driver',
-        output='screen',
+        output='both',   # 螢幕 + ~/.ros/log/<launch>/launch.log
+        additional_env={'PYTHONUNBUFFERED': '1'},   # print 立即寫出，log 才看得到
         parameters=[{'baudrate': 1000000}],
     )
 
@@ -61,14 +62,16 @@ def generate_launch_description():
         package='walking',
         executable='walking_node',
         name='walking_strategy',
-        output='screen',
+        output='both',   # 螢幕 + ~/.ros/log/<launch>/launch.log
+        additional_env={'PYTHONUNBUFFERED': '1'},   # print 立即寫出，log 才看得到
     )
 
     motion_node = Node(
         package='motionpackage',
         executable='motionpackage',
         name='motion_strategy',
-        output='screen',
+        output='both',   # 螢幕 + ~/.ros/log/<launch>/launch.log
+        additional_env={'PYTHONUNBUFFERED': '1'},   # print 立即寫出，log 才看得到
         parameters=[{'location': 'ar'}],
     )
 

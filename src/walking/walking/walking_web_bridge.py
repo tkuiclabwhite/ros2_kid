@@ -58,11 +58,11 @@ class WalkingWebBridge(Node):
         self.current_params = {
             "com_y_swing":   float(getattr(parameter, "com_y_swing", 0.0)),
             # "width_size":    float(getattr(parameter, "width_size", 4.5)),
-            "width_size":    float(getattr(parameter, "width_size", 0)),
+            "width_size":    float(getattr(parameter, "width_size", 0.0)),      # 相對調好 stand 的調整量
             "period_t":     float(getattr(parameter, "period_t", 360.0)),
             "t_dsp":         float(getattr(parameter, "t_dsp", 0.0)),
             "lift_height":   float(getattr(parameter, "lift_height", 3.0)),
-            "stand_height":  float(getattr(parameter, "stand_height", 23.5)),
+            "stand_height":  float(getattr(parameter, "STAND_HEIGHT", 0.0)),    # 相對調好 stand 的調整量
             "com_height":    float(getattr(parameter, "com_height", 29.5)),
 
             "step_length":   float(getattr(parameter, "step_length", 0.0)),
@@ -226,7 +226,7 @@ class WalkingWebBridge(Node):
         response.width_size   = float(loaded_data.get("width_size", 0.0))
         response.t_dsp        = float(loaded_data.get("t_dsp", 0.0))
         response.lift_height  = float(loaded_data.get("lift_height", 2.5))
-        response.stand_height = float(loaded_data.get("stand_height", 23.5))
+        response.stand_height = float(loaded_data.get("stand_height", 0.0))
         response.com_height   = float(loaded_data.get("com_height", 29.5))
         response.board_high   = float(loaded_data.get("board_high", 0.0))
         response.clearance    = float(loaded_data.get("clearance", 3.0))
@@ -368,7 +368,7 @@ class WalkingWebBridge(Node):
         response.period_t    = int(p.get("period_t", 360))
         response.t_dsp       = float(p.get("t_dsp", 0.0))
         response.lift_height = float(p.get("lift_height", 2.5))
-        response.stand_height= float(p.get("stand_height", 23.5))
+        response.stand_height= float(p.get("stand_height", 0.0))
         response.com_height  = float(p.get("com_height", 29.5))
         
         # ★ Debug 印出確認

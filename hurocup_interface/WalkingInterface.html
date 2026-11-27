@@ -116,6 +116,9 @@
 
 			checkConnectionInterval = setInterval(checkConnection, 1000);
 
+			hookTransferMeter(ros.socket);
+			createLatencyTopics();
+
 			Load();
 		});
 		ros.on('error', function (error) {
@@ -132,6 +135,173 @@
 
 			document.body.style.backgroundImage = 'url(./picture/red_filter_image.jpg)';
 		});
+
+		// ===== 傳輸速度監測：統計 rosbridge WebSocket 每秒收發的位元組與訊息數 =====
+		var xferStat = { txBytes: 0, rxBytes: 0, txMsgs: 0, rxMsgs: 0 };
+		var xferLastTime = performance.now();
+
+		function xferSize(data) {
+			if (typeof data === 'string') return new Blob([data]).size;   // UTF-8 實際位元組
+			if (data instanceof Blob) return data.size;
+			if (data && data.byteLength !== undefined) return data.byteLength; // ArrayBuffer / TypedArray
+			return 0;
+		}
+
+		// 每次連線都會產生新的 ros.socket，所以在 'connection' 時重新掛勾
+		function hookTransferMeter(sock) {
+			if (!sock || sock.__xferHooked) return;
+			sock.__xferHooked = true;
+			var origSend = sock.send.bind(sock);
+			sock.send = function (data) {
+				xferStat.txBytes += xferSize(data);
+				xferStat.txMsgs++;
+				return origSend(data);
+			};
+			sock.addEventListener('message', function (ev) {
+				xferStat.rxBytes += xferSize(ev.data);
+				xferStat.rxMsgs++;
+			});
+		}
+
+		function formatRate(bytesPerSec) {
+			if (bytesPerSec >= 1024 * 1024) return (bytesPerSec / 1024 / 1024).toFixed(2) + ' MB/s';
+			if (bytesPerSec >= 1024) return (bytesPerSec / 1024).toFixed(1) + ' KB/s';
+			return bytesPerSec.toFixed(0) + ' B/s';
+		}
+
+		setInterval(function () {
+			var now = performance.now();
+			var dt = (now - xferLastTime) / 1000;
+			xferLastTime = now;
+			var el = document.getElementById('xfer-rate');
+			if (el && dt > 0) {
+				el.innerText =
+					'TX ' + formatRate(xferStat.txBytes / dt) + ' (' + (xferStat.txMsgs / dt).toFixed(1) + ' msg/s)  |  ' +
+					'RX ' + formatRate(xferStat.rxBytes / dt) + ' (' + (xferStat.rxMsgs / dt).toFixed(1) + ' msg/s)';
+			}
+			xferStat.txBytes = xferStat.rxBytes = xferStat.txMsgs = xferStat.rxMsgs = 0;
+		}, 1000);
+
+		// ===== 延遲監測：網頁 ↔ driver 來回時間 + driver 回報的 USB 讀寫時間 =====
+		// 需要 driver_node 有 /latency_ping、/latency_pong、/motor_timing（motor_control/driver_node.py）
+		var latencyPingPub = null, latencyPongSub = null, motorTimingSub = null;
+		var pingSeq = 0;
+		var rttSamples = [];          // 最近 10 筆 RTT (ms)
+		var upSamples = [];           // 最近 10 筆 網頁→driver 單程 (ms)
+		var downSamples = [];         // 最近 10 筆 driver→網頁 單程 (ms)
+		var lastMotorTiming = null, lastMotorTimingAt = 0;
+
+		// 牆上時間 (ms, 次毫秒精度)，跟 driver 的 time.time() 同一個時鐘基準；網頁和 ROS 在同一台機器才準
+		function wallMs() { return performance.timeOrigin + performance.now(); }
+		function pushSample(arr, v) { arr.push(v); if (arr.length > 10) arr.shift(); }
+		function avgOf(arr) { return arr.length ? arr.reduce(function (a, b) { return a + b; }, 0) / arr.length : null; }
+		function maxOf(arr) { return arr.length ? Math.max.apply(null, arr) : null; }
+		function minOf(arr) { return arr.length ? Math.min.apply(null, arr) : null; }
+		function fmtN(v) { return v !== null ? v.toFixed(2) : '--'; }
+
+		function createLatencyTopics() {
+			if (latencyPongSub) latencyPongSub.unsubscribe();
+			if (motorTimingSub) motorTimingSub.unsubscribe();
+			latencyPingPub = new ROSLIB.Topic({ ros: ros, name: '/latency_ping', messageType: 'std_msgs/String' });
+			latencyPongSub = new ROSLIB.Topic({ ros: ros, name: '/latency_pong', messageType: 'std_msgs/String' });
+			motorTimingSub = new ROSLIB.Topic({ ros: ros, name: '/motor_timing', messageType: 'std_msgs/String' });
+			latencyPongSub.subscribe(function (msg) {
+				var d; try { d = JSON.parse(msg.data); } catch (e) { return; }
+				if (typeof d.t_web !== 'number') return;
+				pushSample(rttSamples, performance.now() - d.t_web);
+				if (typeof d.t_web_wall === 'number' && typeof d.t_robot === 'number') {
+					var tRobotMs = d.t_robot * 1000;
+					pushSample(upSamples, tRobotMs - d.t_web_wall);   // 網頁送出 → driver 收到
+					pushSample(downSamples, wallMs() - tRobotMs);     // driver 回覆 → 網頁收到
+				}
+			});
+			motorTimingSub.subscribe(function (msg) {
+				try { lastMotorTiming = JSON.parse(msg.data); lastMotorTimingAt = performance.now(); } catch (e) {}
+			});
+		}
+
+		setInterval(function () {
+			if (latencyPingPub && ros.isConnected) {
+				// t_web 用 performance.now()：算 RTT 用，不受時鐘影響
+				// t_web_wall 用牆上時間：跟 driver 的 t_robot 相減得到單程
+				latencyPingPub.publish(new ROSLIB.Message({ data: JSON.stringify({ seq: ++pingSeq, t_web: performance.now(), t_web_wall: wallMs() }) }));
+			}
+			renderLatency();
+		}, 1000);
+
+		function fmtMs(s, key) {
+			if (!s) return '--';
+			var v = key ? s[key] : s;
+			return (typeof v === 'number') ? v.toFixed(2) : '--';
+		}
+
+		function renderLatency() {
+			var el = document.getElementById('latency-body');
+			if (!el) return;
+			var rows = [];
+			var rtt = avgOf(rttSamples);
+			var upAvg = avgOf(upSamples), downAvg = avgOf(downSamples);
+			// 單程出現明顯負值 = 時鐘不一致（網頁跟 ROS 不在同一台，或時間被調整），單程不可信
+			var clockBad = (upSamples.length && minOf(upSamples) < -0.5) || (downSamples.length && minOf(downSamples) < -0.5);
+			var warn = clockBad ? ' <span style="color:#f55">時鐘不一致</span>' : '';
+			rows.push(['網頁 → driver 發送' + warn, fmtN(upAvg), fmtN(maxOf(upSamples))]);
+			rows.push(['driver → 網頁 接收' + warn, fmtN(downAvg), fmtN(maxOf(downSamples))]);
+			rows.push(['網頁 ↔ driver 來回 (RTT)', fmtN(rtt), fmtN(maxOf(rttSamples))]);
+			// 估計總和用的單程：時鐘可信就用實測，否則退回 RTT/2
+			var upOne = (!clockBad && upAvg !== null) ? upAvg : (rtt !== null ? rtt / 2 : null);
+			var downOne = (!clockBad && downAvg !== null) ? downAvg : (rtt !== null ? rtt / 2 : null);
+
+			var t = lastMotorTiming;
+			var stale = !t || (performance.now() - lastMotorTimingAt > 3000);
+			if (stale) {
+				el.innerHTML = rowsHtml(rows) + '<div style="color:#f90;margin-top:4px;">等待 /motor_timing（driver_node 未更新或未啟動）</div>';
+				return;
+			}
+			rows.push(['walking → driver 指令', fmtMs(t.cmd_age, 'avg'), fmtMs(t.cmd_age, 'max')]);
+			rows.push(['driver 等控制迴圈', fmtMs(t.cmd_wait, 'avg'), fmtMs(t.cmd_wait, 'max')]);
+
+			var wSum = 0, rSum = 0, hasPort = false;
+			var portNames = Object.keys(t.ports || {}).sort();
+			portNames.forEach(function (name) {
+				var p = t.ports[name];
+				var short = name.replace('/dev/', '');
+				rows.push([short + ' 電腦→馬達 寫入', fmtMs(p.write, 'avg'), fmtMs(p.write, 'max')]);
+				rows.push([short + ' 馬達→電腦 讀取' + (p.fail ? ' <span style="color:#f55">失敗' + p.fail + '</span>' : ''),
+				           fmtMs(p.read, 'avg'), fmtMs(p.read, 'max')]);
+				if (p.write) wSum += p.write.avg;
+				if (p.read) rSum += p.read.avg;
+				hasPort = true;
+			});
+			var hz = (t.loop_period && t.loop_period.avg > 0) ? (1000 / t.loop_period.avg).toFixed(1) + ' Hz' : '--';
+			rows.push(['控制迴圈週期 (' + hz + ')', fmtMs(t.loop_period, 'avg'), fmtMs(t.loop_period, 'max')]);
+			rows.push(['每圈 USB+發布耗時', fmtMs(t.loop_busy, 'avg'), fmtMs(t.loop_busy, 'max')]);
+
+			var extra = '';
+			if (t.sim) {
+				extra = '<div style="color:#f90;margin-top:4px;">driver 在模擬模式，沒有真實 USB 讀寫時間</div>';
+			} else if (!hasPort) {
+				extra = '<div style="color:#f90;margin-top:4px;">沒有存活的 U2D2 Port</div>';
+			}
+			// 估計總和：各段平均相加（Ports 是依序讀寫，所以寫入/讀取取各 Port 總和）
+			if (upOne !== null && downOne !== null && t.cmd_age && t.cmd_wait) {
+				var down = upOne + t.cmd_age.avg + t.cmd_wait.avg + wSum;
+				var up = rSum + downOne;
+				extra += '<div style="margin-top:6px;border-top:1px solid #444;padding-top:4px;">' +
+					'估計 網頁→馬達 ≈ <b style="color:#0f0">' + down.toFixed(1) + ' ms</b>' +
+					'　馬達→網頁 ≈ <b style="color:#0f0">' + up.toFixed(1) + ' ms</b></div>' +
+					'<div style="color:#888;font-size:11px;">網頁單程' + (clockBad ? '以 RTT/2 估計（時鐘不一致）' : '為實測') +
+					'；不含 walking_node 步態計算時間</div>';
+			}
+			el.innerHTML = rowsHtml(rows) + extra;
+		}
+
+		function rowsHtml(rows) {
+			var h = '<table style="border-collapse:collapse;width:100%;"><tr style="color:#888;"><td>項目</td><td style="text-align:right;">avg ms</td><td style="text-align:right;">max ms</td></tr>';
+			rows.forEach(function (r) {
+				h += '<tr><td style="padding-right:10px;">' + r[0] + '</td><td style="text-align:right;">' + r[1] + '</td><td style="text-align:right;padding-left:8px;">' + r[2] + '</td></tr>';
+			});
+			return h + '</table>';
+		}
 
 		var locationBack_Subscriber = new ROSLIB.Topic({
 			ros: ros,
@@ -240,9 +410,9 @@
 			period_t: 360,
 			t_dsp: 0,
 			lift_height: 2.5,
-			stand_height: 23.5,
+			stand_height: 0,
 			com_height: 29.5,
-			sample_time: 30,
+			sample_time: 20,
 		});
 
 		var SensorSet_Publisher = new ROSLIB.Topic({
@@ -536,7 +706,7 @@ function strategylocation() {
 					document.getElementById("T_DSP").value = res.t_dsp;
 					document.getElementById("lift_height").value = res.lift_height;
 					document.getElementById("stand_height").value = res.stand_height;
-					document.getElementById("com_height").value = res.com_height;
+					// document.getElementById("com_height").value = res.com_height;
 				},function (err) {
         // 失敗時會進來這裡
         console.error("載入參數失敗，後端 ROS Service 可能尚未準備好或發生錯誤: ", err);
@@ -571,7 +741,10 @@ function strategylocation() {
 			var s_type = Number(statetype);
 			function getVal(id, defaultVal) {
 				var el = document.getElementById(id);
-				if (el && el.value !== "") return Number(el.value);
+				if (el && el.value !== "") {
+					var n = toNum(el.value);
+					if (!isNaN(n)) return n;
+				}
 				return defaultVal;
 			}
 
@@ -584,7 +757,7 @@ function strategylocation() {
 					period_t: getVal("period_t", 360),
 					t_dsp: getVal("T_DSP", 0),
 					lift_height: getVal("lift_height", 2.5),
-					stand_height: getVal("stand_height", 23.5),
+					stand_height: getVal("stand_height", 0),
 					com_height: getVal("com_height", 29.5),
 					sample_time: 20  // 補上 Parameter.msg 要求的欄位
 				});
@@ -615,53 +788,101 @@ function strategylocation() {
 			}
 		}
 
-		function SendParam2FPGA() {
+		var SAMPLE_TIME_MS = 20;
+
+		// width_size / STAND_HEIGHT = 相對調好 stand 的調整量 (cm)，可填負數：0 = 維持 stand
+		//   width_size  : + 往外開，- 往內縮
+		//   STAND_HEIGHT: + 站高，- 蹲低
+
+		// 與後端 Python round()（四捨六入五成雙）相同的取整，算出實際生效的 period_t
+		function effectivePeriod(p) {
+			var x = p / SAMPLE_TIME_MS, f = Math.floor(x), r = x - f, n;
+			if (Math.abs(r - 0.5) < 1e-9) n = (f % 2 === 0) ? f : f + 1;
+			else n = Math.round(x);
+			return Math.max(1, n) * SAMPLE_TIME_MS;
+		}
+
+		// 字串轉數字：中文輸入法的全形負號 / 數字 / 小數點（－ − – — ０-９ ．）先轉半形，不是數字回傳 NaN
+		function toNum(v) {
+			var t = String(v).trim()
+				.replace(/[－−–—‐]/g, "-")
+				.replace(/[＋]/g, "+")
+				.replace(/[．。]/g, ".")
+				.replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
+			return (t === "" || t === "-" || t === "+") ? NaN : Number(t);
+		}
+
+		// 讀欄位數值，找不到元素或不是數字時回傳 0
+		function getSendVal(id) {
+			var el = document.getElementById(id);
+			if (!el) return 0;
+			var n = toNum(el.value);
+			return isNaN(n) ? 0 : n;
+		}
+
+		// 共用的發送：通知後端 + 發 JSON 到 /walking_params_update
+		function publishWalkingParams(params, tag) {
 			Send_parameter_msg.data = true;
 			Send_parameter.publish(Send_parameter_msg);
 
-			function getVal(id) {
-				var el = document.getElementById(id);
-				return el ? (Number(el.value) || 0) : 0;
-			}
+			const msg = new ROSLIB.Message({
+				data: JSON.stringify(params)
+			});
+			console.log("publish /walking_params_update [" + tag + "]:", params);
+			walkingParamsUpdateTopic.publish(msg);
+		}
 
+		// 步態參數：不含 width_size / STAND_HEIGHT，改這些不會動到姿態
+		function SendGaitParam() {
 			var params = {};
-
 			if (statetype === 0) {
 				// --- 平地連續步態 ---
 				params = {
-					"com_y_swing": getVal("com_y_swing"),
-					"width_size":  getVal("WidthSize"),
-					"period_t":    getVal("period_t"),
-					"Tdsp":        getVal("T_DSP"),
-					"lift_height": getVal("lift_height"),
-					"STAND_HEIGHT": getVal("stand_height"),
-					"COM_HEIGHT":  getVal("com_height"),
-					"COM_Y_shift": 0 
+					"com_y_swing": getSendVal("com_y_swing"),
+					"period_t":    getSendVal("period_t"),
+					"Tdsp":        getSendVal("T_DSP"),
+					"lift_height": getSendVal("lift_height"),
+					"COM_HEIGHT":  29.5,
+					"COM_Y_shift": 0
 				};
 			} else {
 				// --- 上/下樓梯 (LC) 步態 ---
 				var prefix = (statetype === 1) ? "lu" : "ld";
 				params = {
-					"com_y_swing": getVal(prefix + "com_y_swing"), 
-					"width_size":  getVal(prefix + "width_size"),
-					"period_t":    getVal(prefix + "period_t"),
-					"Tdsp":        getVal(prefix + "osc_lockrange"),
-					"lift_height": getVal(prefix + "base_default_z"),
-					"Board_High":  getVal(prefix + "base_lift_z"),
-					"STAND_HEIGHT": getVal(prefix + "now_stand_height"),
-					"COM_HEIGHT":  getVal(prefix + "now_com_height"),
-					"Hip_roll":    getVal(prefix + "Hip_roll"),
-					"Ankle_roll":  getVal(prefix + "Ankle_roll"),
-					"Clearance":   getVal(prefix + "Clearance")
+					"com_y_swing": getSendVal(prefix + "com_y_swing"),
+					"period_t":    getSendVal(prefix + "period_t"),
+					"Tdsp":        getSendVal(prefix + "osc_lockrange"),
+					"lift_height": getSendVal(prefix + "base_default_z"),
+					"Board_High":  getSendVal(prefix + "base_lift_z"),
+					"COM_HEIGHT":  getSendVal(prefix + "now_com_height"),
+					"Hip_roll":    getSendVal(prefix + "Hip_roll"),
+					"Ankle_roll":  getSendVal(prefix + "Ankle_roll"),
+					"Clearance":   getSendVal(prefix + "Clearance")
 				};
 			}
+			var p = params["period_t"], pe = effectivePeriod(p);
+			if (pe !== p) {
+				alert("period_t = " + p + " 不是 " + SAMPLE_TIME_MS + " 的倍數，實際會以 " + pe + " ms 執行。");
+			}
+			publishWalkingParams(params, "gait");
+		}
 
-			const msg = new ROSLIB.Message({
-				data: JSON.stringify(params)
-			});
-
-			console.log("publish /walking_params_update:", params);
-			walkingParamsUpdateTopic.publish(msg);
+		// 姿態參數：width_size / STAND_HEIGHT，會直接改變機器人站姿，單獨送
+		function SendPostureParam() {
+			var params = {};
+			if (statetype === 0) {
+				params = {
+					"width_size":   getSendVal("WidthSize"),
+					"STAND_HEIGHT": getSendVal("stand_height")
+				};
+			} else {
+				var prefix = (statetype === 1) ? "lu" : "ld";
+				params = {
+					"width_size":   getSendVal(prefix + "width_size"),
+					"STAND_HEIGHT": getSendVal(prefix + "now_stand_height")
+				};
+			}
+			publishWalkingParams(params, "posture");
 		}
 		
 		// ＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝＝
@@ -679,7 +900,8 @@ function strategylocation() {
 		}
 
 		function changeWidthSize_value(value){
-			width_size_tmp = Number(value) || 0;
+			var n = toNum(value);
+			width_size_tmp = isNaN(n) ? 0 : n;   // 可填負數：- 往內縮
 			switch (statetype) {
 				case 0: document.getElementById("WidthSize").value = width_size_tmp; break;
 				case 1: document.getElementById("luwidth_size").value = width_size_tmp; break;
@@ -711,7 +933,8 @@ function strategylocation() {
 		}
 
 		function change_stand_height_value(value) {
-			stand_height_tmp = value;
+			var n = toNum(value);
+			stand_height_tmp = isNaN(n) ? 0 : n;   // 可填負數：- 蹲低
 			switch (statetype) {
 				case 0: document.getElementById("stand_height").value = stand_height_tmp; break;
 			}
@@ -751,7 +974,8 @@ function strategylocation() {
 		}
 
 		function changenow_stand_height_value(value) {
-			now_stand_height_tmp = value;
+			var n = toNum(value);
+			now_stand_height_tmp = isNaN(n) ? 0 : n;   // 可填負數：- 蹲低
 			switch (statetype) {
 				case 1: document.getElementById("lunow_stand_height").value = now_stand_height_tmp; break;
 				case 2: document.getElementById("ldnow_stand_height").value = now_stand_height_tmp; break;
@@ -877,12 +1101,22 @@ function strategylocation() {
 	</ul>
 <br>
     <!-- 1. 狀態容器：固定在左側，不加 margin-left 確保位置不變 -->
-    <div style="padding-left: 20px; height: 100px;"> 
+    <div style="padding-left: 20px; height: 120px;"> 
         <!-- 固定高度容器，避免 Connected 顯示時下方框框往下跳 -->
-        <div style="height: 30px;">
+        <div style="height: 50px;">
             <p id="connected" style="color:#00D600; display:none; font-size: 20px; margin: 0;">
                 Connected
             </p>
+            <p id="xfer-rate" style="color:#ccc; font-family: Consolas, Monaco, monospace; font-size: 13px; margin: 2px 0 0 0;">
+                TX 0 B/s (0.0 msg/s)  |  RX 0 B/s (0.0 msg/s)
+            </p>
+        </div>
+        <!-- 延遲面板：固定在右下角，不影響原本版面 -->
+        <div id="latency-panel" style="position:fixed; right:12px; bottom:12px; z-index:1000; background:rgba(20,20,20,0.88); border:1px solid #444; border-radius:6px; padding:8px 12px; color:#ddd; font-family:Consolas, Monaco, monospace; font-size:12px; min-width:330px;">
+            <div style="color:#888; font-size:12px; margin-bottom:4px; cursor:pointer;" onclick="var b=document.getElementById('latency-body'); b.style.display = (b.style.display==='none') ? 'block' : 'none';">
+                LATENCY 延遲（每秒更新，點此收合）
+            </div>
+            <div id="latency-body">連線中...</div>
         </div>
         
         <!-- 狀態顯示窗：緊跟在 Connected 下方 -->
@@ -1005,10 +1239,10 @@ function strategylocation() {
 						<td>com_y_swing</td>
 						<td><input type="text" name="com_y_swing" id="com_y_swing" value="0" style="width: 140px" onchange="changecom_y_swing_value(this.value)"></td>
 					</tr>
-					<tr>
-						<td>width_size</td>
+					<!-- <tr>
+						<td title="相對調好的 stand：+ 往外開，- 往內縮 (cm)">width_size (±)</td>
 						<td><input type="text" name="width_size" id="WidthSize" value="0" style="width: 140px" onchange="changeWidthSize_value(this.value)"></td>
-					</tr>
+					</tr> -->
 					<tr>
 						<td>period_t</td>
 						<td><input type="text" name="period_t" id="period_t" value="0" style="width: 140px" onchange="changeperiod_t_value(this.value)"></td>
@@ -1021,17 +1255,28 @@ function strategylocation() {
 						<td>lift_height</td>
 						<td><input type="text" name="lift_height" id="lift_height" value="0" style="width: 140px" onchange="changelift_height_value(this.value)"></td>
 					</tr>
-					<tr>
-						<td>STAND_HEIGHT</td>
+					<!-- <tr>
+						<td title="相對調好的 stand：+ 站高，- 蹲低 (cm)">STAND_HEIGHT (±)</td>
 						<td><input type="text" name="stand_height" id="stand_height" value="0" style="width: 140px" onchange="change_stand_height_value(this.value)"></td>
-					</tr>
-					<tr>
+					</tr> -->
+					<!-- <tr>
 						<td>COM_HEIGHT</td>
 						<td><input type="text" name="com_height" id="com_height" value="0" style="width: 140px" onchange="change_com_height_value(this.value)"></td>
-					</tr>
+					</tr> -->
 				</table>
 				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="Save()">Save</button>
-				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="SendParam2FPGA()">Send</button>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="SendGaitParam()">Send Gait</button>
+				<table>
+					<tr>
+						<td title="相對調好的 stand：+ 往外開，- 往內縮 (cm)">width_size (±)</td>
+						<td><input type="text" name="width_size" id="WidthSize" value="0" style="width: 140px" onchange="changeWidthSize_value(this.value)"></td>
+					</tr>
+					<tr>
+						<td title="相對調好的 stand：+ 站高，- 蹲低 (cm)">STAND_HEIGHT (±)</td>
+						<td><input type="text" name="stand_height" id="stand_height" value="0" style="width: 140px" onchange="change_stand_height_value(this.value)"></td>
+					</tr>
+				</table>
+				<button type="button" style="width: 100px;height: 40px; margin-top: 9px;" onclick="SendPostureParam()">Send Posture</button>
 			</section>
 			<section id="lcupstep" style="float: left; margin-left: 0%; display: none; min-width: 300px; max-width: 350px; width: 33%;">
 				<b style="font-size: 25px;">LCup Step</b>
@@ -1042,7 +1287,7 @@ function strategylocation() {
 						<td><input type="text" name="com_y_swing" id="lucom_y_swing" value="0" style="width: 140px" onchange="changecom_y_swing_value(this.value)"></td>
 					</tr>
 					<tr>
-						<td>width_size</td>
+						<td title="相對調好的 stand：+ 往外開，- 往內縮 (cm)">width_size (±)</td>
 						<td><input type="text" name="width_size" id="luwidth_size" value="0" style="width: 140px" onchange="changeWidthSize_value(this.value)"></td>
 					</tr>
 					<tr>
@@ -1066,7 +1311,7 @@ function strategylocation() {
 						<td><input type="text" name="base_lift_z" id="lubase_lift_z" value="0" style="width: 140px" onchange="changebase_lift_z_value(this.value)"></td>
 					</tr>
 					<tr>
-						<td>STAND_HEIGHT</td>
+						<td title="相對調好的 stand：+ 站高，- 蹲低 (cm)">STAND_HEIGHT (±)</td>
 						<td><input type="text" name="now_stand_height" id="lunow_stand_height" value="0" style="width: 140px" onchange="changenow_stand_height_value(this.value)"></td>
 					</tr>
 					<tr>
@@ -1084,7 +1329,8 @@ function strategylocation() {
 				</table>
 				<br />
 				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="Save()">Save</button>
-				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="SendParam2FPGA()">Send</button>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="SendGaitParam()">Send Gait</button>
+				<button type="button" style="width: 100px;height: 40px; margin-top: 9px;" onclick="SendPostureParam()">Send Posture</button>
 			</section>
 			<section id="lcdownstep" style="float: left; margin-left: 0%; display: none; min-width: 300px; max-width: 350px; width: 33%;">
 				<b style="font-size: 25px;">LCdown Step</b>
@@ -1095,7 +1341,7 @@ function strategylocation() {
 						<td><input type="text" name="com_y_swing" id="ldcom_y_swing" value="0" style="width: 140px" onchange="changecom_y_swing_value(this.value)"></td>
 					</tr>
 					<tr>
-						<td>width_size</td>
+						<td title="相對調好的 stand：+ 往外開，- 往內縮 (cm)">width_size (±)</td>
 						<td><input type="text" name="width_size" id="ldwidth_size" value="0" style="width: 140px" onchange="changeWidthSize_value(this.value)"></td>
 					</tr>
 					<tr>
@@ -1119,7 +1365,7 @@ function strategylocation() {
 						<td><input type="text" name="base_lift_z" id="ldbase_lift_z" value="0" style="width: 140px" onchange="changebase_lift_z_value(this.value)"></td>
 					</tr>
 					<tr>
-						<td>STAND_HEIGHT</td>
+						<td title="相對調好的 stand：+ 站高，- 蹲低 (cm)">STAND_HEIGHT (±)</td>
 						<td><input type="text" name="now_stand_height" id="ldnow_stand_height" value="0" style="width: 140px" onchange="changenow_stand_height_value(this.value)"></td>
 					</tr>
 					<tr>
@@ -1137,7 +1383,8 @@ function strategylocation() {
 				</table>
 				<br />
 				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="Save()">Save</button>
-				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="SendParam2FPGA()">Send</button>
+				<button type="button" style="width: 80px;height: 40px; margin-top: 9px;" id="sss" onclick="SendGaitParam()">Send Gait</button>
+				<button type="button" style="width: 100px;height: 40px; margin-top: 9px;" onclick="SendPostureParam()">Send Posture</button>
 			</section>			
 		</div>
 	</form>

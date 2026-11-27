@@ -14,6 +14,7 @@ import time
 import threading
 import math
 import json
+from collections import deque
 from typing import Dict, List, Tuple, Optional
 
 import rclpy
@@ -46,6 +47,8 @@ DEFAULT_TICKS = 2048
 # ============================================================
 current_motor_state: Dict[int, int] = {}
 motor_state_lock = threading.Lock()
+# 每顆馬達最後一次在 /joint_commands 上的目標刻度（motion / walking 送出的 goal，不含重力下垂）
+commanded_ticks: Dict[int, int] = {}
 
 # IK 自動相容層
 import inspect
@@ -90,6 +93,70 @@ def calc_rel_gp_from_ang(ang_now: List[float], baseline_ang: List[float]) -> Dic
         rel[mid] = int(round(DIR[mid] * TPR * delta))
     return rel
 
+# 絕對零點 = URDF 關節角 0：雙腳全直 (內部偏移量 0 = 腳底板間距 SOLE_GAP_STRAIGHT、膝蓋全直 → 高度 = L1 + L2)
+ANCHOR_WIDTH  = 0.0   # 內部偏移量，不是 width_size
+ANCHOR_HEIGHT = float(getattr(parameter, "L1", 12.5)) + float(getattr(parameter, "L2", 12.5))
+LEG_ZERO_TICKS: Dict[int, int] = dict(getattr(parameter, "LEG_ZERO_TICKS", {}))
+SOLE_GAP_STRAIGHT = float(getattr(parameter, "SOLE_GAP_STRAIGHT", 2.6))
+
+STAND_MOVE_TIME = float(getattr(parameter, "STAND_MOVE_TIME", 0.0))
+STAND_MIN_VELOCITY = max(1, int(getattr(parameter, "STAND_MIN_VELOCITY", 1)))
+PV_TICKS_PER_S = 0.229 * 4096.0 / 60.0   # Profile Velocity 1 單位 = 0.229 rpm ≈ 15.63 ticks/s
+
+def sync_velocity(target: Dict[int, int], current: Dict[int, int], move_time: float) -> Dict[int, int]:
+    """讓每顆馬達在 move_time 秒內同時到位的 Profile Velocity。
+    最小給 STAND_MIN_VELOCITY（太慢推不動腳底板的靜摩擦），最大 1023（driver 的上限）。"""
+    vel = {}
+    for mid, tgt in target.items():
+        cur = current.get(mid, tgt)
+        d = abs(ticks_diff_signed(tgt, cur))
+        vel[mid] = max(STAND_MIN_VELOCITY, min(1023, int(math.ceil(d / move_time / PV_TICKS_PER_S))))
+    return vel
+
+def ticks_diff_signed(a: float, b: float, mod: int = 4096) -> float:
+    d = (a - b) % mod
+    return d - mod if d > mod / 2 else d
+
+# URDF 關節角 0（LEG_ZERO_TICKS，雙腳全直）在 IK 輸出裡對應的角度
+STRAIGHT_ANG = compute_ik_auto(0, 0, ANCHOR_HEIGHT, 0, 0, 0, ANCHOR_HEIGHT, 0)
+
+def ticks_to_ang(ticks: Dict[int, int]) -> List[float]:
+    """腿部馬達刻度 → IK 角度（以 LEG_ZERO_TICKS = 全直為零點）。"""
+    return [STRAIGHT_ANG[idx] + DIR[mid] * ticks_diff_signed(ticks[mid], LEG_ZERO_TICKS.get(mid, DEFAULT_TICKS)) / TPR
+            for idx, mid in enumerate(IK_IDS)]
+
+def _fk_leg(roll: float, hip: float, knee: float):
+    """compute_leg_ik 的反運算（單腳）：hip roll / hip pitch / knee 角度 → 腳踝相對髖的 (x, y, z)。"""
+    l1 = float(getattr(parameter, "L1", 12.5)); l2 = float(getattr(parameter, "L2", 12.5))
+    r = math.sqrt(max(l1*l1 + l2*l2 + 2*l1*l2*math.cos(knee), 1e-9))
+    val = max(-1.0, min(1.0, (l1*l1 + r*r - l2*l2) / (2*l1*r)))
+    alpha = math.pi/2 - math.acos(val) - hip
+    x = r * math.sin(alpha); sxy = r * math.cos(alpha)
+    return x, sxy * math.cos(roll), sxy * math.sin(roll)
+
+def stand_pose_from_ticks(ticks: Dict[int, int]):
+    """stand 刻度 → 雙腳腳踝位置 (lx, ly, lz, rx, ry, rz)。"""
+    ang = ticks_to_ang(ticks)
+    hr = 0.0
+    if int(getattr(parameter, "walking_mode", 0)) in [1, 2]:
+        hr = math.radians(float(getattr(parameter, "Hip_roll", 0.0)))
+    lx, ly, lz = _fk_leg(ang[1] - hr, ang[2], ang[3])
+    rx, ry, rz = _fk_leg(ang[7] + hr, ang[8], ang[9])
+    return (lx, ly, lz, rx, ry, rz)
+
+def pose_ik(pose, dw: float, dh: float) -> List[float]:
+    """stand 姿勢 + 調整量 (dw 全寬，兩腳各 dw/2；dh 高度) 的 IK 角度。"""
+    lx, ly, lz, rx, ry, rz = pose
+    return apply_ankle_compensation(compute_ik_auto(lx, ly + dw/2, lz + dh, 0,
+                                                    rx, ry - dw/2, rz + dh, 0))
+
+def ticks_from_anchor(target_ang: List[float], anchor_ang: List[float],
+                      anchor_ticks: Dict[int, int]) -> Dict[int, int]:
+    """以錨點(刻度+角度)為基準，換算目標角度的腿部絕對刻度。"""
+    rel = calc_rel_gp_from_ang(target_ang, anchor_ang)
+    return {mid: int((anchor_ticks.get(mid, DEFAULT_TICKS) + rel.get(mid, 0)) % 4096)
+            for mid in LEG_IDS}
+
 # ============================================================
 # Parameter 管理
 # ============================================================
@@ -125,9 +192,9 @@ def apply_param_dict(d):
     if hasattr(walking, "T_DSP_"):
         try: walking.T_DSP_ = max(0.0, min(1.0, float(parameter.Tdsp)))
         except Exception: pass
-    if hasattr(walking, "width_size_"): walking.width_size_ = float(getattr(parameter, "width_size", 0.0))
+    if hasattr(walking, "width_size_"): walking.width_size_ = parameter.width_offset(getattr(parameter, "width_size", 0.0))
     if hasattr(walking, "lift_height_"): walking.lift_height_ = float(getattr(parameter, "lift_height", 0.0))
-    if hasattr(walking, "stand_height"): walking.stand_height = float(getattr(parameter, "STAND_HEIGHT", 0.0))
+    if hasattr(walking, "stand_height"): walking.stand_height = parameter.stand_height_abs(getattr(parameter, "STAND_HEIGHT", 0.0))
     if hasattr(walking, "com_height"): walking.com_height = float(getattr(parameter, "COM_HEIGHT", 0.0))
     if hasattr(walking, "step_length_"): walking.step_length_ = float(getattr(parameter, "step_length", 0.0))
     if hasattr(walking, "shift_length_"): walking.shift_length_ = float(getattr(parameter, "shift_length", 0.0))
@@ -170,6 +237,7 @@ class WalkingNode(Node):
         super().__init__('walking_strategy_node')
         self.cmd_pub = self.create_publisher(JointState, '/joint_commands', 10)
         self.joint_sub = self.create_subscription(JointState, '/joint_states', self._joint_state_cb, 10)
+        self.create_subscription(JointState, '/joint_commands', self._joint_cmd_cb, 10)
 
         # Web Interface Topics
         self.create_subscription(Int16, '/ContinousMode_Topic', self._mode_cb, 10)
@@ -185,9 +253,22 @@ class WalkingNode(Node):
         self.walk_active: bool = False
         self.last_width_size: float = float(getattr(parameter, "width_size", 0.0))
         self.width_dirty: bool = False
+        self._own_stamps = deque(maxlen=200)   # walking 自己送出的 /joint_commands stamp
 
         self.get_logger().info("Walking Node Initialized. Waiting for Driver Data...")
         self.publish_params()
+
+    def _joint_cmd_cb(self, msg: JointState):
+        """記錄 motion 最後一次送出的目標刻度（抓 stand 錨點用）；walking 自己送的不算"""
+        st = (msg.header.stamp.sec, msg.header.stamp.nanosec)
+        if st in self._own_stamps:
+            return
+        with motor_state_lock:
+            for i, name in enumerate(msg.name):
+                try:
+                    commanded_ticks[int(name)] = int(round(msg.position[i]))
+                except (ValueError, IndexError):
+                    pass
 
     def _joint_state_cb(self, msg: JointState):
         with motor_state_lock:
@@ -199,14 +280,18 @@ class WalkingNode(Node):
                 except ValueError:
                     pass
 
-    def publish_command(self, target_ticks: Dict[int, int]):
+    def publish_command(self, target_ticks: Dict[int, int], velocity: Dict[int, int] = None):
+        """velocity=None → 不帶速度（driver 收到 0 = 最快）；有給就逐顆帶 Profile Velocity。"""
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
+        self._own_stamps.append((msg.header.stamp.sec, msg.header.stamp.nanosec))
         msg.name = []
         msg.position = []
         for mid, tick in target_ticks.items():
             msg.name.append(str(mid))
             msg.position.append(float(tick))
+            if velocity is not None:
+                msg.velocity.append(float(velocity.get(mid, 0)))
         self.cmd_pub.publish(msg)
 
     def _mode_cb(self, msg: Int16):
@@ -220,7 +305,7 @@ class WalkingNode(Node):
             # self.get_logger().warn("[Request] Received Anchor Reset Flag! Next 'Generate' will update baseline.")
 
     def _cmd_cb(self, msg: Interface):
-        scale = 0.001; theta_scale = 0.01
+        scale = 0.001; theta_scale = 1.0
         parameter.step_length  = float(msg.x) * scale
         parameter.shift_length = float(msg.y) * scale
         parameter.THTA         = float(math.radians(msg.theta)) * theta_scale
@@ -242,6 +327,27 @@ class WalkingNode(Node):
     def _param_update_cb(self, msg: String):
         try: d = json.loads(msg.data)
         except Exception as e: return
+        # width_size / STAND_HEIGHT = 相對調好 stand 的調整量，可正可負
+        if "width_size" in d:
+            try:
+                gap = parameter.sole_gap(d["width_size"])
+                if gap < 0.0:
+                    self.get_logger().warn(f"width_size={d['width_size']}：腳底板間距約 {gap:.2f} cm，可能會互相碰到")
+            except (TypeError, ValueError):
+                d.pop("width_size")
+        # height：站高超過腿長（膝蓋反折）或蹲到 <= 0 → 拒絕
+        if "STAND_HEIGHT" in d:
+            try:
+                h = parameter.stand_height_abs(d["STAND_HEIGHT"])
+                h_max = ANCHOR_HEIGHT
+                if not (0.0 < h < h_max):
+                    self.get_logger().error(
+                        f"拒絕 STAND_HEIGHT={d['STAND_HEIGHT']}：調整後高度 {h:.2f} cm 超出 (0, {h_max:.2f}) "
+                        f"(stand 高度 {parameter.STAND_BASE_HEIGHT} cm)，"
+                        f"保留 {getattr(parameter, 'STAND_HEIGHT', 0.0)}")
+                    d.pop("STAND_HEIGHT")
+            except (TypeError, ValueError):
+                d.pop("STAND_HEIGHT")
         apply_param_dict(d)
         if bool(d.get("generate", False)):
             self.walk_active = not self.walk_active
@@ -253,6 +359,9 @@ class WalkingNode(Node):
                     self.last_width_size = new_w
                     self.width_dirty = True
             except: pass
+        # 網頁按 Send 帶有站姿參數 → 一律重算站姿（即使數值跟啟動預設一樣，也要從全直移過去）
+        if any(k in d for k in ("width_size", "STAND_HEIGHT", "COM_HEIGHT")):
+            self.width_dirty = True
         self.publish_params()
 
 # ============================================================
@@ -270,9 +379,6 @@ def main():
     baseline_ticks: Dict[int, int] = {} # 這是目前的基準 (走路用的)
     baseline_ang: List[float] = []      # 這是目前的角度 (走路用的)
     
-    # ★ 新增：永遠不變的初始錨點 (用來計算 Idle 站姿變化)
-    initial_ticks: Dict[int, int] = {}  
-    initial_ang: List[float] = []       
     
     was_walking = False 
     stopping_active = False       
@@ -285,10 +391,47 @@ def main():
     # 參數追蹤
     # ★ 設定初始預設值 (請確保這裡跟 Parameter.py 預設一樣)
     # start_w = 4.5 
-    start_w = 0
-    start_h = 23.5
-    last_applied_width = start_w
-    last_applied_height = start_h
+    # 基準站姿 = 調好的 stand：刻度 + FK 算出的腳位置 + 對應 IK 角度
+    stand_ticks: Dict[int, int] = {}
+    stand_pose = None
+    stand_ang: List[float] = []
+
+    def capture_stand(tag: str):
+        """抓 stand 刻度：motion 送出的目標刻度優先，其次實際刻度，都沒有 → LEG_ZERO_TICKS（全直）。
+        再用 FK 算出 stand 的寬度 / 高度，更新 parameter.STAND_BASE_*。"""
+        nonlocal stand_ticks, stand_pose, stand_ang
+        with motor_state_lock:
+            snap = dict(current_motor_state)
+            cmd = dict(commanded_ticks)
+        src = []
+        ticks = {}
+        for mid in LEG_IDS:
+            if mid in cmd:
+                ticks[mid] = int(cmd[mid]); src.append("cmd")
+            elif int(snap.get(mid, 0)) > 0:
+                ticks[mid] = int(snap[mid]); src.append("now")
+            else:
+                ticks[mid] = LEG_ZERO_TICKS.get(mid, DEFAULT_TICKS); src.append("zero")
+        stand_ticks = ticks
+        stand_pose = stand_pose_from_ticks(ticks)
+        stand_ang = pose_ik(stand_pose, 0.0, 0.0)
+        lx, ly, lz, rx, ry, rz = stand_pose
+        parameter.STAND_BASE_WIDTH = ly - ry
+        parameter.STAND_BASE_HEIGHT = (lz + rz) / 2
+        print(f"[{tag}] Stand 錨點 ({'/'.join(sorted(set(src)))}): "
+              f"L=({lx:.2f},{ly:.2f},{lz:.2f}) R=({rx:.2f},{ry:.2f},{rz:.2f}) "
+              f"→ 高度 {parameter.STAND_BASE_HEIGHT:.2f} cm，腳底板間距 {parameter.sole_gap(0):.2f} cm")
+
+    def stand_target(dw: float, dh: float) -> Dict[int, int]:
+        """stand 刻度 + (調整量造成的 IK 角度變化)"""
+        return ticks_from_anchor(pose_ik(stand_pose, dw, dh), stand_ang, stand_ticks)
+
+    def sync_walking_stand():
+        walking.width_size_ = parameter.width_offset(getattr(parameter, "width_size", 0.0))
+        walking.stand_height = parameter.stand_height_abs(getattr(parameter, "STAND_HEIGHT", 0.0))
+
+    last_applied_dw = None
+    last_applied_dh = None
     last_applied_com = float(getattr(parameter, "COM_HEIGHT", 0.0))
     WIDTH_EPS = 1e-6
 
@@ -331,32 +474,20 @@ def main():
             if is_walking and not was_walking:
                 print("\n[Generate ON] STARTING...")
                 
-                # 判斷是否需要重抓錨點
-                if (not initial_ticks) or node.req_reset_anchor:
-                    if node.req_reset_anchor:
-                        # print("[Reset] Forced Anchor Reset triggered by Motion!")
-                        node.req_reset_anchor = False
+                # 錨點 = 調好的 stand（motion 執行過 → 重抓；還沒抓過 → 抓一次）
+                if node.req_reset_anchor or stand_pose is None:
+                    capture_stand("Generate ON")
+                node.req_reset_anchor = False
+                sync_walking_stand()
 
-                    with motor_state_lock:
-                        current_snapshot = dict(current_motor_state)
-                        baseline_ticks = dict(current_snapshot)
-                        initial_ticks  = dict(current_snapshot)
-                    
-                    cur_w_start = walking.width_size_
-                    cur_h_start = walking.stand_height
-                    
-                    start_ik_ang = compute_ik_auto(
-                        0, cur_w_start/2, cur_h_start, 0,
-                        0, -cur_w_start/2, cur_h_start, 0,
-                        0, 0, 0, 0
-                    )
-                    start_ik_ang = apply_ankle_compensation(start_ik_ang)
-                    initial_ang = list(start_ik_ang)
-                    
-                    # print(f"[Generate ON] Anchor Updated. W={cur_w_start}, H={cur_h_start}")
-                else:
-                    print("Resuming: Using existing Baseline (Fixes Drift Issue).")
-                    pass  # else 結束在這裡
+                # 移到 stand + 網頁調整量（調整量都 0 → 刻度就是 stand）
+                dw = float(getattr(parameter, "width_size", 0.0))
+                dh = float(getattr(parameter, "STAND_HEIGHT", 0.0))
+                baseline_ticks = stand_target(dw, dh)
+                node.publish_command(baseline_ticks)
+                last_applied_dw, last_applied_dh = dw, dh
+                last_applied_com    = float(getattr(parameter, "COM_HEIGHT", 0.0))
+                node.width_dirty = False
 
                 # =========================================================
                 # ★ 修正重點：這一段必須「跳出」else，向左縮排！
@@ -470,68 +601,47 @@ def main():
             # 分支 C: Idle 站姿調整
             # ==========================================================
             else:
-                cur_w = float(getattr(parameter, "width_size", 0.0))
-                cur_h = float(getattr(parameter, "STAND_HEIGHT", 0.0))
+                dw = float(getattr(parameter, "width_size", 0.0))
+                dh = float(getattr(parameter, "STAND_HEIGHT", 0.0))
                 cur_com = float(getattr(parameter, "COM_HEIGHT", 0.0))
                 is_dirty = node.width_dirty
 
-                width_changed = abs(cur_w - last_applied_width) > WIDTH_EPS
-                height_changed = abs(cur_h - last_applied_height) > WIDTH_EPS
-                com_changed = abs(cur_com - last_applied_com) > WIDTH_EPS
+                changed = (last_applied_dw is None or abs(dw - last_applied_dw) > WIDTH_EPS
+                           or abs(dh - last_applied_dh) > WIDTH_EPS
+                           or abs(cur_com - last_applied_com) > WIDTH_EPS)
 
-                if width_changed or height_changed or com_changed or is_dirty:
-                    # ★ 防呆：如果還沒按過 Generate，initial_ticks 會是空的，這時不准調整
-                    if not initial_ticks:
-                        # print(f"[Idle] Ignored adjustment. Please toggle 'Generate' at least once to set Anchor.")
-                        # 這裡要更新 last_applied 以免迴圈一直印 Log
-                        last_applied_width = cur_w
-                        last_applied_height = cur_h
-                        last_applied_com = cur_com
-                        continue
-
-                    # print(f"[Idle] Recomputing Stand... Target: W={cur_w}, H={cur_h}")
+                if changed or is_dirty:
                     node.width_dirty = False
-                    
-                    # 1. 更新參數
-                    walking.width_size_ = cur_w
-                    walking.stand_height = cur_h if cur_h > 1.0 else 23.5
-                    
-                    # 2. 計算目標 IK
-                    stand_ang = compute_ik_auto(
-                        0, cur_w/2, walking.stand_height, 0,
-                        0, -cur_w/2, walking.stand_height, 0,
-                        0, 0, 0, 0
-                    )
-                    stand_ang = apply_ankle_compensation(stand_ang)
-                    
-                    # 3. 計算相對於「初始錨點 (initial_ang)」的變化量
-                    if initial_ang and initial_ticks:
-                        rel_cmd = calc_rel_gp_from_ang(stand_ang, initial_ang)
-                        
-                        new_ticks = {}
-                        for mid in LEG_IDS:
-                            base = initial_ticks.get(mid, DEFAULT_TICKS)
-                            delta = rel_cmd.get(mid, 0)
-                            
-                            # if abs(delta) > 800:
-                            #     print(f"[WARNING] Motor {mid} delta {delta} too large! Ignored.")
-                            #     delta = 0
-                            
-                            new_val = int((base + delta) % 4096)
-                            new_ticks[mid] = new_val
-                        
-                        # 發送指令
+                    # 錨點 = 調好的 stand（motion 執行過 → 重抓；還沒抓過 → 抓一次）
+                    if node.req_reset_anchor or stand_pose is None:
+                        capture_stand("Idle")
+                    node.req_reset_anchor = False
+                    sync_walking_stand()
+
+                    new_ticks = stand_target(dw, dh)
+                    print(f"[Idle] Stand + (width {dw:+.2f}, height {dh:+.2f}) → "
+                          f"高度 {walking.stand_height:.2f} cm，腳底板間距 {parameter.sole_gap(dw):.2f} cm")
+
+                    # Debug：每顆腿部馬達 目標(相對 stand) / 目前實際刻度
+                    with motor_state_lock:
+                        cur_snapshot = dict(current_motor_state)
+                    for side, ids in (("L", IK_IDS[:6]), ("R", IK_IDS[6:])):
+                        print(f"  [{side}] " + "  ".join(
+                            f"{mid}:{new_ticks[mid]}({new_ticks[mid]-stand_ticks[mid]:+d})/now {cur_snapshot.get(mid, -1)}"
+                            for mid in ids))
+
+                    # 發送指令（限速：所有腿部馬達在 STAND_MOVE_TIME 秒內同時到位）
+                    if STAND_MOVE_TIME > 0:
+                        node.publish_command(new_ticks,
+                                             sync_velocity(new_ticks, cur_snapshot, STAND_MOVE_TIME))
+                    else:
                         node.publish_command(new_ticks)
-                        
-                        # 更新 Baseline (為了讓下次走路是從這個新姿勢開始)
-                        baseline_ticks = dict(new_ticks)
-                        baseline_ang = list(stand_ang)
-                        # print(f"[Idle] Done. Baseline moved to W={cur_w}")
-                    
-                    last_applied_width = cur_w
-                    last_applied_height = cur_h
+
+                    # 更新 Baseline (為了讓下次走路是從這個新姿勢開始)
+                    baseline_ticks = dict(new_ticks)
+                    last_applied_dw, last_applied_dh = dw, dh
                     last_applied_com = cur_com
-            
+
             # # --- dt / phase debug ---
             if not hasattr(node, "_last_loop_now"):
                 node._last_loop_now = time.perf_counter()
