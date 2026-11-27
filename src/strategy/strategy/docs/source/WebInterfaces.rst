@@ -551,7 +551,12 @@ HSV 色模顯示
 頭部馬達扭力
 ^^^^^^^^^^^^^
 
-切換頭部馬達（水平/垂直軸）的扭力開關。
+切換頭部馬達的扭力開關：小人型是水平、垂直兩顆（ID 22、23），
+大人型多一顆 Roll，共三顆（ID 28、29、30）。
+
+.. note::
+   按鈕顯示的是馬達\ **當下實際的扭力狀態**\ （由 driver 讀回）。
+   重開 launch 後若馬達沒斷電，扭力會維持原本的狀態，不會一律變成洩力。
 
 .. _image-save-camera:
 
@@ -565,7 +570,11 @@ HSV 色模顯示
 頭部馬達控制
 ^^^^^^^^^^^^^
 
-滑桿控制頭部相機的水平（Horizontal）與垂直（Vertical）方向。最小值與最大值為走線物理限制，非馬達刻度極限。
+滑桿控制頭部相機的水平（Horizontal）與垂直（Vertical）方向，大人型另有側傾（Roll）。
+最小值與最大值為走線物理限制，非馬達刻度極限。
+
+**Head 2048** 按鈕：頭部馬達全部回到 2048（中心），滑桿也會跟著歸位
+（小人型兩顆、大人型三顆，速度固定 50）。
 
 .. tabs::
 
@@ -623,10 +632,20 @@ HSV 色模顯示
          * - Vertical Position
            - 垂直刻度
            - 2048（中心）
-           - 1023
-           - 2548
+           - 850
+           - 2400
          * - Vertical Speed
            - 垂直轉速
+           - 1
+           - 1
+           - 200
+         * - Roll Position
+           - 側傾刻度（ID 30）
+           - 2048（中心）
+           - 1024
+           - 3072
+         * - Roll Speed
+           - 側傾轉速
            - 1
            - 1
            - 200
@@ -859,13 +878,13 @@ Topic Hz 指令面板 (大人型)
 
 .. _image-draw-clear:
 
-清除繪圖 (大人型)
-^^^^^^^^^^^^^^^^^
+清除繪圖（Clear Draw）
+^^^^^^^^^^^^^^^^^^^^^^
 
-.. note::
-   本功能為 **大人型專用**。
+清除影像上由策略畫上去的所有線條與框（小人型、大人型都有）。
 
-清除影像上由策略畫上去的所有線條與框
+影像節點是依 ``cnt`` 累積繪圖的，策略停掉後圖形會一直留在畫面上，
+切換策略也**不會**自動清除。策略裡可呼叫 :meth:`API.clearDrawImage` 做同樣的事。
 
 .. _image-distance-select:
 
@@ -1531,7 +1550,7 @@ ID 上下調整
          * - 右腿
            - 22–27
          * - 頭部
-           - 28–29
+           - 28–30
 
 .. _motion-xpro-conversion:
 
@@ -1638,47 +1657,55 @@ WalkingInterface
 
           <!-- 現在策略顯示(各網頁共用) -->
           <a class="area-overlay" href="#strategy"
-            style="top:9%;left:0.5%;width:7.5%;height:13%;color:#ffcc00"></a>
-            
+            style="top:15.5%;left:0.5%;width:7.5%;height:8.5%;color:#ffcc00"></a>
+
           <!-- Address(各網頁共用) -->
           <a class="area-overlay" href="#shared-address"
-            style="top:28.25%;left:44%;width:12%;height:5%;color:#ffcc00"></a>
+            style="top:31.25%;left:44%;width:12%;height:3.25%;color:#ffcc00"></a>
 
           <!-- IMU -->
           <a class="area-overlay" href="#walking-imu"
-            style="top:35%;left:27.25%;width:11%;height:53%;color:#ffcc00"></a>
+            style="top:37.5%;left:27.25%;width:10.75%;height:52.5%;color:#ffcc00"></a>
 
           <!-- Walking Mode 調整 -->
           <a class="area-overlay" href="#walking-mode"
-            style="top:35%;left:38.5%;width:21.25%;height:8.5%;color:#ffcc00"></a>
+            style="top:37.75%;left:38.5%;width:21%;height:4.75%;color:#ffcc00"></a>
 
           <!-- 步長調整 -->
           <a class="area-overlay" href="#walking-step-size"
-            style="top:43%;left:38.5%;width:21.25%;height:12.5%;color:#ffcc00"></a>
+            style="top:42.5%;left:38.5%;width:21%;height:12.5%;color:#ffcc00"></a>
 
           <!-- Load -->
           <a class="area-overlay" href="#walking-load"
-            style="top:55%;left:38.5%;width:10.625%;height:6.25%;color:#ffcc00"></a>
+            style="top:55.25%;left:41.75%;width:7%;height:4.25%;color:#ffcc00"></a>
 
           <!-- Generate -->
           <a class="area-overlay" href="#walking-generate"
-            style="top:55%;left:49.125%;width:10.625%;height:6.25%;color:#ffcc00"></a>
+            style="top:55.25%;left:49.1%;width:7%;height:4.25%;color:#ffcc00"></a>
 
           <!-- 方向控制 -->
           <a class="area-overlay" href="#walking-direction"
-            style="top:61%;left:38.5%;width:21.25%;height:14.25%;color:#ffcc00"></a>
+            style="top:59.75%;left:41.75%;width:14.25%;height:13.5%;color:#ffcc00"></a>
 
           <!-- 步態參數 -->
           <a class="area-overlay" href="#walking-params"
-            style="top:35%;left:60%;width:18.5%;height:25.5%;color:#ffcc00"></a>
+            style="top:37.75%;left:60%;width:18.5%;height:17.25%;color:#ffcc00"></a>
 
           <!-- Save -->
           <a class="area-overlay" href="#walking-save"
-            style="top:60.25%;left:60%;width:9.2%;height:6%;color:#ffcc00"></a>
+            style="top:55.4%;left:64.85%;width:4.3%;height:4.3%;color:#ffcc00"></a>
 
-          <!-- Send -->
+          <!-- Send Gait -->
           <a class="area-overlay" href="#walking-send"
-            style="top:60.25%;left:69.25%;width:9.2%;height:6%;color:#ffcc00"></a>
+            style="top:55.4%;left:69.2%;width:4.3%;height:4.3%;color:#ffcc00"></a>
+
+          <!-- 站姿 + Send Posture -->
+          <a class="area-overlay" href="#walking-posture"
+            style="top:59.5%;left:61.5%;width:15.25%;height:10.75%;color:#ffcc00"></a>
+
+          <!-- LATENCY 延遲面板 -->
+          <a class="area-overlay" href="#walking-latency"
+            style="top:94.75%;left:82%;width:17.25%;height:3.75%;color:#ffcc00"></a>
 
          </div>
 
@@ -1856,6 +1883,8 @@ Walking Mode 調整
            - 2
            - 下板步態
 
+      ``LC_up`` / ``LC_down`` **只有目前策略是 lc 時才會顯示**\ ，其他策略只看得到 ``Continuous``\ 。
+
    .. tab:: 大人型 (ADULT)
 
       .. list-table::
@@ -1877,6 +1906,9 @@ Walking Mode 調整
          * - ``SR_Continuous``
            - 3
            - 障礙物上的連續行走（**小人型沒有這個模式**\ ）
+
+      ``SR_up`` / ``SR_down`` / ``SR_Continuous`` **只有目前策略是 sr 時才會顯示**\ ，其他策略只看得到 ``Continuous``\ 。
+
 .. _walking-step-size:
 
 步長調整
@@ -1962,8 +1994,12 @@ Generate
 參數面板依選取的 `Walking Mode 調整`_ 顯示不同欄位組。
 
 .. important::
-   **兩台的欄位組成不同**\ ，而且差異方向相反 ——
-   平地那組大人型多兩個，上下板／障礙那組反而是小人型多三個。
+   ``width_size`` / ``STAND_HEIGHT`` **是「相對 stand 的調整量」，不是絕對值。**
+
+   * stand = Motion 網頁調好的基礎站姿（執行過站姿磁區後會重新抓）。
+   * ``width_size``\ ：+ 往外開，- 往內縮（cm）；\ ``STAND_HEIGHT``\ ：+ 站高，- 蹲低（cm）。
+   * **兩個都填 0 = 維持 stand**\ 。欄位名稱旁的 ``(±)`` 就是這個意思。
+   * 這兩個欄位改用 :ref:`walking-posture` 的 **Send Posture** 送出，不跟步態參數一起送。
 
 Continuous Step（平地連續步態）
 """""""""""""""""""""""""""""""
@@ -1981,9 +2017,9 @@ Continuous Step（平地連續步態）
      - ✓
      - ✓
    * - ``width_size``
-     - 腳寬 / 步寬（cm）
-     - ✓
-     - ✓
+     - 腳寬調整量（cm，相對 stand），在 :ref:`walking-posture` 區
+     - ✓（±）
+     - ✓（±）
    * - ``period_t``
      - 步態週期（以 20 為一單位），越小踏步越快
      - ✓
@@ -1997,12 +2033,12 @@ Continuous Step（平地連續步態）
      - ✓
      - ✓
    * - ``STAND_HEIGHT``
-     - 站姿高度（cm）
-     - ✓
-     - ✓
+     - 站姿高度調整量（cm，相對 stand），在 :ref:`walking-posture` 區
+     - ✓（±）
+     - ✓（±）
    * - ``COM_HEIGHT``
      - 質心高度（cm）
-     - ✓
+     - ✗（固定 29.5）
      - ✓
    * - ``hip_roll``
      - 髖關節 roll 補償
@@ -2017,13 +2053,18 @@ Continuous Step（平地連續步態）
 
    .. tab:: 小人型 (KID)
 
-      預設值：``com_height`` = 29.5 cm、``stand_height`` = 23.5 cm、
-      ``period_t`` = 360、``lift_height`` = 2.5 cm。
+      預設值：``period_t`` = 360、``lift_height`` = 2.5 cm、
+      ``width_size`` = 0、``STAND_HEIGHT`` = 0（= 維持 stand）。
+
+      ``COM_HEIGHT`` 欄位已拿掉，Send Gait 固定送 29.5 cm。
+
+      ``period_t`` 必須是 20 的倍數（控制週期 20 ms）。不是的話按 Send Gait 會跳出提示，
+      告訴你實際會以哪個值執行。
 
    .. tab:: 大人型 (ADULT)
 
-      預設值：``com_height`` = 40 cm、``stand_height`` = 50 cm、
-      ``period_t`` = 420、``lift_height`` = 5 cm。
+      預設值：``com_height`` = 40 cm、``period_t`` = 420、``lift_height`` = 5 cm、
+      ``width_size`` = 0、``STAND_HEIGHT`` = 0（= 維持 stand）。
 
       多出來的 ``hip_roll`` / ``ankle_roll`` 是**平地步態也能調的 roll 補償**\ ；
       小人型只有在上下板那一組才有這兩個欄位。
@@ -2042,10 +2083,14 @@ Continuous Step（平地連續步態）
      - 說明
      - 小人型
      - 大人型
-   * - ``com_y_swing`` / ``width_size`` / ``period_t``
+   * - ``com_y_swing`` / ``period_t``
      - 同平地
      - ✓
      - ✓
+   * - ``width_size``
+     - 同平地（± 調整量）
+     - ✓（±）
+     - ✓（±）
    * - ``T_DSP``\ （欄位 id 為 ``osc_lockrange``\ ）
      - 雙支撐時間比例
      - ✓
@@ -2058,27 +2103,20 @@ Continuous Step（平地連續步態）
      - 板 / 障礙物高度（cm）
      - ✓
      - ✓
-   * - ``STAND_HEIGHT`` / ``COM_HEIGHT``
-     - 站姿與質心高度
+   * - ``STAND_HEIGHT``
+     - 站姿高度調整量（±，相對 stand）
+     - ✓（±）
+     - ✓（±）
+   * - ``COM_HEIGHT``
+     - 質心高度
      - ✓
      - ✓
-   * - ``base_default_z``
-     - 基準高度
-     - **✓**
-     - ✗
-   * - ``Hip_roll``
-     - 髖關節 roll 補償
-     - **✓**
-     - ✗
-   * - ``Ankle_roll``
-     - 踝關節 roll 補償
-     - **✓**
-     - ✗
 
 .. note::
 
-   大人型的 ``hip_roll`` / ``ankle_roll`` 在**平地那一組**\ ，
-   障礙這一組反而沒有；小人型剛好相反。改參數前先確認自己在哪一個模式。
+   小人型上下板的 ``base_default_z`` / ``Hip_roll`` / ``Ankle_roll`` 欄位已從網頁拿掉，
+   Send Gait 會把這三個送 0。
+   大人型的 ``hip_roll`` / ``ankle_roll`` 在**平地那一組**\ ，障礙這一組沒有。
 
 .. _walking-save:
 
@@ -2090,15 +2128,46 @@ Save
 - 平地模式：儲存至WalkingParameter.ini。
 - LC 模式：儲存至UpStair.ini/DownStair.ini。
 
+步態參數與站姿調整量（``width_size`` / ``STAND_HEIGHT``\ ）會一起存。
+Save 只寫檔，不會套用到機器人；要套用請按 Send Gait / Send Posture。
+
 .. _walking-send:
 
-Send
-^^^^
+Send Gait
+^^^^^^^^^
 
-將畫面上的參數即時套用至行走節點（不寫入檔案），並執行腳寬更變。
+只送**步態參數**\ （\ ``com_y_swing``\ 、\ ``period_t``\ 、\ ``T_DSP``\ 、\ ``lift_height``\ 、
+``COM_HEIGHT``\ ，上下板另加 ``Board_High``\ 、\ ``Clearance`` 等），
+**不會動到站姿**\ 。走路中也可以送，下一步開始生效。
+
+策略裡的對應函式是 :meth:`API.sendGaitParameter`\ 。
 
 .. note::
-   Send 僅更新執行中的節點，不寫入檔案。若要永久保存請改用 `Save`_。
+   Send 系列只更新執行中的節點，不寫入檔案。若要永久保存請改用 `Save`_。
+
+.. _walking-posture:
+
+站姿調整與 Send Posture
+^^^^^^^^^^^^^^^^^^^^^^^
+
+只送 ``width_size`` / ``STAND_HEIGHT``\ （相對 stand 的調整量，見上方 `步態參數`_\ ）。
+
+* **機器人停著的時候也會立刻移到新站姿**\ ，送之前確認機器人站穩、周圍淨空。
+* 調整後的站高超過腿長或 ≤ 0 時，walking 會拒絕這次的 ``STAND_HEIGHT``\ （終端機印 error），維持原值。
+* 腳寬調太窄、兩腳腳底板可能互碰時，終端機會印 warning，但仍會執行。
+
+策略裡的對應函式是 :meth:`API.sendPostureParameter`\ 。
+
+.. _walking-latency:
+
+LATENCY 延遲面板
+^^^^^^^^^^^^^^^^
+
+固定在畫面右下角，**預設收合**\ ，點標題列展開／收合，每秒更新一次。
+顯示網頁 ↔ driver、walking → driver、driver ↔ 馬達各段的平均與最大延遲，用來判斷動作延遲卡在哪一段。
+
+* 「時鐘不一致」：網頁和機器人的時鐘對不上，單程延遲不可信，改看來回（RTT）。
+* 「等待 /motor_timing」：driver_node 沒有啟動，或是舊版沒有發延遲資訊。
 
 ----
 

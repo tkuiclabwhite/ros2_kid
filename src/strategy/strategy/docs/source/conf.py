@@ -13,10 +13,15 @@ sys.path.insert(0, os.path.abspath('_adult'))
 
 project = 'TKU ICLAB ROS2 API'
 
-# 版本號：**改文件時人工更新這一行**。
+# 最後更新日期：**改文件時人工更新 last_updated 這一行**，只顯示在 Version 頁（|last_updated|）。
 # 原本是自動抓 git 最後一次 commit 日期，但那會誤導 —— 文件改了卻沒 commit 時
-# 版本號不會動（站上曾經長期停在 2026.05.26，實際內容已經新很多）。
-release = '2026.10.20'
+# 日期不會動（站上曾經長期停在 2026.05.26，實際內容已經新很多）。
+# 日期不放進 release：放了的話每一頁的分頁標題（書籤名稱）都會帶日期，
+# 改日期也會讓每一頁的 HTML 都跟著變。
+last_updated = '2026.11.27'
+release = ''
+rst_epilog = f'.. |last_updated| replace:: {last_updated}\n'
+html_title = f'{project} 說明文件'
 copyright = '2026, Yang,Shu-kai'
 author = 'Yang,Shu-kai'
 html_short_title = 'ICLAB API'

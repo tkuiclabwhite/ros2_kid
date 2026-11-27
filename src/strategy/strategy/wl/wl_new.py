@@ -383,13 +383,11 @@ class WeightLift(API):
 
     def walk_parameter(self, yaw, Y_COM):
         self.sendSensorReset(True)
-        self.sendLCWalkParameter(
+        self.sendGaitParameter(
             com_y_swing  = float(Y_COM),
-            width_size   = float(5),
             period_t     = int(300),
             t_dsp        = float(0.1),
             lift_height  = float(1.5),
-            stand_height = float(23.5),
             com_height   = float(29.5)
         )
 

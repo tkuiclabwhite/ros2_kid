@@ -165,14 +165,11 @@ class Mar(API):
     # ───────────────────────────────────────────
     def _send_walk_param(self):
         p = WALK_PARAM_NORMAL
-        self.sendWalkParameter(
-            mode         = 0,
+        self.sendGaitParameter(
             com_y_swing  = p['com_y_swing'],
-            width_size   = p['width_size'],
             period_t     = p['period_t'],
             t_dsp        = p['t_dsp'],
             lift_height  = p['lift_height'],
-            stand_height = p['stand_height'],
             com_height   = p['com_height'],
         )
 

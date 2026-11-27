@@ -78,8 +78,8 @@ motor_control
            - 左腳（其中 16–19 為 H42 Pro）
          * - 22–27
            - 右腳（其中 22–25 為 H42 Pro）
-         * - 28–29
-           - 頭部
+         * - 28–30
+           - 頭部（28 水平、29 垂直、30 Roll）
 
       **訂閱：**
 
@@ -98,7 +98,7 @@ motor_control
            - 開關扭力
          * - ``Head_Topic``
            - HeadPackage
-           - 頭部馬達指令（ID 1=水平→28, ID 2=垂直→29）
+           - 頭部馬達指令（ID 1=水平→28, ID 2=垂直→29, ID 3=Roll→30）
 
 **發布：**\ （KID / ADULT 相同）
 
@@ -476,12 +476,16 @@ strategy / API
            - 執行固定動作（踢球等）
          * - ``sendHeadMotor(ID, pos, speed)``
            - 控制頭部馬達（ID 1=水平→22, ID 2=垂直→23）
-         * - ``sendLCWalkParameter(...)``
-           - 發送步態參數（含上下板參數）
+         * - ``sendGaitParameter(...)``
+           - 發送步態參數（平地／上下板共用，等同網頁 Send Gait）
+         * - ``sendPostureParameter(width_size, stand_height)``
+           - 發送站姿調整量（相對 stand，等同網頁 Send Posture）
          * - ``get_objects(color)``
            - 取得目前偵測到的物體列表
          * - ``drawImageFunction(...)``
            - 在網頁影像上畫圖形
+         * - ``clearDrawImage()``
+           - 清除網頁影像上的所有繪圖
 
    .. tab:: 大人型 (ADULT)
 
@@ -511,11 +515,15 @@ strategy / API
          * - ``sendBodySector(sector)``
            - 執行固定動作
          * - ``sendHeadMotor(ID, pos, speed)``
-           - 控制頭部馬達（ID 1=水平→28, ID 2=垂直→29）
+           - 控制頭部馬達（ID 1=水平→28, ID 2=垂直→29, ID 3=Roll→30）
          * - ``set_head(pan, tilt)``
            - 以比例值（-1.0 ~ 1.0）控制頭部左右與上下
-         * - ``sendLCWalkParameter(...)``
-           - 發送 JSON 格式步態參數
+         * - ``sendGaitParameter(...)``
+           - 發送步態參數（等同網頁 Send Gait）
+         * - ``sendPostureParameter(width_size, stand_height)``
+           - 發送站姿參數（等同網頁 Send Posture）
+         * - ``clearDrawImage()``
+           - 清除網頁影像上的所有繪圖
          * - ``get_objects(color)``
            - 取得目前偵測到的物體列表
          * - ``drawImageFunction(...)``

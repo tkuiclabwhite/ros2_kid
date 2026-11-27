@@ -458,6 +458,8 @@ Python 套件
 
 .. code-block:: bash
 
+   sudo apt install python3-can
+   sudo apt-get install python3-pyqtgraph
    pip install python-can==4.6.1
 
 .. note::

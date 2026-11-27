@@ -184,13 +184,11 @@ class LiftandCarry(API):
                 # self.get_logger().info("🔊LC parameter reset")
                 self.sendHeadMotor(1,self.head_Horizontal,100)  #水平
                 self.sendHeadMotor(2,self.head_Vertical,100)    #垂直
-                self.sendLCWalkParameter(                
+                self.sendGaitParameter(                
                 com_y_swing  = float(1.2),   #起步步態補償
-                width_size   = float(5.0),  #雙腳距離
                 period_t     = int(300),  #步態頻率
                 t_dsp        = float(0.2),  #雙支撐時間
                 lift_height  = float(1.5),
-                stand_height = float(23.5), #機器人初始站姿高度
                 com_height   = float(29.5),  #質心高度
             )    
                 time.sleep(1.5)
@@ -366,14 +364,12 @@ class LiftandCarry(API):
                     #                             stand_height = 23.5,\
                     #                             com_height = 29.5,\
                     #                             back_flag = 0)
-                    self.sendLCWalkParameter(                        
+                    self.sendGaitParameter(                        
                         com_y_swing  = float(-8),   #起步步態補償
-                        width_size   = float(4),  #雙腳距離
                         period_t     = int(200),  #步態頻率
                         t_dsp        = float(0.5),  #雙支撐時間
                         clearance    = float(6),
                         board_high   = float(4),
-                        stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
                         ankle_roll   = float(0)
@@ -400,14 +396,12 @@ class LiftandCarry(API):
                     #                             stand_height = 23.5,\
                     #                             com_height = 29.5,\
                     #                             back_flag = 0)
-                    self.sendLCWalkParameter(                        
+                    self.sendGaitParameter(                        
                         com_y_swing  = float(-8),   #起步步態補償
-                        width_size   = float(4),  #雙腳距離
                         period_t     = int(220),  #步態頻率
                         t_dsp        = float(0.5),  #雙支撐時間
                         clearance    = float(6),
                         board_high   = float(4),
-                        stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
                         ankle_roll   = float(0)
@@ -434,14 +428,12 @@ class LiftandCarry(API):
                     #                             stand_height = 23.5,\
                     #                             com_height = 29.5,\
                     #                             back_flag = 0)
-                    self.sendLCWalkParameter(                        
+                    self.sendGaitParameter(                        
                         com_y_swing  = float(-8),   #起步步態補償
-                        width_size   = float(4),  #雙腳距離
                         period_t     = int(220),  #步態頻率
                         t_dsp        = float(0.7),  #雙支撐時間
                         clearance    = float(6),
                         board_high   = float(4),
-                        stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
                         ankle_roll   = float(0)
@@ -470,14 +462,12 @@ class LiftandCarry(API):
                     #                             stand_height = 23.5,\
                     #                             com_height = 29.5,\
                     #                             back_flag = 0)
-                    self.sendLCWalkParameter(                        
+                    self.sendGaitParameter(                        
                         com_y_swing  = float(-5),   #起步步態補償
-                        width_size   = float(4),  #雙腳距離
                         period_t     = int(200),  #步態頻率
                         t_dsp        = float(0.6),  #雙支撐時間
                         clearance    = float(6),
                         board_high   = float(4),
-                        stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
                         ankle_roll   = float(0)
@@ -505,14 +495,12 @@ class LiftandCarry(API):
                     #                             stand_height = 23.5,\
                     #                             com_height = 29.5,\
                     #                             back_flag = 0)
-                    self.sendLCWalkParameter(                        
+                    self.sendGaitParameter(                        
                         com_y_swing  = float(-4),   #起步步態補償
-                        width_size   = float(4),  #雙腳距離
                         period_t     = int(300),  #步態頻率
                         t_dsp        = float(0.4),  #雙支撐時間
                         clearance    = float(4.5),
                         board_high   = float(3),
-                        stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
                         ankle_roll   = float(0)
@@ -535,14 +523,12 @@ class LiftandCarry(API):
                     #                         stand_height = 23.5,\
                     #                         com_height = 29.5,\
                     #                         back_flag = 0)
-                    self.sendLCWalkParameter(                        
+                    self.sendGaitParameter(                        
                         com_y_swing  = float(-4),   #起步步態補償
-                        width_size   = float(5),  #雙腳距離
                         period_t     = int(260),  #步態頻率
                         t_dsp        = float(0.7),  #雙支撐時間
                         clearance    = float(4),
                         board_high   = float(2),
-                        stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
                         ankle_roll   = float(0)
@@ -570,14 +556,12 @@ class LiftandCarry(API):
                     #                         stand_height = 23.5,\
                     #                         com_height = 29.5,\
                     #                         back_flag = 0)
-                    self.sendLCWalkParameter(                        
+                    self.sendGaitParameter(                        
                         com_y_swing  = float(-4),   #起步步態補償
-                        width_size   = float(5),  #雙腳距離
                         period_t     = int(260),  #步態頻率
                         t_dsp        = float(0.7),  #雙支撐時間
                         clearance    = float(4),
                         board_high   = float(2),
-                        stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
                         ankle_roll   = float(0)
@@ -605,14 +589,12 @@ class LiftandCarry(API):
                     #                         stand_height = 23.5,\
                     #                         com_height = 29.5,\
                     #                         back_flag = 0)
-                    self.sendLCWalkParameter(                        
+                    self.sendGaitParameter(                        
                         com_y_swing  = float(-4),   #起步步態補償
-                        width_size   = float(5),  #雙腳距離
                         period_t     = int(260),  #步態頻率
                         t_dsp        = float(0.7),  #雙支撐時間
                         clearance    = float(4),
                         board_high   = float(2),
-                        stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
                         ankle_roll   = float(0)
@@ -640,14 +622,12 @@ class LiftandCarry(API):
                     #                         stand_height = 23.5,\
                     #                         com_height = 29.5,\
                     #                         back_flag = 0)
-                    self.sendLCWalkParameter(                        
+                    self.sendGaitParameter(                        
                         com_y_swing  = float(-4),   #起步步態補償
-                        width_size   = float(5),  #雙腳距離
                         period_t     = int(260),  #步態頻率
                         t_dsp        = float(0.7),  #雙支撐時間
                         clearance    = float(4),
                         board_high   = float(2),
-                        stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
                         ankle_roll   = float(0)
@@ -674,14 +654,12 @@ class LiftandCarry(API):
                     #                         stand_height = 23.5,\
                     #                         com_height = 29.5,\
                     #                         back_flag = 0)
-                    self.sendLCWalkParameter(                        
+                    self.sendGaitParameter(                        
                         com_y_swing  = float(-2),   #起步步態補償
-                        width_size   = float(5),  #雙腳距離
                         period_t     = int(240),  #步態頻率
                         t_dsp        = float(0.25),  #雙支撐時間
                         clearance    = float(2),
                         board_high   = float(1),
-                        stand_height = float(23.5), #機器人初始站姿高度
                         com_height   = float(29.5),  #質心高度
                         hip_roll     = float(0),
                         ankle_roll   = float(0)
@@ -730,13 +708,11 @@ class LiftandCarry(API):
             #                         stand_height = 23.5,
             #                         com_height = 29.5,\
             #                         back_flag = True)
-            self.sendLCWalkParameter(                
+            self.sendGaitParameter(                
                 com_y_swing  = float(1.2),   #起步步態補償
-                width_size   = float(5),  #雙腳距離
                 period_t     = int(300),  #步態頻率
                 t_dsp        = float(0.2),  #雙支撐時間
                 lift_height  = float(1.5),
-                stand_height = float(23.5), #機器人初始站姿高度
                 com_height   = float(29.5),  #質心高度
             )            
             time.sleep(2) 

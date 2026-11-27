@@ -12,12 +12,14 @@
 
       body 馬達 ID 範圍：**1~21**
 
-      頭部馬達（ID 22 水平、ID 23 垂直）請使用 ``sendHeadMotor``\ 。
+      頭部馬達（ID 22 水平、ID 23 垂直）請使用 ``sendHeadMotor``\ ，
+      ``ID`` 參數填 1（水平）、2（垂直）。
 
    .. tab:: 大人型 (ADULT)
 
       body 馬達 ID 範圍：**1~27**
 
-      頭部馬達（ID 28 水平、ID 29 垂直）請使用 ``sendHeadMotor``\ 。
+      頭部馬達（ID 28 水平、ID 29 垂直、ID 30 側傾 Roll）請使用 ``sendHeadMotor``\ ，
+      ``ID`` 參數填 1（水平）、2（垂直）、3（Roll）。
 
 .. automethod:: API.SingleAbsolutePosition

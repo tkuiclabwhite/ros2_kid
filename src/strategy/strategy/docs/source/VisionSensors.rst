@@ -5,6 +5,7 @@
 .. automethod:: API.sendSensorReset
 .. automethod:: API.setZoomIn
 .. automethod:: API.drawImageFunction
+.. automethod:: API.clearDrawImage
 .. automethod:: API.get_objects
 .. autoattribute:: API.imu_rpy
 .. autoattribute:: API.color_counts

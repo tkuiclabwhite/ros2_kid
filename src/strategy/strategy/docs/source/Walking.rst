@@ -5,4 +5,5 @@
 .. automethod:: API.sendBodyAutoCmd
 .. automethod:: API.sendbodyAuto
 .. automethod:: API.sendContinuousValue
-.. automethod:: API.sendLCWalkParameter
+.. automethod:: API.sendGaitParameter
+.. automethod:: API.sendPostureParameter

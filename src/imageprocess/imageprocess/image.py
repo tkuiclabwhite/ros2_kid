@@ -10,7 +10,7 @@ from tku_msgs.msg import HSVValue, Location, Zoom,DrawImage
 # from tku_msgs.msg import YUVValue, OpenCvOrder
 from tku_msgs.srv import HSVInfo,SaveHSV,BuildModel
 # from tku_msgs.srv import YUVInfo,SaveYUV,OpenCvInfo,SaveOpenCv
-from std_msgs.msg import String,Int16
+from std_msgs.msg import String,Int16,Bool
 from dataclasses import dataclass
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from pathlib import Path
@@ -236,7 +236,20 @@ class ImageNode(Node):
             self.draw_image_callback, 
             qos_img
         )
+        # 繪圖是以 cnt 為 key 累積的，策略停掉之後圖形會一直留在畫面上。
+        # 提供一個明確的清除入口給網頁按鈕與策略（API.clearDrawImage）使用。
+        self.draw_clear_sub = self.create_subscription(
+            Bool, '/drawimage/clear', self.draw_clear_callback, 10
+        )
 
+
+    def draw_clear_callback(self, msg):
+        """清除所有已累積的繪圖。收到 data=False 時不動作，方便當開關用。"""
+        if not msg.data:
+            return
+        n = len(self.draw_image_array)
+        self.draw_image_array.clear()
+        self.get_logger().info(f"[DrawImage] 已清除 {n} 個圖形")
 
     def draw_image_callback(self, msg):
         # 尋找是否有相同編號的圖形

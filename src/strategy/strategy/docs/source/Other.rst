@@ -13,9 +13,7 @@
 .. autoattribute:: API.lm_fps_ema
 .. autoattribute:: API.label_matrix_stamp
 
-.. automethod:: API.sendWalkParameter
-
-.. automethod:: set_head
+.. automethod:: API.set_head
 
 .. automethod:: API._clamp
 

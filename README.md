@@ -271,9 +271,11 @@ USB 相機驅動 Package，發布 `/camera1/image_raw`。
 | `sendbodyAuto(1/0)` | 啟動/停止步態 |
 | `sendBodySector(sector)` | 執行固定動作（kickt等） |
 | `sendHeadMotor(ID, pos, speed)` | 控制頭部 |
-| `sendLCWalkParameter(...)` | 發送步態參數（含上下板參數） |
+| `sendGaitParameter(...)` | 發送步態參數（平地／上下板共用，等同網頁 Send Gait） |
+| `sendPostureParameter(width_size, stand_height)` | 發送站姿調整量（相對 stand，等同網頁 Send Posture） |
 | `get_objects(color)` | 取得目前偵測到的物體列表 |
 | `drawImageFunction(...)` | 在網頁影像上畫圖形 |
+| `clearDrawImage()` | 清除網頁影像上的所有繪圖 |
 
 ---
 

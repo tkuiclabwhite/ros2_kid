@@ -127,6 +127,7 @@ class API(Node):
         self.sector_pub = self.create_publisher(Int16, '/package/Sector', 10)
 
         self.draw_image_pub = self.create_publisher(DrawImage, '/drawimage', 10)
+        self.draw_clear_pub = self.create_publisher(Bool, '/drawimage/clear', 10)
         self.walkparameter_pub = self.create_publisher(Parameter, '/strategy/walkparameter', 10)
 
         self.walking_json_pub = self.create_publisher(String, '/walking_params_update', 10)
@@ -1036,14 +1037,33 @@ class API(Node):
         """
         發送指令至指定的頭部馬達。
 
-        直接指定頭部馬達 ID、目標位置值與旋轉速度。
+        直接指定頭部馬達編號、目標位置值與旋轉速度。
+        ``ID`` 填的是頭部馬達編號，driver 會轉成實際的馬達 ID：
+
+        .. list-table::
+           :header-rows: 1
+
+           * - ID 參數
+             - 軸向
+             - 小人型
+             - 大人型
+           * - 1
+             - 水平 (Horizontal)
+             - ID 22
+             - ID 28
+           * - 2
+             - 垂直 (Vertical)
+             - ID 23
+             - ID 29
+           * - 3
+             - 側傾 (Roll)
+             - 沒有
+             - ID 30
 
         Args:
-            ID (int): 頭部馬達的硬體 ID。
-                * 1為水平馬達(Horizontal)
-                * 2為垂直馬達(Vertical)
+            ID (int): 頭部馬達編號（1~3），對應見上表。
             Position (int): 目標絕對刻度。範圍為0~4095。
-            Speed (int): 馬達移動速度。
+            Speed (int): 馬達移動速度。不要給 0（0 代表全速）。
 
         Returns:
             None
@@ -1103,101 +1123,227 @@ class API(Node):
         img.thickness = int(thickness)
         self.draw_image_pub.publish(img)
 
-    def sendWalkParameter(self,
-            mode: int,
+    def clearDrawImage(self) -> None:
+        """清除畫面上所有由 :meth:`drawImageFunction` 產生的圖形。
+
+        影像節點是以 ``cnt`` 為鍵累積繪圖資料的，策略結束後圖形會一直留在畫面上。
+        建議在策略停止時呼叫一次，以免殘留的圖形干擾下一個任務的判讀 ——
+        切換 strategy **不會**\ 自動清除，圖形會一直保留到有人明確清掉為止。
+
+        網頁的 Clear Draw 按鈕走的是同一個介面。
+
+        Example:
+            >>> # 在策略結束前清乾淨
+            >>> api.clearDrawImage()
+        """
+        msg = Bool()
+        msg.data = True
+        self.draw_clear_pub.publish(msg)
+
+    def sendGaitParameter(self,
             com_y_swing: float,
-            width_size: float,
             period_t: int,
             t_dsp: float,
-            lift_height: float,
-            stand_height: float,
-            com_height: float,
-        ):
+            lift_height: float = 0.0,
+            com_height: float = 29.5,
+            com_y_shift: Optional[float] = None,
+            board_high: Optional[float] = None,
+            clearance: Optional[float] = None,
+            hip_roll: Optional[float] = None,
+            ankle_roll: Optional[float] = None,
+        ) -> None:
         """
-        發送標準步態參數。
+        發送步態參數給 Walking，等同 Walking 網頁的 **Send Gait**。
 
-        將基礎的行走參數封裝為 `Parameter` 訊息並發布。此函式主要用於
-        一般的平地行走與基本的運動控制。
+        只送步態參數，**不會**\ 改變站姿（腳寬、站高）。站姿請用 :meth:`sendPostureParameter`。
+        平地與上下板共用此函式：上下板才需要的參數（board_high、clearance、hip_roll、ankle_roll）
+        預設為 None，不給就不送，Walking 維持原值；給了才送出。
 
         Args:
-            mode (int): 步態模式。
-            com_y_swing (float): 重心 (CoM) 的左右擺幅。
-            width_size (float): 雙腳間距（步寬）。
-            period_t (int): 步態週期時間（單位通常為 ms）。
-            t_dsp (float): 雙支撐相 (Double Support Phase) 時間比例。
-            lift_height (float): 抬腳高度。
-            stand_height (float): 站立高度（從地面到髖部）。
-            com_height (float): 質心高度。
-        """
-        msg = Parameter()
-        msg.mode = int(mode)
-        msg.com_y_swing = float(com_y_swing)
-        msg.width_size = float(width_size)
-        msg.period_t = int(period_t)
-        msg.t_dsp = float(t_dsp)
-        msg.lift_height = float(lift_height)
-        msg.stand_height = float(stand_height)
-        msg.com_height = float(com_height)
-        self.walkparameter_pub.publish(msg)
+            com_y_swing (float): 起步重心 (CoM) 的左右補償，正值向左，負值向右。
+            period_t (int): 步態週期 (ms)，越小踏步越快。應為 20 的倍數，否則會被四捨五入到 20 的倍數。
+            t_dsp (float): 雙支撐時間比例。
+            lift_height (float, optional): 抬腳高度 (cm)。預設 0。上下板時由 clearance 決定跨越高度。
+            com_height (float, optional): 質心高度 (cm)。預設 29.5。
+            com_y_shift (float, optional): 質心側向偏移 (cm)。預設 None（不送）。
 
-    def sendLCWalkParameter(self,
-            # mode: int,
-            com_y_swing: float, width_size: float,
-            period_t: int, t_dsp: float, 
-            stand_height: float = 23.5, com_height: float = 29.5,lift_height: float = 0,
-            board_high: float = 0.0, clearance: float = 3.0,
-            hip_roll: float = 0.0, ankle_roll: float = 0.0
-        ):
-        """
-        發送步態參數給Walking，此函式包含上下板步態參數。
-
-        Args:
-            連續步態
-                * com_y_swing (float): 起步重心(CoM)的左右補償，正值代表向左，負值代表向右。
-                * width_size (float): 雙腳間距（步寬）。
-                * period_t (int): 步態週期時間，越小踏步越快，以每20為一單位。
-                * t_dsp (float): 雙支時間。
-                * lift_height (float, optional): 抬腳高度。預設為 0。
-                * stand_height (float, optional): 站立高度。預設為 23.5。
-                * com_height (float, optional): 質心高度。預設為 29.5。
-
-            上下板步態(包含除lift_height以外的連續步態參數)
-                * board_high (float, optional): 木板的高度。預設為 0。
-                * clearance (float, optional): 抬腳時的地面淨空高度。預設為 3。
-                * hip_roll (float, optional): 髖部側傾補償角度。預設為 0。
-                * ankle_roll (float, optional): 踝部側傾補償角度。預設為 0。
+            上下板專用（預設 None，不送）
+                * board_high (float, optional): 木板高度 (cm)。
+                * clearance (float, optional): 抬腳時的越障安全餘裕 (cm)。
+                * hip_roll (float, optional): 髖部側傾補償角度 (degree)。
+                * ankle_roll (float, optional): 踝部側傾補償角度 (degree)。
 
         Returns:
             None
 
         Note:
-            * 如在啟動步態前無發送過步態參數，則會使用預設值。請確保在 **開啟步態** 前有使用此函數，或者在Walking網頁界面中 **Send/Load** 步態參數。
-            
-            * 在上下板步態時clearance會取代lift_height參數的位置
+            * 如在啟動步態前沒有送過步態參數，Walking 會使用預設值。請在 **開啟步態** 前呼叫此函式，
+              或在 Walking 網頁 **Send/Load** 步態參數。
+            * 送出的參數只會更新有出現的欄位，沒出現的維持 Walking 目前的值。
 
         Example:
-            >>> api.sendLCWalkParameter(                
-            ... com_y_swing  = float(-1.5),
-            ... width_size   = float(4.5),
-            ... period_t     = int(320),
-            ... t_dsp        = float(0.1),
-            ... lift_height  = float(2),
-            ... stand_height = float(23.5),
-            ... com_height   = float(29.5),
-            ... )   
+            >>> # 平地
+            >>> api.sendGaitParameter(
+            ...     com_y_swing = -1.5,
+            ...     period_t    = 300,
+            ...     t_dsp       = 0.1,
+            ...     lift_height = 1.5,
+            ... )
+            >>> # 上板
+            >>> api.sendGaitParameter(
+            ...     com_y_swing = -8,
+            ...     period_t    = 200,
+            ...     t_dsp       = 0.5,
+            ...     board_high  = 4,
+            ...     clearance   = 6,
+            ...     hip_roll    = 0,
+            ...     ankle_roll  = 0,
+            ... )
         """
         params = {
-            # "walking_mode": mode,
-            "com_y_swing": com_y_swing, "width_size": width_size,
-            "period_t": period_t, "Tdsp": t_dsp,
-            "lift_height": lift_height, "STAND_HEIGHT": stand_height,
-            "COM_HEIGHT": com_height,
-            "Board_High": board_high, "Clearance": clearance,
-            "Hip_roll": hip_roll, "Ankle_roll": ankle_roll
+            "com_y_swing": float(com_y_swing),
+            "period_t": int(period_t),
+            "Tdsp": float(t_dsp),
+            "lift_height": float(lift_height),
+            "COM_HEIGHT": float(com_height),
         }
+        for key, val in (("COM_Y_shift", com_y_shift), ("Board_High", board_high),
+                         ("Clearance", clearance), ("Hip_roll", hip_roll),
+                         ("Ankle_roll", ankle_roll)):
+            if val is not None:
+                params[key] = float(val)
         msg = String()
         msg.data = json.dumps(params)
         self.walking_json_pub.publish(msg)
+
+    def sendPostureParameter(self, width_size: float = 0.0, stand_height: float = 0.0) -> None:
+        """
+        發送站姿參數給 Walking，等同 Walking 網頁的 **Send Posture**。
+
+        兩個值都是「相對調好的 stand 的調整量」(cm)，不是絕對值：0 = 維持 stand。
+        機器人停著時也會\ **立刻**\ 移到新站姿。
+
+        Args:
+            width_size (float, optional): 腳寬調整量 (cm)。+ 往外開，- 往內縮。預設 0。
+            stand_height (float, optional): 站高調整量 (cm)。+ 站高，- 蹲低。預設 0。
+                調整後高度超出腿長或 <= 0 時，Walking 會拒絕並維持原值（log 會印 error）。
+
+        Returns:
+            None
+
+        Example:
+            >>> # 回到 stand
+            >>> api.sendPostureParameter()
+            >>> # 兩腳再往外開 1 cm、蹲低 2 cm
+            >>> api.sendPostureParameter(width_size=1.0, stand_height=-2.0)
+        """
+        params = {"width_size": float(width_size), "STAND_HEIGHT": float(stand_height)}
+        msg = String()
+        msg.data = json.dumps(params)
+        self.walking_json_pub.publish(msg)
+
+    # ------------------------------------------------------------------
+    # 已停用（2026-11-27）：改用 sendGaitParameter / sendPostureParameter。
+    #   * sendWalkParameter 送 /strategy/walkparameter，小人型已經沒有節點訂閱，送了沒作用。
+    #   * sendLCWalkParameter 每次都把 width_size / stand_height 當絕對值一起送，
+    #     但 Walking 現在把它們當成「相對 stand 的調整量」：width_size=5 會讓腳再開 5 cm，
+    #     stand_height=23.5 會因超過腿長被拒絕。
+    # ------------------------------------------------------------------
+    # def sendWalkParameter(self,
+    #         mode: int,
+    #         com_y_swing: float,
+    #         width_size: float,
+    #         period_t: int,
+    #         t_dsp: float,
+    #         lift_height: float,
+    #         stand_height: float,
+    #         com_height: float,
+    #     ):
+    #     """
+    #     發送標準步態參數。
+    #
+    #     將基礎的行走參數封裝為 `Parameter` 訊息並發布。此函式主要用於
+    #     一般的平地行走與基本的運動控制。
+    #
+    #     Args:
+    #         mode (int): 步態模式。
+    #         com_y_swing (float): 重心 (CoM) 的左右擺幅。
+    #         width_size (float): 雙腳間距（步寬）。
+    #         period_t (int): 步態週期時間（單位通常為 ms）。
+    #         t_dsp (float): 雙支撐相 (Double Support Phase) 時間比例。
+    #         lift_height (float): 抬腳高度。
+    #         stand_height (float): 站立高度（從地面到髖部）。
+    #         com_height (float): 質心高度。
+    #     """
+    #     msg = Parameter()
+    #     msg.mode = int(mode)
+    #     msg.com_y_swing = float(com_y_swing)
+    #     msg.width_size = float(width_size)
+    #     msg.period_t = int(period_t)
+    #     msg.t_dsp = float(t_dsp)
+    #     msg.lift_height = float(lift_height)
+    #     msg.stand_height = float(stand_height)
+    #     msg.com_height = float(com_height)
+    #     self.walkparameter_pub.publish(msg)
+    #
+    # def sendLCWalkParameter(self,
+    #         # mode: int,
+    #         com_y_swing: float, width_size: float,
+    #         period_t: int, t_dsp: float, 
+    #         stand_height: float = 23.5, com_height: float = 29.5,lift_height: float = 0,
+    #         board_high: float = 0.0, clearance: float = 3.0,
+    #         hip_roll: float = 0.0, ankle_roll: float = 0.0
+    #     ):
+    #     """
+    #     發送步態參數給Walking，此函式包含上下板步態參數。
+    #
+    #     Args:
+    #         連續步態
+    #             * com_y_swing (float): 起步重心(CoM)的左右補償，正值代表向左，負值代表向右。
+    #             * width_size (float): 雙腳間距（步寬）。
+    #             * period_t (int): 步態週期時間，越小踏步越快，以每20為一單位。
+    #             * t_dsp (float): 雙支時間。
+    #             * lift_height (float, optional): 抬腳高度。預設為 0。
+    #             * stand_height (float, optional): 站立高度。預設為 23.5。
+    #             * com_height (float, optional): 質心高度。預設為 29.5。
+    #
+    #         上下板步態(包含除lift_height以外的連續步態參數)
+    #             * board_high (float, optional): 木板的高度。預設為 0。
+    #             * clearance (float, optional): 抬腳時的地面淨空高度。預設為 3。
+    #             * hip_roll (float, optional): 髖部側傾補償角度。預設為 0。
+    #             * ankle_roll (float, optional): 踝部側傾補償角度。預設為 0。
+    #
+    #     Returns:
+    #         None
+    #
+    #     Note:
+    #         * 如在啟動步態前無發送過步態參數，則會使用預設值。請確保在 **開啟步態** 前有使用此函數，或者在Walking網頁界面中 **Send/Load** 步態參數。
+    #         
+    #         * 在上下板步態時clearance會取代lift_height參數的位置
+    #
+    #     Example:
+    #         >>> api.sendLCWalkParameter(                
+    #         ... com_y_swing  = float(-1.5),
+    #         ... width_size   = float(4.5),
+    #         ... period_t     = int(320),
+    #         ... t_dsp        = float(0.1),
+    #         ... lift_height  = float(2),
+    #         ... stand_height = float(23.5),
+    #         ... com_height   = float(29.5),
+    #         ... )   
+    #     """
+    #     params = {
+    #         # "walking_mode": mode,
+    #         "com_y_swing": com_y_swing, "width_size": width_size,
+    #         "period_t": period_t, "Tdsp": t_dsp,
+    #         "lift_height": lift_height, "STAND_HEIGHT": stand_height,
+    #         "COM_HEIGHT": com_height,
+    #         "Board_High": board_high, "Clearance": clearance,
+    #         "Hip_roll": hip_roll, "Ankle_roll": ankle_roll
+    #     }
+    #     msg = String()
+    #     msg.data = json.dumps(params)
+    #     self.walking_json_pub.publish(msg)
 
     def get_objects(self, color: Optional[str] = None) -> List[dict]:
         """

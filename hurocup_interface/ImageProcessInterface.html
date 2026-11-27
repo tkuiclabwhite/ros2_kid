@@ -628,6 +628,37 @@
 			});
 			ApplyHeadTorqueStates();
 		});
+		// 清除影像上所有繪圖。影像節點是以 cnt 為鍵累積的，
+		// 策略停掉後圖形會一直留著，需要一個明確的清除入口。
+		var ClearDraw_Topic = new ROSLIB.Topic({
+			ros: ros,
+			name: '/drawimage/clear',
+			messageType: 'std_msgs/Bool'
+		});
+		var ClearDraw_msg = new ROSLIB.Message({ data: false });
+		function ClearDrawImage() {
+			ClearDraw_msg.data = true;
+			ClearDraw_Topic.publish(ClearDraw_msg);
+			ClearDraw_msg.data = false;
+			console.log("ClearDrawImage");
+		}
+		// 頭部兩顆 (ID 22, 23) 回到 2048。網頁 id 1 = 水平、2 = 垂直，driver 的 head_map 轉成 22、23。
+		// speed 不能給 0，driver 寫入 Profile Velocity 時 0 代表全速。
+		var HEAD_CENTER_POS = 2048;
+		var HEAD_CENTER_SPEED = 50;
+		function HeadCenter() {
+			['Horizontal', 'Vertical'].forEach(function (axis, i) {
+				HeadPackagecmd.id = i + 1;
+				HeadPackagecmd.position = HEAD_CENTER_POS;
+				HeadPackagecmd.speed = HEAD_CENTER_SPEED;
+				Head_Topic.publish(HeadPackagecmd);
+
+				// 拉條跟著歸位，免得畫面顯示的位置與實際不符
+				document.getElementById(axis + "PositionValue").value = HEAD_CENTER_POS;
+				document.getElementById(axis + "PositionRange").value = HEAD_CENTER_POS;
+			});
+			console.log("[Head] Center -> " + HEAD_CENTER_POS);
+		}
 		function CameraSave() {
 			console.log("CameraSave");
 			document.getElementById("CamBrightness").value = CamBrightnessValue;
@@ -1189,8 +1220,24 @@
 
 		}
 
-		#B_ColorModelForm {
-			width: 200px;
+		/* 一排四顆，按鈕撐滿各自的格子。No Torque? 的完整字串與熊留在 title。
+		   格子寬度交給瀏覽器依字寬分配（不寫死 25%）：320px 四等分時 Camera Save 放不下，
+		   瀏覽器會改成靠左；依字寬分配四顆只差幾 px，字可以維持 12px 並置中。 */
+		#select table.HeadBtnRow td {
+			padding: 0 1px;
+		}
+		#B_ColorModelForm,
+		#B_HeadCenter,
+		#B_ClearDraw,
+		#B_Camera {
+			height: 25px;
+			margin: 0;
+			padding: 0 4px;
+			width: 100%;
+			box-sizing: border-box;
+			text-align: center;
+			white-space: nowrap;
+			font-size: 12px;
 		}
 
 		#Camera {
@@ -1442,17 +1489,26 @@
 
 			<div id="select">
 				<div>
-					<table width="320">
+					<table width="320" class="HeadBtnRow">
 						<tr>
 							<!-- <td>
 								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_Start" value="Start" onClick="WebStart()"></input>
 							</td> -->
-							<td>
-								<input style="margin-right: 10px; height:25px;" type="button" class="Button" id="B_ColorModelForm" value=" No Torque?  Push me ʕ•ᴥ•ʔ  "
-								 onClick="HeadTorqueSwitch()"></input>
+							<!-- 四顆一排，寬度依字寬分配。寬度不夠放熊，No Torque? 的完整字串與熊留在 title。 -->
+							<td align="center">
+								<input type="button" class="Button" id="B_ColorModelForm" value="No Torque?"
+								 title=" No Torque?  Push me ʕ•ᴥ•ʔ  " onClick="HeadTorqueSwitch()"></input>
 							</td>
-							<td>
-								<input style="margin-right: 5px; height:25px;" type="button" class="Button" id="B_Camera" value="Camera Save"
+							<td align="center">
+								<input type="button" class="Button" id="B_HeadCenter" value="Head 2048"
+								 title="頭部兩顆 (ID 22, 23) 回到 2048" onClick="HeadCenter()"></input>
+							</td>
+							<td align="center">
+								<input type="button" class="Button" id="B_ClearDraw" value="Clear Draw"
+								 onClick="ClearDrawImage()"></input>
+							</td>
+							<td align="center">
+								<input type="button" class="Button" id="B_Camera" value="Camera Save"
 								 onClick="CameraSave()"></input>
 							</td>
 						</tr>
